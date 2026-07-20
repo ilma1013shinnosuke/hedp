@@ -12,4 +12,7 @@ fi
 trap 'rmdir "${LOCK_DIRECTORY}"' EXIT
 
 cd "${REPOSITORY_ROOT}"
-"${REPOSITORY_ROOT}/.venv/bin/hedp" collect-device-realtime
+status=0
+"${REPOSITORY_ROOT}/.venv/bin/hedp" collect-device-realtime || status=1
+"${REPOSITORY_ROOT}/.venv/bin/hedp" collect-alarms-current || status=1
+exit "${status}"

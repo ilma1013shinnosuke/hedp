@@ -111,17 +111,17 @@ Evidence: `FusionSolarClient.get_json`, `post_json`, `_is_auth_failure`,
 | `station-kpi-list` | `/rest/pvms/web/report/v1/station/station-kpi-list` | POST | Request body documented below | Stored response confirmed | One day per request; hourly points | live-confirmed | Monitor compatibility and retention |
 | `energy-balance` | `/rest/pvms/web/station/v1/overview/energy-balance` | GET | `stationDn`, `timeDim`, `queryTime`, `timeZone`, `timeZoneStr`, `dateStr`, `_` | Stored response and derived Records confirmed | Daily `timeDim=2`; 288 five-minute points | live-confirmed | Confirm units and uncertain key semantics |
 | `device-realtime-data` | `/rest/pvms/web/device/v1/device-realtime-data` | GET | `deviceDn`, `_` | Stored responses confirmed for four configured devices | Current snapshot; no history parameter observed | live-confirmed | Verify authoritative device discovery and meter behavior |
+| `query-battery-dc` | `/rest/pvms/web/device/v1/query-battery-dc` | GET | `dn`, `sigids`, `moduleId`, `_` | Module 1 has data; modules 2–4 return successful empty arrays | Current snapshot | implementation-confirmed | Supply observed `sigids` and live-confirm Python storage |
+| Current alarms | `/rest/pvms/fm/v1/query` | POST | JSON body documented below | Stored responses confirmed for four devices | Current state | live-confirmed | Confirm alarm identity and transition semantics |
+| Alarm history | `/rest/pvms/fm/v1/query` | POST | JSON body plus `occurUTC` | Stored responses confirmed for four devices | Explicit Unix-millisecond range and pagination | live-confirmed | Confirm retention and stable deduplication identity |
 
 #### Unconfirmed or partially confirmed
 
 | API/capability | Endpoint | Method | Parameters | Response status | History/time series | Status | Next verification action |
 |---|---|---|---|---|---|---|---|
-| Battery DC detail / `query-battery-dc` | unknown | unknown | unknown; `deviceDn`/`moduleId` unknown | unknown | unknown | candidate | Capture battery-module request and response in DevTools |
 | Device inventory / topology / equipment structure | unknown | unknown | `stationDn` relationship unknown | unknown | unknown | candidate | Capture device-list and equipment screens |
 | Configuration | unknown | unknown | unknown | unknown | unknown | candidate | Capture configuration screen requests |
 | Signal definition/master | unknown | unknown | unknown | Realtime response embeds Signal entries; dedicated API unknown | unknown | candidate | Capture any Signal/master request separately |
-| Alarms | unknown | unknown | unknown | unknown | Current-state behavior unknown | candidate | Capture active-alarm screen request and response |
-| Alarm history | unknown | unknown | pagination and time range unknown | unknown | Historical behavior unknown | candidate | Capture past-alarm query, pagination, and range |
 | Operation history | unknown | unknown | unknown | unknown | Historical behavior unknown | candidate | Capture operation-history screen requests |
 | Maintenance or fault history | unknown | unknown | unknown | unknown | Historical behavior unknown | candidate | Capture maintenance/fault screen requests |
 | Monthly energy-balance | Same observed path as `energy-balance` | GET | `timeDim=4` observed; other details as daily request not yet proven | Response not retained as Python RawData | Monthly dimension observed | devtools-observed | Capture complete request and response for a month |
@@ -237,20 +237,41 @@ Confirmed device signal groups include:
 
 | Field | Confirmed information |
 |---|---|
-| API name | `query-battery-dc` (requested candidate name only) |
-| HTTP method | Unverified |
-| Endpoint | Unverified |
-| Required parameters | Unverified |
-| Date specification | Unverified |
-| `stationDn` / `deviceDn` / `moduleId` | All unverified |
-| Available information | Unverified; no raw response was found. Do not infer fields from `device-realtime-data`. |
-| Evidence state | **candidate** |
-| Past dates | Unverified |
-| Recommended collector | `FusionSolarBatteryDcCollector`, only after endpoint, request, identifiers, and raw response are observed |
+| API name | `query-battery-dc` |
+| HTTP method | `GET` |
+| Endpoint | `/rest/pvms/web/device/v1/query-battery-dc` |
+| Required parameters | `dn`, `sigids`, `moduleId`, `_` |
+| Date specification | None observed; current snapshot |
+| `stationDn` / `deviceDn` / `moduleId` | `dn=NE=33812831`; module 1 has data, modules 2–4 return `success=true` with `data=[]` |
+| Available information | Elements contain `dataType`, `enumMap`, `id`, `latestTime`, `name`, `realValue`, `unit`, and `value` |
+| Evidence state | **implementation-confirmed** and **devtools-observed**; Python live storage awaits the exact observed `sigids` value |
+| Past dates | No historical parameter observed |
+| Recommended collector | `FusionSolarBatteryDcCollector` |
 
-Evidence search: no occurrence in the repository, Git history, local
-filesystem, connected Drive files, workbook API specification, or targeted
-public search. The expected legacy source/function was not available.
+Top-level keys are `buildCode`, `data`, `failCode`, `params`, and `success`.
+The complete response is stored unchanged. The `sigids` parameter value is
+configuration because its confirmed value has not been recorded in this
+document; it must not be guessed.
+
+### alarms
+
+| Field | Confirmed information |
+|---|---|
+| API name | Current alarms and alarm history |
+| HTTP method | `POST`, `Content-Type: application/json` |
+| Endpoint | `/rest/pvms/fm/v1/query` |
+| Common body | `dataType`, `domainType=SOLAR`, `pageNo`, `pageSize`, `nativeMoDn` |
+| History body | Common body plus `occurUTC.begin` and `occurUTC.end` Unix milliseconds |
+| Device DNs | `NE=33812828`, `NE=33812829`, `NE=33812830`, `NE=33812831` |
+| Available information | `offset`, `limit`, `totalCount`, `sizeExceeded`, `groupResult`, `severityStatistics`, `hits` |
+| Evidence state | **live-confirmed**; supporting request/response evidence was first observed in DevTools |
+| Historical availability | Confirmed explicit range for `dataType=HISTORY`; Python uses Asia/Tokyo date boundaries |
+| Recommended collector | `FusionSolarAlarmCollector` |
+
+Top-level keys are `success`, `data`, `failCode`, and `params`. For zero
+results, `hits=[]`, `severityStatistics=[]`, `totalCount=0`, `groupResult` is
+null or empty, and `offset` is 0 or -1. Python stores every returned page as a
+separate unchanged RawData object and continues other devices after one fails.
 
 ## 3. Data inventory
 
@@ -263,11 +284,11 @@ public search. The expected legacy source/function was not available.
 | Battery SOC | `device-realtime-data`, battery signal 10006 | Yes | Unimplemented |
 | Battery charge | `energy-balance` 5-minute charge; `device-realtime-data` energy charged today and signed charge/discharge power | Yes | Energy-balance is Recordized; realtime Signals are not |
 | Battery discharge | `energy-balance` 5-minute discharge; `device-realtime-data` energy discharged today and signed charge/discharge power | Yes | Energy-balance is Recordized; realtime Signals are not |
-| Battery DC information | `device-realtime-data` confirms bus voltage; `query-battery-dc` is unverified | Bus voltage only | Unimplemented |
+| Battery DC information | `query-battery-dc`; `device-realtime-data` also confirms bus voltage | DevTools response confirmed | RawData collector implemented; live Python storage pending confirmed `sigids` configuration |
 | Inverter | `device-realtime-data` inverter signal set | Yes | Unimplemented |
 | Meter | `device-realtime-data` meter signal definitions | Names yes; measured values no (`-`) | Unimplemented |
 | Device status | `device-realtime-data`: top-level status plus battery/inverter status signals | Yes | Unimplemented |
-| Alarms | No confirmed API or response fields | No | Unimplemented |
+| Alarms | `/rest/pvms/fm/v1/query`, CURRENT and HISTORY | DevTools response confirmed | RawData collector implemented |
 | Equipment topology | Four hard-coded candidate DNs and coarse `groupName`/`pv2mppt`; no confirmed discovery/topology API | Partial | Unimplemented |
 | 5-minute series | `energy-balance`, 288 points/day observed | Yes; Python preserves the API response as RawData | Confirmed numeric values are Recordized; raw missing markers remain unchanged |
 | 1-hour series | `station-kpi-list`, 24-point/day behavior observed; `13_RAW_FusionSolar_時間` | Yes | Five KPI fields are Recordized |
@@ -311,13 +332,12 @@ URL (`02_GAS設定`). The four device DNs above are recorded as candidate DNs in
 The hourly station path, daily energy-balance path, and five-minute device
 snapshot path are implemented. Continue in this order:
 
-1. Observe battery DC detail, then add one RawData collector per confirmed API.
+1. Live-confirm Battery DC and alarm RawData storage with safe parameters.
 2. Observe authoritative device inventory/topology before replacing configured
    candidate DNs.
 3. Observe configuration and dedicated Signal/master APIs for the planned
    03:10 collection.
-4. Observe active alarms and alarm history before implementing the planned
-   five-minute alarm collection.
+4. Review collected alarms before selecting any derived Record mapping.
 5. Confirm complete monthly and yearly energy-balance requests and responses.
 6. Add Record conversion only after each new response is durably stored and its
    fields, units, and identifiers are confirmed.
@@ -331,8 +351,8 @@ device identifiers, values, units, or signs.
   `FUSIONSOLAR_STATUS.md` are unavailable.
 - `energy-balance`: units, exact semantics of some confirmed keys,
   pagination/limits, historical retention, and GAS function name.
-- `query-battery-dc`: all communication details, identifiers, response fields,
-  history support, and evidence state beyond its candidate name.
+- The exact confirmed `sigids` value for `query-battery-dc`, its rate limits,
+  and whether any history mode exists.
 - Whether `_` is required by `device-realtime-data`, its rate limit, unknown-DN
   error shape, and compatibility across FusionSolar updates.
 - Charge/discharge power sign convention in `device-realtime-data`.
@@ -342,7 +362,8 @@ device identifiers, values, units, or signs.
   `NE=33812828`.
 - Any confirmed `mo-details` endpoint, parameters, or response.
 - Any usable `moduleId`; the only occurrence is an empty schema column.
-- Alarm API, alarm fields, and historical alarm availability.
+- Alarm `hits` element semantics, retention limits, and which observed ID is
+  the stable deduplication identity beyond complete response preservation.
 - Complete monthly and yearly request/response contracts beyond the observed
   `timeDim=4` and `timeDim=5` values.
 - Cookie names/lifetime, CSRF lifetime, request-rate limits, and CAPTCHA
@@ -351,9 +372,9 @@ device identifiers, values, units, or signs.
 
 `device-realtime-data` is live-confirmed in Python. Its complete response, including all Signal values, is retained unchanged every five minutes. Device type assignments remain unconfirmed.
 
-Equipment, configuration, and Signal-specific APIs are planned for daily collection at 03:10 Asia/Tokyo after their method, endpoint, request, and response have been observed. Their future collectors belong at the existing API-to-Collector-to-RawData boundary; no endpoint is inferred here.
+Battery DC collection runs daily at 03:10 Asia/Tokyo after configuration of the observed `sigids`. Other equipment, configuration, and Signal-specific APIs remain planned after their method, endpoint, request, and response have been observed.
 
-Alarm collection is planned every five minutes after live DevTools verification. A history API would deduplicate by alarm ID or occurrence time; a current-state API would store snapshots and derive transitions later. No unverified alarm API is implemented.
+Current alarms are collected every five minutes as snapshots. History is collected for explicit date ranges and complete pages are preserved. Stable alarm ID semantics remain unconfirmed, so state transitions and derived deduplication are not implemented.
 
 Energy-balance `xAxis` contains 288 five-minute timestamps for a day. The confirmed arrays are paired by index, `"--"` is retained in RawData and omitted only from derived Records, and uncertain units and meanings (including `mainsUsePower`, `disGridPower`, and `radiationDosePower`) remain explicitly unknown.
 

@@ -10,6 +10,11 @@ from hedp.record import Record
 
 
 class Storage:
+    _SNAPSHOT_SOURCES = {
+        "fusionsolar_device_realtime",
+        "fusionsolar_battery_dc",
+        "fusionsolar_alarm_current",
+    }
     def __init__(self, database_path: str) -> None:
         self.database_path = database_path
         self._connection: Optional[sqlite3.Connection] = None
@@ -39,12 +44,17 @@ class Storage:
         connection = self._require_connection()
         data = raw_data.to_json()
         payload = json.dumps(raw_data.payload)
+        metadata = (
+            json.dumps(raw_data.metadata)
+            if raw_data.metadata is not None
+            else None
+        )
         target_date = (
             raw_data.target_date.isoformat()
             if raw_data.target_date is not None
             else None
         )
-        if raw_data.source == "fusionsolar_device_realtime":
+        if raw_data.source in self._SNAPSHOT_SOURCES:
             connection.execute(
                 """
                 INSERT INTO raw_data (data)
@@ -80,9 +90,21 @@ class Storage:
                       OR json_extract(data, '$.target_date') = ?
                   )
                   AND json(json_extract(data, '$.payload')) = json(?)
+                  AND (
+                      (? IS NULL AND json_extract(data, '$.metadata') IS NULL)
+                      OR json(json_extract(data, '$.metadata')) = json(?)
+                  )
             )
             """,
-            (data, raw_data.source, target_date, target_date, payload),
+            (
+                data,
+                raw_data.source,
+                target_date,
+                target_date,
+                payload,
+                metadata,
+                metadata,
+            ),
         )
         connection.commit()
 

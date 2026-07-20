@@ -16,6 +16,19 @@ def test_device_dns_must_be_configured(monkeypatch):
         Configuration.device_dns_from_environment()
 
 
+def test_battery_dc_configuration(monkeypatch):
+    monkeypatch.setenv("HEDP_FUSIONSOLAR_BATTERY_DN", " NE=1 ")
+    monkeypatch.setenv("HEDP_FUSIONSOLAR_BATTERY_SIGIDS", " 1,2 ")
+    assert Configuration.battery_dc_from_environment() == ("NE=1", "1,2")
+
+
+def test_battery_dc_configuration_is_required(monkeypatch):
+    monkeypatch.delenv("HEDP_FUSIONSOLAR_BATTERY_DN", raising=False)
+    monkeypatch.delenv("HEDP_FUSIONSOLAR_BATTERY_SIGIDS", raising=False)
+    with pytest.raises(RuntimeError, match="BATTERY_DN.*BATTERY_SIGIDS"):
+        Configuration.battery_dc_from_environment()
+
+
 ENVIRONMENT = {
     "HEDP_FUSIONSOLAR_BASE_URL": "https://example.test",
     "HEDP_FUSIONSOLAR_STATION_DN": "station-dn",

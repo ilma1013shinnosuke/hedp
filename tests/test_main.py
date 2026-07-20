@@ -166,6 +166,66 @@ def test_cli_collect_energy_balance_runs_date_range(capsys) -> None:
     )
 
 
+def test_cli_collect_battery_dc(capsys):
+    application = Mock()
+    connection = Mock()
+    application.run_battery_dc.return_value = ([Mock()] * 4, [])
+    with patch(
+        "hedp.main._create_battery_dc_application",
+        return_value=(application, connection),
+    ):
+        result = cli(
+            [
+                "collect-battery-dc",
+                "--device-dn",
+                "NE=1",
+                "--sigids",
+                "1,2",
+            ]
+        )
+    assert result == 0
+    application.run_battery_dc.assert_called_once_with(
+        "NE=1", "1,2", [1, 2, 3, 4]
+    )
+    connection.close.assert_called_once_with()
+    assert capsys.readouterr().out == (
+        "Collected 4 battery-dc RawData item(s). Failed 0.\n"
+    )
+
+
+def test_cli_collect_alarm_history(capsys):
+    application = Mock()
+    connection = Mock()
+    application.run_alarm_history.return_value = ([Mock()], [])
+    with (
+        patch(
+            "hedp.main._create_alarm_application",
+            return_value=(application, connection),
+        ),
+        patch(
+            "hedp.main.Configuration.device_dns_from_environment",
+            return_value=["NE=1"],
+        ),
+    ):
+        result = cli(
+            [
+                "collect-alarms-history",
+                "--start",
+                "2026-07-19",
+                "--end",
+                "2026-07-20",
+            ]
+        )
+    assert result == 0
+    application.run_alarm_history.assert_called_once_with(
+        ["NE=1"], date(2026, 7, 19), date(2026, 7, 20)
+    )
+    connection.close.assert_called_once_with()
+    assert capsys.readouterr().out == (
+        "Collected 1 alarm-history RawData item(s). Failed 0.\n"
+    )
+
+
 def test_cli_backup_uses_storage_only_and_closes_connection(
     tmp_path, capsys
 ) -> None:

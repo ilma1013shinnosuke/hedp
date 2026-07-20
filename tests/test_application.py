@@ -50,6 +50,44 @@ def test_run_collects_then_saves_and_returns_same_raw_data() -> None:
     ]
 
 
+def test_run_battery_dc_saves_successes():
+    collected = [Mock(spec=RawData), Mock(spec=RawData)]
+    collector = Mock()
+    collector.collect_modules.return_value = (collected, [(2, "failed")])
+    storage = Mock()
+    application = Application(
+        None, storage, None, battery_dc_collector=collector
+    )
+
+    result = application.run_battery_dc("NE=1", "1,2", [1, 2, 3])
+
+    assert result == (collected, [(2, "failed")])
+    collector.collect_modules.assert_called_once_with(
+        "NE=1", "1,2", [1, 2, 3]
+    )
+    assert storage.save_rawdata.call_args_list == [
+        call(collected[0]),
+        call(collected[1]),
+    ]
+
+
+def test_run_current_alarms_saves_all_pages():
+    collected = [Mock(spec=RawData), Mock(spec=RawData)]
+    collector = Mock()
+    collector.collect_current_devices.return_value = (collected, [])
+    storage = Mock()
+    application = Application(None, storage, None, alarm_collector=collector)
+
+    result = application.run_current_alarms(["NE=1"])
+
+    assert result == (collected, [])
+    collector.collect_current_devices.assert_called_once_with(["NE=1"])
+    assert storage.save_rawdata.call_args_list == [
+        call(collected[0]),
+        call(collected[1]),
+    ]
+
+
 def test_run_range_processes_each_raw_data_in_order() -> None:
     raw_data_list = [
         RawData(

@@ -8,6 +8,10 @@ from zoneinfo import ZoneInfo
 from hedp.application import Application
 from hedp.configuration import Configuration
 from hedp.fusionsolar_client import FusionSolarClient
+from hedp.fusionsolar_alarm_collector import FusionSolarAlarmCollector
+from hedp.fusionsolar_battery_dc_collector import (
+    FusionSolarBatteryDcCollector,
+)
 from hedp.fusionsolar_collector import FusionSolarCollector
 from hedp.fusionsolar_energy_balance_collector import (
     FusionSolarEnergyBalanceCollector,
@@ -87,6 +91,46 @@ def _create_device_realtime_application() -> tuple[
         storage,
         None,
         device_realtime_collector=FusionSolarDeviceRealtimeCollector(client),
+    )
+    return application, connection
+
+
+def _create_battery_dc_application() -> tuple[
+    Application, sqlite3.Connection
+]:
+    configuration = Configuration.from_environment()
+    client = FusionSolarClient(
+        base_url=configuration.base_url,
+        station_dn=configuration.station_dn,
+        username=configuration.username,
+        password=configuration.password,
+    )
+    storage = Storage(configuration.database_path)
+    connection = storage.connect()
+    application = Application(
+        None,
+        storage,
+        None,
+        battery_dc_collector=FusionSolarBatteryDcCollector(client),
+    )
+    return application, connection
+
+
+def _create_alarm_application() -> tuple[Application, sqlite3.Connection]:
+    configuration = Configuration.from_environment()
+    client = FusionSolarClient(
+        base_url=configuration.base_url,
+        station_dn=configuration.station_dn,
+        username=configuration.username,
+        password=configuration.password,
+    )
+    storage = Storage(configuration.database_path)
+    connection = storage.connect()
+    application = Application(
+        None,
+        storage,
+        None,
+        alarm_collector=FusionSolarAlarmCollector(client),
     )
     return application, connection
 
@@ -223,6 +267,24 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     device_group = device_parser.add_mutually_exclusive_group()
     device_group.add_argument("--all", action="store_true")
     device_group.add_argument("--device-dn")
+    battery_parser = subparsers.add_parser("collect-battery-dc")
+    battery_parser.add_argument("--device-dn")
+    battery_parser.add_argument("--sigids")
+    battery_parser.add_argument("--module-id", type=int, action="append")
+    current_alarm_parser = subparsers.add_parser("collect-alarms-current")
+    current_alarm_group = current_alarm_parser.add_mutually_exclusive_group()
+    current_alarm_group.add_argument("--all", action="store_true")
+    current_alarm_group.add_argument("--device-dn")
+    history_alarm_parser = subparsers.add_parser("collect-alarms-history")
+    history_alarm_parser.add_argument(
+        "--start", type=_date_argument, required=True
+    )
+    history_alarm_parser.add_argument(
+        "--end", type=_date_argument, required=True
+    )
+    history_alarm_group = history_alarm_parser.add_mutually_exclusive_group()
+    history_alarm_group.add_argument("--all", action="store_true")
+    history_alarm_group.add_argument("--device-dn")
     build_energy_parser = subparsers.add_parser("build-energy-balance-records")
     build_energy_parser.add_argument("--start", type=_date_argument, required=True)
     build_energy_parser.add_argument("--end", type=_date_argument, required=True)
@@ -295,6 +357,56 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
             connection.close()
         print(
             f"Collected {len(raw_data_list)} device-realtime RawData item(s). "
+            f"Failed {len(failures)}."
+        )
+        return 1 if failures and not raw_data_list else 0
+
+    if arguments.command == "collect-battery-dc":
+        if arguments.device_dn and arguments.sigids:
+            device_dn, sigids = arguments.device_dn, arguments.sigids
+        elif arguments.device_dn or arguments.sigids:
+            parser.error("--device-dn and --sigids must be specified together")
+        else:
+            device_dn, sigids = Configuration.battery_dc_from_environment()
+        module_ids = arguments.module_id or [1, 2, 3, 4]
+        application, connection = _create_battery_dc_application()
+        try:
+            raw_data_list, failures = application.run_battery_dc(
+                device_dn, sigids, module_ids
+            )
+        finally:
+            connection.close()
+        print(
+            f"Collected {len(raw_data_list)} battery-dc RawData item(s). "
+            f"Failed {len(failures)}."
+        )
+        return 1 if failures and not raw_data_list else 0
+
+    if arguments.command in {
+        "collect-alarms-current",
+        "collect-alarms-history",
+    }:
+        device_dns = (
+            [arguments.device_dn]
+            if arguments.device_dn
+            else Configuration.device_dns_from_environment()
+        )
+        application, connection = _create_alarm_application()
+        try:
+            if arguments.command == "collect-alarms-current":
+                raw_data_list, failures = application.run_current_alarms(
+                    device_dns
+                )
+                label = "current alarm"
+            else:
+                raw_data_list, failures = application.run_alarm_history(
+                    device_dns, arguments.start, arguments.end
+                )
+                label = "alarm-history"
+        finally:
+            connection.close()
+        print(
+            f"Collected {len(raw_data_list)} {label} RawData item(s). "
             f"Failed {len(failures)}."
         )
         return 1 if failures and not raw_data_list else 0

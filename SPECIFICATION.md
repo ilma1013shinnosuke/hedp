@@ -65,8 +65,10 @@ does not depend on AI, ChatGPT, or Codex.
 - Previous-day `energy-balance`: daily at 03:00
 - `station-kpi`: existing daily collection at 03:00
 - Backup: after the daily collection and quality steps
-- Equipment/configuration/Signal: planned for 03:10; API unconfirmed
-- Alarms: planned every five minutes; API unconfirmed
+- Battery DC: daily at 03:10; confirmed API, configured Signal IDs
+- Other equipment/configuration/Signal APIs: planned for 03:10; unconfirmed
+- Current alarms: every five minutes
+- Alarm history: explicit date-range collection
 
 ## Quality requirements
 

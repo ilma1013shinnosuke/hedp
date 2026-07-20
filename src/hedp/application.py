@@ -6,6 +6,10 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from hedp.fusionsolar_collector import FusionSolarCollector
+from hedp.fusionsolar_alarm_collector import FusionSolarAlarmCollector
+from hedp.fusionsolar_battery_dc_collector import (
+    FusionSolarBatteryDcCollector,
+)
 from hedp.fusionsolar_energy_balance_collector import (
     FusionSolarEnergyBalanceCollector,
 )
@@ -50,6 +54,10 @@ class Application:
         energy_balance_record_builder: Optional[
             FusionSolarEnergyBalanceRecordBuilder
         ] = None,
+        battery_dc_collector: Optional[
+            FusionSolarBatteryDcCollector
+        ] = None,
+        alarm_collector: Optional[FusionSolarAlarmCollector] = None,
     ) -> None:
         self.collector = collector
         self.storage = storage
@@ -57,6 +65,8 @@ class Application:
         self.energy_balance_collector = energy_balance_collector
         self.device_realtime_collector = device_realtime_collector
         self.energy_balance_record_builder = energy_balance_record_builder
+        self.battery_dc_collector = battery_dc_collector
+        self.alarm_collector = alarm_collector
 
     def run(self) -> RawData:
         if self.collector is None or self.record_builder is None:
@@ -127,6 +137,42 @@ class Application:
             raise RuntimeError("Device-realtime collector is not configured")
         collected, failures = self.device_realtime_collector.collect_devices(
             device_dns
+        )
+        for raw_data in collected:
+            self.storage.save_rawdata(raw_data)
+        return collected, failures
+
+    def run_battery_dc(
+        self, device_dn: str, sigids: str, module_ids: list[int]
+    ) -> tuple[list[RawData], list[tuple[int, str]]]:
+        if self.battery_dc_collector is None:
+            raise RuntimeError("Battery DC collector is not configured")
+        collected, failures = self.battery_dc_collector.collect_modules(
+            device_dn, sigids, module_ids
+        )
+        for raw_data in collected:
+            self.storage.save_rawdata(raw_data)
+        return collected, failures
+
+    def run_current_alarms(
+        self, device_dns: list[str]
+    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+        if self.alarm_collector is None:
+            raise RuntimeError("Alarm collector is not configured")
+        collected, failures = self.alarm_collector.collect_current_devices(
+            device_dns
+        )
+        for raw_data in collected:
+            self.storage.save_rawdata(raw_data)
+        return collected, failures
+
+    def run_alarm_history(
+        self, device_dns: list[str], start_date: date, end_date: date
+    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+        if self.alarm_collector is None:
+            raise RuntimeError("Alarm collector is not configured")
+        collected, failures = self.alarm_collector.collect_history_devices(
+            device_dns, start_date, end_date
         )
         for raw_data in collected:
             self.storage.save_rawdata(raw_data)

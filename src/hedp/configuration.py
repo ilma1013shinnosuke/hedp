@@ -43,3 +43,20 @@ class Configuration:
                 "HEDP_FUSIONSOLAR_DEVICE_DNS"
             )
         return list(dict.fromkeys(item.strip() for item in value.split(",") if item.strip()))
+
+    @staticmethod
+    def battery_dc_from_environment() -> tuple[str, str]:
+        device_dn = os.environ.get("HEDP_FUSIONSOLAR_BATTERY_DN", "").strip()
+        sigids = os.environ.get(
+            "HEDP_FUSIONSOLAR_BATTERY_SIGIDS", ""
+        ).strip()
+        missing = []
+        if not device_dn:
+            missing.append("HEDP_FUSIONSOLAR_BATTERY_DN")
+        if not sigids:
+            missing.append("HEDP_FUSIONSOLAR_BATTERY_SIGIDS")
+        if missing:
+            raise RuntimeError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
+        return device_dn, sigids

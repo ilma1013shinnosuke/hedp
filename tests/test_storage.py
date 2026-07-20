@@ -78,6 +78,31 @@ def test_device_realtime_same_payload_at_different_times_is_saved(
         connection.close()
 
 
+def test_same_payload_with_different_request_metadata_is_saved(tmp_path) -> None:
+    storage = Storage(str(tmp_path / "metadata.db"))
+    connection = storage.connect()
+    try:
+        timestamp = datetime(2026, 7, 20, tzinfo=timezone.utc)
+        payload = {"success": True, "data": {"hits": []}}
+        first = RawData(
+            "fusionsolar_alarm_history",
+            timestamp,
+            payload,
+            metadata={"device_dn": "NE=1"},
+        )
+        second = RawData(
+            "fusionsolar_alarm_history",
+            timestamp,
+            payload,
+            metadata={"device_dn": "NE=2"},
+        )
+        storage.save_rawdata(first)
+        storage.save_rawdata(second)
+        assert storage.load_rawdata() == [first, second]
+    finally:
+        connection.close()
+
+
 def test_save_and_load_rawdata(tmp_path) -> None:
     storage = Storage(str(tmp_path / "test.db"))
     connection = storage.connect()
