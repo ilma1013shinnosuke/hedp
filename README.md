@@ -102,8 +102,8 @@ exact duplicates are skipped, differing values at one timestamp are retained
 and audited, and missing periods are never interpolated. Inspect and dry-run
 reports must be checked before a real import.
 Historical export files are not part of the repository. The current deployment
-has not imported them; import execution and performance measurement remain a
-separate operation requiring the original files.
+imported the available history on 2026-07-21; repeating the import inserted no
+additional observations. Future deployments still require the original files.
 
 Uninstall the daily job with `scripts/uninstall_macos_launchd.sh`.
 

@@ -289,8 +289,13 @@ class SwitchBotStorage:
 
     @staticmethod
     def canonical_key(observation: dict[str, Any]) -> str:
+        def normalize(value: Any) -> Any:
+            # JSON distinguishes -0.0 from 0.0 even though they represent the
+            # same measurement and export formats may spell zero differently.
+            return 0.0 if isinstance(value, float) and value == 0 else value
+
         identity = {
-            key: observation.get(key)
+            key: normalize(observation.get(key))
             for key in (
                 "device_id", "observed_at_utc", "observation_kind",
                 "temperature_c", "relative_humidity_percent", "co2_ppm",

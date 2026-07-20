@@ -150,6 +150,15 @@ def test_import_filename_mapping_accepts_decomposed_japanese(tmp_path):
     )
 
 
+def test_canonical_key_treats_negative_and_positive_zero_as_equal():
+    negative_zero = {"device_id": "device", "temperature_c": -0.0}
+    positive_zero = {"device_id": "device", "temperature_c": 0.0}
+
+    assert SwitchBotStorage.canonical_key(negative_zero) == (
+        SwitchBotStorage.canonical_key(positive_zero)
+    )
+
+
 def test_exact_observation_conflict_keeps_both(tmp_path):
     storage = _storage(tmp_path)
     base = {
