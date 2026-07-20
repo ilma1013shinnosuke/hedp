@@ -149,6 +149,51 @@ class FusionSolarClient:
         except ValueError as error:
             raise RuntimeError("FusionSolar response is not valid JSON") from error
 
+    def post_json(
+        self,
+        url: str,
+        payload: dict[str, object],
+        headers: Optional[dict[str, str]] = None,
+    ) -> Any:
+        request_headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Referer": f"{self.base_url}/pvmswebsite/assets/build/index.html",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Timezone-Offset": "540",
+            "X-Non-Renewal-Session": "true",
+            "roarand": self.csrf_token or "",
+            "Content-Type": "application/json;charset=UTF-8",
+            "Origin": self.base_url,
+        }
+        if headers:
+            request_headers.update(headers)
+
+        request_url = urljoin(f"{self.base_url}/", url)
+        response = self.session.post(
+            request_url,
+            json=payload,
+            headers=request_headers,
+            allow_redirects=False,
+        )
+        if self._is_auth_failure(response):
+            self.login()
+            request_headers["roarand"] = self.csrf_token or ""
+            if headers:
+                request_headers.update(headers)
+            response = self.session.post(
+                request_url,
+                json=payload,
+                headers=request_headers,
+                allow_redirects=False,
+            )
+        if self._is_auth_failure(response):
+            raise RuntimeError("FusionSolar authentication failed after retry")
+        response.raise_for_status()
+        try:
+            return response.json()
+        except ValueError as error:
+            raise RuntimeError("FusionSolar response is not valid JSON") from error
+
     def _get_api_response(
         self, url: str, headers: dict[str, str]
     ) -> requests.Response:

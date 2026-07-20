@@ -221,6 +221,54 @@ def test_get_json_rejects_non_json_response(client_and_session) -> None:
         client.get_json("/data")
 
 
+def test_post_json_uses_url_body_and_headers(client_and_session) -> None:
+    client, session = client_and_session
+    client.csrf_token = "1234567890abcdef"
+    session.post.return_value = make_response(json_data={"value": 42})
+    payload = {"station": "station-dn"}
+
+    assert client.post_json(
+        "/data", payload, headers={"X-Timezone-Offset": "0"}
+    ) == {"value": 42}
+    session.post.assert_called_once_with(
+        "https://example.test/data",
+        json=payload,
+        headers={
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://example.test/pvmswebsite/assets/build/index.html",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Timezone-Offset": "0",
+            "X-Non-Renewal-Session": "true",
+            "roarand": "1234567890abcdef",
+            "Content-Type": "application/json;charset=UTF-8",
+            "Origin": "https://example.test",
+        },
+        allow_redirects=False,
+    )
+
+
+def test_post_json_logs_in_and_retries_once(client_and_session) -> None:
+    client, session = client_and_session
+    session.post.side_effect = [
+        make_response(status_code=401),
+        make_response(json_data={"value": 42}),
+    ]
+
+    def login() -> None:
+        client.csrf_token = "new-token-123456"
+
+    client.login = Mock(side_effect=login)
+    payload = {"station": "station-dn"}
+
+    assert client.post_json("/data", payload) == {"value": 42}
+    client.login.assert_called_once_with()
+    assert session.post.call_count == 2
+    assert session.post.call_args_list[1].kwargs["json"] is payload
+    assert session.post.call_args_list[1].kwargs["headers"]["roarand"] == (
+        "new-token-123456"
+    )
+
+
 def test_login_rejects_captcha_message(client_and_session) -> None:
     client, session = client_and_session
     session.get.side_effect = [
