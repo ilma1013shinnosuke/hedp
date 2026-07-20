@@ -33,9 +33,16 @@ class Storage:
 
     def save_rawdata(self, raw_data: RawData) -> None:
         connection = self._require_connection()
+        data = raw_data.to_json()
         connection.execute(
-            "INSERT INTO raw_data (data) VALUES (?)",
-            (raw_data.to_json(),),
+            """
+            INSERT INTO raw_data (data)
+            SELECT ?
+            WHERE NOT EXISTS (
+                SELECT 1 FROM raw_data WHERE data = ?
+            )
+            """,
+            (data, data),
         )
         connection.commit()
 
@@ -49,8 +56,14 @@ class Storage:
     def save_records(self, records: list[Record]) -> None:
         connection = self._require_connection()
         connection.executemany(
-            "INSERT INTO records (data) VALUES (?)",
-            [(record.to_json(),) for record in records],
+            """
+            INSERT INTO records (data)
+            SELECT ?
+            WHERE NOT EXISTS (
+                SELECT 1 FROM records WHERE data = ?
+            )
+            """,
+            [(data, data) for data in (record.to_json() for record in records)],
         )
         connection.commit()
 
