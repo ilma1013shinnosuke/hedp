@@ -1,6 +1,8 @@
 import json
 import sqlite3
+from datetime import date
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from hedp.raw_data import RawData
 from hedp.record import Record
@@ -78,6 +80,23 @@ class Storage:
             "SELECT data FROM records ORDER BY id"
         ).fetchall()
         return [Record.from_json(row[0]) for row in rows]
+
+    def get_record_dates(
+        self,
+        source: str,
+        start_date: date,
+        end_date: date,
+        timezone_name: str = "Asia/Tokyo",
+    ) -> set[date]:
+        timezone = ZoneInfo(timezone_name)
+        return {
+            record.timestamp.astimezone(timezone).date()
+            for record in self.load_records()
+            if record.source == source
+            and start_date
+            <= record.timestamp.astimezone(timezone).date()
+            <= end_date
+        }
 
     def _require_connection(self) -> sqlite3.Connection:
         if self._connection is None:

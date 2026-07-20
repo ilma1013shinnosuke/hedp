@@ -165,3 +165,91 @@ def test_cli_closes_connection_when_range_run_raises() -> None:
             )
 
     connection.close.assert_called_once_with()
+
+
+def test_cli_missing_prints_dates_and_count(capsys) -> None:
+    application = Mock()
+    connection = Mock()
+    application.find_missing_dates.return_value = [
+        date(2026, 7, 2),
+        date(2026, 7, 4),
+    ]
+
+    with patch(
+        "hedp.main._create_application",
+        return_value=(application, connection),
+    ):
+        cli(["missing", "--start", "2026-07-01", "--end", "2026-07-05"])
+
+    assert capsys.readouterr().out == (
+        "2026-07-02\n2026-07-04\nMissing 2 date(s).\n"
+    )
+    connection.close.assert_called_once_with()
+
+
+def test_cli_missing_prints_no_missing_dates(capsys) -> None:
+    application = Mock()
+    connection = Mock()
+    application.find_missing_dates.return_value = []
+
+    with patch(
+        "hedp.main._create_application",
+        return_value=(application, connection),
+    ):
+        cli(["missing", "--start", "2026-07-01", "--end", "2026-07-05"])
+
+    assert capsys.readouterr().out == "No missing dates.\nMissing 0 date(s).\n"
+
+
+def test_cli_backfill_missing_prints_count(capsys) -> None:
+    application = Mock()
+    connection = Mock()
+    application.backfill_missing.return_value = [Mock(), Mock()]
+
+    with patch(
+        "hedp.main._create_application",
+        return_value=(application, connection),
+    ):
+        cli(
+            [
+                "backfill-missing",
+                "--start",
+                "2026-07-01",
+                "--end",
+                "2026-07-05",
+            ]
+        )
+
+    assert capsys.readouterr().out == "Backfilled 2 RawData item(s).\n"
+    connection.close.assert_called_once_with()
+
+
+@pytest.mark.parametrize("command", ["missing", "backfill-missing"])
+def test_cli_new_commands_reject_invalid_arguments(command) -> None:
+    with pytest.raises(SystemExit) as raised:
+        cli([command, "--start", "2026-07-05", "--end", "2026-07-01"])
+
+    assert raised.value.code == 2
+
+
+def test_cli_backfill_closes_connection_when_run_raises() -> None:
+    application = Mock()
+    connection = Mock()
+    application.backfill_missing.side_effect = RuntimeError("failed")
+
+    with patch(
+        "hedp.main._create_application",
+        return_value=(application, connection),
+    ):
+        with pytest.raises(RuntimeError, match="failed"):
+            cli(
+                [
+                    "backfill-missing",
+                    "--start",
+                    "2026-07-01",
+                    "--end",
+                    "2026-07-05",
+                ]
+            )
+
+    connection.close.assert_called_once_with()

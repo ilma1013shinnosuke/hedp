@@ -31,3 +31,24 @@ Collect a date range:
 ```bash
 hedp collect --start 2026-07-01 --end 2026-07-03
 ```
+
+Run daily:
+
+```bash
+hedp collect
+```
+
+Check missing dates:
+
+```bash
+hedp missing --start 2026-01-01 --end 2026-07-20
+```
+
+Backfill missing dates:
+
+```bash
+hedp backfill-missing --start 2026-01-01 --end 2026-07-20
+```
+
+HEDP is OS-independent. Use the operating system's scheduler to run
+`hedp collect` automatically.

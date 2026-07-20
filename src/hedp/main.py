@@ -58,6 +58,12 @@ def cli(argv: Optional[list[str]] = None) -> None:
     collect_parser = subparsers.add_parser("collect")
     collect_parser.add_argument("--start", type=_date_argument)
     collect_parser.add_argument("--end", type=_date_argument)
+    missing_parser = subparsers.add_parser("missing")
+    missing_parser.add_argument("--start", type=_date_argument, required=True)
+    missing_parser.add_argument("--end", type=_date_argument, required=True)
+    backfill_parser = subparsers.add_parser("backfill-missing")
+    backfill_parser.add_argument("--start", type=_date_argument, required=True)
+    backfill_parser.add_argument("--end", type=_date_argument, required=True)
     arguments = parser.parse_args(argv)
 
     if (arguments.start is None) != (arguments.end is None):
@@ -65,17 +71,42 @@ def cli(argv: Optional[list[str]] = None) -> None:
     if arguments.start is not None and arguments.start > arguments.end:
         parser.error("--start must not be after --end")
 
-    if arguments.start is None:
-        main()
-        print("Collected 1 RawData item.")
+    if arguments.command == "collect":
+        if arguments.start is None:
+            main()
+            print("Collected 1 RawData item.")
+            return
+        application, connection = _create_application()
+        try:
+            raw_data_list = application.run_range(
+                arguments.start, arguments.end
+            )
+        finally:
+            connection.close()
+        print(f"Collected {len(raw_data_list)} RawData items.")
         return
 
     application, connection = _create_application()
     try:
-        raw_data_list = application.run_range(arguments.start, arguments.end)
+        if arguments.command == "missing":
+            missing_dates = application.find_missing_dates(
+                arguments.start, arguments.end
+            )
+        else:
+            raw_data_list = application.backfill_missing(
+                arguments.start, arguments.end
+            )
     finally:
         connection.close()
-    print(f"Collected {len(raw_data_list)} RawData items.")
+
+    if arguments.command == "missing":
+        if not missing_dates:
+            print("No missing dates.")
+        for missing_date in missing_dates:
+            print(missing_date.isoformat())
+        print(f"Missing {len(missing_dates)} date(s).")
+    else:
+        print(f"Backfilled {len(raw_data_list)} RawData item(s).")
 
 
 if __name__ == "__main__":

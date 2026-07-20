@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from hedp.raw_data import RawData
 from hedp.record import Record
@@ -108,5 +108,53 @@ def test_save_records_ignores_duplicates_and_adds_only_new_records(
         storage.save_records([first, second])
 
         assert storage.load_records() == [first, second]
+    finally:
+        connection.close()
+
+
+def test_get_record_dates_converts_timezone_and_filters_range_and_source(
+    tmp_path,
+) -> None:
+    storage = Storage(str(tmp_path / "test.db"))
+    connection = storage.connect()
+    records = [
+        Record(
+            "fusionsolar",
+            datetime(2026, 7, 19, 15, tzinfo=timezone.utc),
+            "productPower",
+            1,
+            "kW",
+        ),
+        Record(
+            "fusionsolar",
+            datetime(2026, 7, 20, 15, tzinfo=timezone.utc),
+            "productPower",
+            2,
+            "kW",
+        ),
+        Record(
+            "fusionsolar",
+            datetime(2026, 7, 21, 15, tzinfo=timezone.utc),
+            "productPower",
+            3,
+            "kW",
+        ),
+        Record(
+            "other",
+            datetime(2026, 7, 20, 15, tzinfo=timezone.utc),
+            "productPower",
+            4,
+            "kW",
+        ),
+    ]
+
+    try:
+        storage.save_records(records)
+
+        assert storage.get_record_dates(
+            source="fusionsolar",
+            start_date=date(2026, 7, 20),
+            end_date=date(2026, 7, 21),
+        ) == {date(2026, 7, 20), date(2026, 7, 21)}
     finally:
         connection.close()
