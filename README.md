@@ -55,6 +55,7 @@ hedp switchbot import report
 hedp switchbot observations latest
 hedp switchbot gaps
 hedp switchbot hourly rebuild
+hedp import-fusionsolar-reports runtime/import2 --dry-run
 ```
 
 Quality commands that report issue status exit with 0 when no issue is found

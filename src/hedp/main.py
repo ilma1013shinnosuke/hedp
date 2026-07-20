@@ -25,6 +25,7 @@ from hedp.fusionsolar_energy_balance_record_builder import (
     FusionSolarEnergyBalanceRecordBuilder,
 )
 from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
+from hedp.fusionsolar_report_importer import FusionSolarReportImporter
 from hedp.raw_data import RawData
 from hedp.storage import Storage
 from hedp.switchbot_cli import add_switchbot_parser, run_switchbot
@@ -383,6 +384,10 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     backfill_parser.add_argument("--start", type=_date_argument, required=True)
     backfill_parser.add_argument("--end", type=_date_argument, required=True)
     subparsers.add_parser("backup")
+    report_import_parser = subparsers.add_parser("import-fusionsolar-reports")
+    report_import_parser.add_argument("path", type=Path)
+    report_import_parser.add_argument("--inspect", action="store_true")
+    report_import_parser.add_argument("--dry-run", action="store_true")
     quality_parser = subparsers.add_parser("quality")
     quality_parser.add_argument("--start", type=_date_argument, required=True)
     quality_parser.add_argument("--end", type=_date_argument, required=True)
@@ -447,6 +452,22 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         destination = _backup()
         print(f"Backup created: {destination}")
         return
+
+    if arguments.command == "import-fusionsolar-reports":
+        database_path = Configuration.database_path_from_environment()
+        storage = Storage(database_path)
+        connection = storage.connect()
+        try:
+            importer = FusionSolarReportImporter(storage)
+            report = (
+                importer.inspect(arguments.path)
+                if arguments.inspect
+                else importer.run(arguments.path, dry_run=arguments.dry_run)
+            )
+        finally:
+            connection.close()
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1 if report["status"] == "blocked" else 0
 
     argument_start = getattr(arguments, "start", None)
     argument_end = getattr(arguments, "end", None)
