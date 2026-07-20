@@ -271,7 +271,7 @@ def _quality_records(timestamp: datetime) -> list[Record]:
 def test_check_quality_returns_no_issues_for_normal_data() -> None:
     first = datetime(2026, 7, 20, tzinfo=timezone.utc)
     records = _quality_records(first) + _quality_records(
-        first + timedelta(minutes=5)
+        first + timedelta(minutes=60)
     )
     storage = Mock()
     storage.load_records_for_range.return_value = records
@@ -292,7 +292,7 @@ def test_check_quality_returns_no_issues_for_normal_data() -> None:
             "record_count": 10,
             "timestamp_count": 2,
             "first_timestamp": first.isoformat(),
-            "last_timestamp": (first + timedelta(minutes=5)).isoformat(),
+            "last_timestamp": (first + timedelta(minutes=60)).isoformat(),
         },
     }
 
@@ -327,7 +327,7 @@ def test_check_quality_reports_all_quality_issues() -> None:
     assert report["missing_metric_points"] == [
         {
             "timestamp": second.isoformat(),
-            "missing_metrics": ["buyPower", "powerProfit"],
+            "missing_metrics": ["powerProfit"],
         }
     ]
     assert report["irregular_intervals"] == [
@@ -354,6 +354,84 @@ def test_check_quality_treats_none_as_present_and_valid() -> None:
 
     assert report["invalid_values"] == 0
     assert report["missing_metric_points"] == []
+
+
+def test_check_quality_treats_buy_power_as_optional() -> None:
+    timestamp = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    records = [
+        record
+        for record in _quality_records(timestamp)
+        if record.metric != "buyPower"
+    ]
+    storage = Mock()
+    storage.load_records_for_range.return_value = records
+
+    report = Application(Mock(), storage, Mock()).check_quality(
+        date(2026, 7, 20), date(2026, 7, 20)
+    )
+
+    assert report["missing_metric_points"] == []
+
+
+def test_check_quality_reports_missing_required_metric() -> None:
+    timestamp = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    records = [
+        record
+        for record in _quality_records(timestamp)
+        if record.metric not in {"buyPower", "inverterPower"}
+    ]
+    storage = Mock()
+    storage.load_records_for_range.return_value = records
+
+    report = Application(Mock(), storage, Mock()).check_quality(
+        date(2026, 7, 20), date(2026, 7, 20)
+    )
+
+    assert report["missing_metric_points"] == [
+        {
+            "timestamp": timestamp.isoformat(),
+            "missing_metrics": ["inverterPower"],
+        }
+    ]
+
+
+@pytest.mark.parametrize("minutes", [5, 120, 180])
+def test_check_quality_reports_non_hourly_interval(minutes) -> None:
+    first = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    current = first + timedelta(minutes=minutes)
+    storage = Mock()
+    storage.load_records_for_range.return_value = [
+        *_quality_records(first),
+        *_quality_records(current),
+    ]
+
+    report = Application(Mock(), storage, Mock()).check_quality(
+        date(2026, 7, 20), date(2026, 7, 20)
+    )
+
+    assert report["irregular_intervals"] == [
+        {
+            "previous": first.isoformat(),
+            "current": current.isoformat(),
+            "minutes": float(minutes),
+        }
+    ]
+
+
+def test_check_quality_ignores_interval_across_tokyo_dates() -> None:
+    first = datetime(2026, 7, 20, 14, 55, tzinfo=timezone.utc)
+    current = first + timedelta(minutes=10)
+    storage = Mock()
+    storage.load_records_for_range.return_value = [
+        *_quality_records(first),
+        *_quality_records(current),
+    ]
+
+    report = Application(Mock(), storage, Mock()).check_quality(
+        date(2026, 7, 20), date(2026, 7, 21)
+    )
+
+    assert report["irregular_intervals"] == []
 
 
 def test_check_quality_returns_empty_summary_for_no_data() -> None:
@@ -399,7 +477,7 @@ def test_check_quality_processes_150000_records_in_one_pass() -> None:
     records = TrackedRecords(
         record
         for point in range(30_000)
-        for record in _quality_records(first + timedelta(minutes=5 * point))
+        for record in _quality_records(first + timedelta(minutes=60 * point))
     )
     storage = Mock()
     storage.load_records_for_range.return_value = records

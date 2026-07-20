@@ -18,6 +18,13 @@ class Application:
         "buyPower": "kW",
         "powerProfit": "JPY",
     }
+    REQUIRED_QUALITY_METRICS = {
+        "productPower",
+        "inverterPower",
+        "onGridPower",
+        "powerProfit",
+    }
+    EXPECTED_INTERVAL_MINUTES = 60
 
     def __init__(
         self,
@@ -127,7 +134,7 @@ class Application:
             )
         unexpected_metrics = sorted(unexpected_metric_names)
         timestamps = sorted(records_by_timestamp)
-        expected_metrics = set(self.QUALITY_UNITS)
+        expected_metrics = self.REQUIRED_QUALITY_METRICS
         missing_metric_points = [
             {
                 "timestamp": timestamp.isoformat(),
@@ -146,7 +153,7 @@ class Application:
             if (
                 previous.astimezone(timezone).date()
                 == current.astimezone(timezone).date()
-                and minutes != 5
+                and minutes != self.EXPECTED_INTERVAL_MINUTES
             ):
                 irregular_intervals.append(
                     {
