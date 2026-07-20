@@ -226,6 +226,32 @@ def test_cli_collect_alarm_history(capsys):
     )
 
 
+def test_cli_quality_alarms_returns_issue_status(capsys):
+    configuration = Configuration(
+        "https://example.test", "station", "user", "password", "hedp.db"
+    )
+    with (
+        patch("hedp.main.Configuration") as configuration_class,
+        patch("hedp.main.Storage") as storage_class,
+        patch("hedp.main.Application") as application_class,
+    ):
+        configuration_class.from_environment.return_value = configuration
+        configuration_class.device_dns_from_environment.return_value = ["NE=1"]
+        application_class.return_value.check_alarm_quality.return_value = {
+            "collection_count": 1,
+            "invalid_responses": 0,
+            "total_hits": 0,
+            "issue_count": 1,
+        }
+        result = cli(["quality-alarms"])
+    assert result == 1
+    storage_class.return_value.connect.return_value.close.assert_called_once()
+    assert capsys.readouterr().out == (
+        "Collections: 1\nInvalid responses: 0\n"
+        "Alarm hits: 0\nQuality issues: 1\n"
+    )
+
+
 def test_cli_backup_uses_storage_only_and_closes_connection(
     tmp_path, capsys
 ) -> None:

@@ -84,6 +84,12 @@ Device-realtime diagnostics report total and per-device snapshot counts,
 latest timestamps, and gaps greater than ten minutes. API failures are logged
 for the run but are not currently persisted as database events.
 
+Battery DC quality reports response structure, module coverage, empty-module
+responses, and latest snapshots. Alarm quality reports response structure,
+API success flags, configured-device CURRENT coverage, and observed hit counts.
+The corresponding diagnose commands always return their aggregate details
+without changing data.
+
 ## Security
 
 - Credentials, databases, backups, logs, and environment files are not

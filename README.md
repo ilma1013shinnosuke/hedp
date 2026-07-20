@@ -31,6 +31,10 @@ hedp collect-device-realtime
 hedp collect-battery-dc
 hedp collect-alarms-current
 hedp collect-alarms-history --start 2026-07-19 --end 2026-07-20
+hedp quality-battery-dc
+hedp diagnose-battery-dc
+hedp quality-alarms
+hedp diagnose-alarms
 hedp build-energy-balance-records --start 2026-07-19 --end 2026-07-19
 hedp missing --start 2026-01-01 --end 2026-07-20
 hedp backfill-missing --start 2026-01-01 --end 2026-07-20

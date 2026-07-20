@@ -268,6 +268,124 @@ class Application:
             "api_failure_count": None,
         }
 
+    def diagnose_battery_dc(self) -> dict[str, object]:
+        items = [
+            item
+            for item in self.storage.load_rawdata()
+            if item.source == "fusionsolar_battery_dc"
+        ]
+        by_module = Counter()
+        latest_by_module = {}
+        empty_responses = Counter()
+        invalid_responses = 0
+        for item in items:
+            module_id = str((item.metadata or {}).get("module_id", "unknown"))
+            by_module[module_id] += 1
+            previous = latest_by_module.get(module_id)
+            if previous is None or item.timestamp > previous:
+                latest_by_module[module_id] = item.timestamp
+            data = item.payload.get("data")
+            if not isinstance(item.payload.get("success"), bool) or not isinstance(
+                data, list
+            ):
+                invalid_responses += 1
+            elif not data:
+                empty_responses[module_id] += 1
+        return {
+            "collection_count": len(items),
+            "by_module": dict(sorted(by_module.items())),
+            "latest_by_module": {
+                key: value.isoformat()
+                for key, value in sorted(latest_by_module.items())
+            },
+            "empty_responses_by_module": dict(
+                sorted(empty_responses.items())
+            ),
+            "invalid_responses": invalid_responses,
+        }
+
+    def check_battery_dc_quality(self) -> dict[str, object]:
+        diagnosis = self.diagnose_battery_dc()
+        modules = diagnosis["by_module"]
+        assert isinstance(modules, dict)
+        missing_modules = [
+            module_id for module_id in ("1", "2", "3", "4") if module_id not in modules
+        ]
+        issues = int(diagnosis["invalid_responses"])
+        if diagnosis["collection_count"] == 0:
+            issues += 1
+        issues += len(missing_modules)
+        return {
+            **diagnosis,
+            "missing_modules": missing_modules,
+            "issue_count": issues,
+        }
+
+    def diagnose_alarms(self) -> dict[str, object]:
+        items = [
+            item
+            for item in self.storage.load_rawdata()
+            if item.source
+            in {"fusionsolar_alarm_current", "fusionsolar_alarm_history"}
+        ]
+        by_source = Counter()
+        by_device = Counter()
+        latest_current_by_device = {}
+        invalid_responses = 0
+        non_success_responses = 0
+        total_hits = 0
+        for item in items:
+            by_source[item.source] += 1
+            device_dn = str((item.metadata or {}).get("device_dn", "unknown"))
+            by_device[device_dn] += 1
+            if item.source == "fusionsolar_alarm_current":
+                previous = latest_current_by_device.get(device_dn)
+                if previous is None or item.timestamp > previous:
+                    latest_current_by_device[device_dn] = item.timestamp
+            if item.payload.get("success") is not True:
+                non_success_responses += 1
+            data = item.payload.get("data")
+            if not isinstance(data, dict) or not isinstance(
+                data.get("hits"), list
+            ):
+                invalid_responses += 1
+            else:
+                total_hits += len(data["hits"])
+        return {
+            "collection_count": len(items),
+            "by_source": dict(sorted(by_source.items())),
+            "by_device": dict(sorted(by_device.items())),
+            "latest_current_by_device": {
+                key: value.isoformat()
+                for key, value in sorted(latest_current_by_device.items())
+            },
+            "total_hits": total_hits,
+            "invalid_responses": invalid_responses,
+            "non_success_responses": non_success_responses,
+        }
+
+    def check_alarm_quality(
+        self, expected_device_dns: list[str]
+    ) -> dict[str, object]:
+        diagnosis = self.diagnose_alarms()
+        latest = diagnosis["latest_current_by_device"]
+        assert isinstance(latest, dict)
+        missing_current_devices = [
+            device_dn
+            for device_dn in expected_device_dns
+            if device_dn not in latest
+        ]
+        issue_count = (
+            int(diagnosis["invalid_responses"])
+            + int(diagnosis["non_success_responses"])
+            + len(missing_current_devices)
+        )
+        return {
+            **diagnosis,
+            "missing_current_devices": missing_current_devices,
+            "issue_count": issue_count,
+        }
+
     def find_missing_dates(
         self, start_date: date, end_date: date
     ) -> list[date]:

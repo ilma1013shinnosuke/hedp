@@ -292,6 +292,10 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     energy_quality_parser.add_argument("--start", type=_date_argument, required=True)
     energy_quality_parser.add_argument("--end", type=_date_argument, required=True)
     subparsers.add_parser("diagnose-device-realtime")
+    subparsers.add_parser("quality-battery-dc")
+    subparsers.add_parser("diagnose-battery-dc")
+    subparsers.add_parser("quality-alarms")
+    subparsers.add_parser("diagnose-alarms")
     missing_parser = subparsers.add_parser("missing")
     missing_parser.add_argument("--start", type=_date_argument, required=True)
     missing_parser.add_argument("--end", type=_date_argument, required=True)
@@ -446,6 +450,38 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         print(f"Collections: {report['collection_count']}")
         for device_dn, count in report["by_device"].items():
             print(f"{device_dn}: {count}")
+        return 0
+
+    if arguments.command in {
+        "quality-battery-dc",
+        "diagnose-battery-dc",
+        "quality-alarms",
+        "diagnose-alarms",
+    }:
+        configuration = Configuration.from_environment()
+        storage = Storage(configuration.database_path)
+        connection = storage.connect()
+        try:
+            application = Application(None, storage, None)
+            if arguments.command == "quality-battery-dc":
+                report = application.check_battery_dc_quality()
+            elif arguments.command == "diagnose-battery-dc":
+                report = application.diagnose_battery_dc()
+            elif arguments.command == "quality-alarms":
+                report = application.check_alarm_quality(
+                    Configuration.device_dns_from_environment()
+                )
+            else:
+                report = application.diagnose_alarms()
+        finally:
+            connection.close()
+        print(f"Collections: {report['collection_count']}")
+        print(f"Invalid responses: {report['invalid_responses']}")
+        if "total_hits" in report:
+            print(f"Alarm hits: {report['total_hits']}")
+        if "issue_count" in report:
+            print(f"Quality issues: {report['issue_count']}")
+            return 1 if report["issue_count"] else 0
         return 0
 
     if arguments.command == "collect-energy-balance":

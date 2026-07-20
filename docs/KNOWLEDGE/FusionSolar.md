@@ -253,6 +253,10 @@ The complete response is stored unchanged. The `sigids` parameter value is
 configuration because its confirmed value has not been recorded in this
 document; it must not be guessed.
 
+`quality-battery-dc` checks stored response structure and expected module
+coverage; `diagnose-battery-dc` reports per-module counts, empty responses, and
+latest acquisition times.
+
 ### alarms
 
 | Field | Confirmed information |
@@ -272,6 +276,9 @@ Top-level keys are `success`, `data`, `failCode`, and `params`. For zero
 results, `hits=[]`, `severityStatistics=[]`, `totalCount=0`, `groupResult` is
 null or empty, and `offset` is 0 or -1. Python stores every returned page as a
 separate unchanged RawData object and continues other devices after one fails.
+`quality-alarms` checks stored response structure, success flags, and CURRENT
+coverage for configured devices. `diagnose-alarms` reports source/device counts,
+latest CURRENT acquisitions, and the total number of stored hits.
 
 ## 3. Data inventory
 

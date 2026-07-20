@@ -88,6 +88,53 @@ def test_run_current_alarms_saves_all_pages():
     ]
 
 
+def test_battery_dc_quality_reports_missing_modules_and_invalid_response():
+    storage = Mock()
+    storage.load_rawdata.return_value = [
+        RawData(
+            "fusionsolar_battery_dc",
+            datetime(2026, 7, 20, tzinfo=timezone.utc),
+            {"success": True, "data": [{"id": 1}]},
+            metadata={"device_dn": "NE=1", "module_id": 1},
+        ),
+        RawData(
+            "fusionsolar_battery_dc",
+            datetime(2026, 7, 20, 1, tzinfo=timezone.utc),
+            {"success": True, "data": "invalid"},
+            metadata={"device_dn": "NE=1", "module_id": 2},
+        ),
+    ]
+    report = Application(None, storage, None).check_battery_dc_quality()
+    assert report["collection_count"] == 2
+    assert report["invalid_responses"] == 1
+    assert report["missing_modules"] == ["3", "4"]
+    assert report["issue_count"] == 3
+
+
+def test_alarm_quality_reports_hits_and_missing_current_device():
+    storage = Mock()
+    storage.load_rawdata.return_value = [
+        RawData(
+            "fusionsolar_alarm_current",
+            datetime(2026, 7, 20, tzinfo=timezone.utc),
+            {"success": True, "data": {"hits": [{"alarmId": 1}]}},
+            metadata={"device_dn": "NE=1", "page_number": 1},
+        ),
+        RawData(
+            "fusionsolar_alarm_history",
+            datetime(2026, 7, 20, tzinfo=timezone.utc),
+            {"success": True, "data": {"hits": []}},
+            metadata={"device_dn": "NE=2", "page_number": 1},
+        ),
+    ]
+    report = Application(None, storage, None).check_alarm_quality(
+        ["NE=1", "NE=2"]
+    )
+    assert report["total_hits"] == 1
+    assert report["missing_current_devices"] == ["NE=2"]
+    assert report["issue_count"] == 1
+
+
 def test_run_range_processes_each_raw_data_in_order() -> None:
     raw_data_list = [
         RawData(
