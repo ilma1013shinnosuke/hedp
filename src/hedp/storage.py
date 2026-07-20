@@ -1,6 +1,7 @@
 import json
 import sqlite3
 from datetime import date
+from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -89,6 +90,16 @@ class Storage:
             "SELECT data FROM records ORDER BY id"
         ).fetchall()
         return [Record.from_json(row[0]) for row in rows]
+
+    def backup(self, destination_path: str) -> None:
+        connection = self._require_connection()
+        destination = Path(destination_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        backup_connection = sqlite3.connect(destination)
+        try:
+            connection.backup(backup_connection)
+        finally:
+            backup_connection.close()
 
     def get_record_dates(
         self,

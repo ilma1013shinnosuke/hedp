@@ -1,8 +1,56 @@
 from datetime import date, datetime, timezone
+import sqlite3
 
 from hedp.raw_data import RawData
 from hedp.record import Record
 from hedp.storage import Storage
+
+
+def test_backup_copies_data_creates_parent_overwrites_and_preserves_source(
+    tmp_path,
+) -> None:
+    storage = Storage(str(tmp_path / "test.db"))
+    connection = storage.connect()
+    raw_data = RawData(
+        source="test-source",
+        timestamp=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        payload={"value": 42},
+    )
+    record = Record(
+        source="test-source",
+        timestamp=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        metric="power",
+        value=42,
+        unit="kW",
+    )
+    destination = tmp_path / "new" / "backups" / "backup.db"
+
+    try:
+        storage.save_rawdata(raw_data)
+        storage.save_records([record])
+        storage.backup(str(destination))
+
+        with sqlite3.connect(destination) as backup_connection:
+            backup_connection.execute(
+                "INSERT INTO raw_data (data) VALUES ('obsolete')"
+            )
+        storage.backup(str(destination))
+
+        with sqlite3.connect(destination) as backup_connection:
+            raw_data_count = backup_connection.execute(
+                "SELECT COUNT(*) FROM raw_data"
+            ).fetchone()[0]
+            record_count = backup_connection.execute(
+                "SELECT COUNT(*) FROM records"
+            ).fetchone()[0]
+
+        assert destination.is_file()
+        assert raw_data_count == 1
+        assert record_count == 1
+        assert storage.load_rawdata() == [raw_data]
+        assert storage.load_records() == [record]
+    finally:
+        connection.close()
 
 
 def test_save_and_load_rawdata(tmp_path) -> None:

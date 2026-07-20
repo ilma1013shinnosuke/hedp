@@ -50,6 +50,15 @@ Backfill missing dates:
 hedp backfill-missing --start 2026-01-01 --end 2026-07-20
 ```
 
+Create a manual backup:
+
+```bash
+hedp backup
+```
+
+Backups are saved in `backups/` next to the database. Copy the SQLite file
+to another device to migrate the data.
+
 HEDP is OS-independent. Use the operating system's scheduler to run
 `hedp collect` automatically.
 

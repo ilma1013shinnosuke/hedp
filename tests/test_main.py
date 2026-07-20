@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from pathlib import Path
 from unittest.mock import Mock, call, patch
 
 import pytest
@@ -108,6 +109,71 @@ def test_cli_collect_runs_today_and_prints_success(capsys) -> None:
 
     main_function.assert_called_once_with()
     assert capsys.readouterr().out == "Collected 1 RawData item.\n"
+
+
+def test_cli_backup_uses_storage_only_and_closes_connection(
+    tmp_path, capsys
+) -> None:
+    configuration = Configuration(
+        base_url="https://example.test",
+        station_dn="station-dn",
+        username="user",
+        password="password",
+        database_path=str(tmp_path / "hedp.db"),
+    )
+
+    with (
+        patch("hedp.main.Configuration") as configuration_class,
+        patch("hedp.main.FusionSolarClient") as client_class,
+        patch("hedp.main.FusionSolarCollector") as collector_class,
+        patch("hedp.main.FusionSolarRecordBuilder") as builder_class,
+        patch("hedp.main.Application") as application_class,
+        patch("hedp.main.Storage") as storage_class,
+        patch("hedp.main.datetime") as datetime_class,
+    ):
+        configuration_class.from_environment.return_value = configuration
+        datetime_class.now.return_value = datetime(2026, 7, 20, 12, 34, 56)
+        storage = storage_class.return_value
+        connection = storage.connect.return_value
+
+        cli(["backup"])
+
+    destination = (
+        Path(configuration.database_path).resolve().parent
+        / "backups"
+        / "hedp-20260720-123456.db"
+    )
+    storage.backup.assert_called_once_with(str(destination))
+    connection.close.assert_called_once_with()
+    client_class.assert_not_called()
+    collector_class.assert_not_called()
+    builder_class.assert_not_called()
+    application_class.assert_not_called()
+    assert capsys.readouterr().out == f"Backup created: {destination}\n"
+
+
+def test_cli_backup_closes_connection_when_backup_raises(tmp_path) -> None:
+    configuration = Configuration(
+        base_url="https://example.test",
+        station_dn="station-dn",
+        username="user",
+        password="password",
+        database_path=str(tmp_path / "hedp.db"),
+    )
+
+    with (
+        patch("hedp.main.Configuration") as configuration_class,
+        patch("hedp.main.Storage") as storage_class,
+    ):
+        configuration_class.from_environment.return_value = configuration
+        storage = storage_class.return_value
+        connection = storage.connect.return_value
+        storage.backup.side_effect = RuntimeError("failed")
+
+        with pytest.raises(RuntimeError, match="failed"):
+            cli(["backup"])
+
+    connection.close.assert_called_once_with()
 
 
 def test_cli_collects_date_range_and_closes_connection(capsys) -> None:

@@ -1,7 +1,9 @@
 import argparse
 import sqlite3
-from datetime import date
+from datetime import date, datetime
+from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from hedp.application import Application
 from hedp.configuration import Configuration
@@ -52,6 +54,26 @@ def _date_argument(value: str) -> date:
     return parsed
 
 
+def _backup() -> Path:
+    configuration = Configuration.from_environment()
+    storage = Storage(configuration.database_path)
+    connection = storage.connect()
+    try:
+        database_path = Path(configuration.database_path).resolve()
+        timestamp = datetime.now(ZoneInfo("Asia/Tokyo")).strftime(
+            "%Y%m%d-%H%M%S"
+        )
+        destination = (
+            database_path.parent
+            / "backups"
+            / f"hedp-{timestamp}.db"
+        )
+        storage.backup(str(destination))
+    finally:
+        connection.close()
+    return destination
+
+
 def cli(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(prog="hedp")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -64,7 +86,13 @@ def cli(argv: Optional[list[str]] = None) -> None:
     backfill_parser = subparsers.add_parser("backfill-missing")
     backfill_parser.add_argument("--start", type=_date_argument, required=True)
     backfill_parser.add_argument("--end", type=_date_argument, required=True)
+    subparsers.add_parser("backup")
     arguments = parser.parse_args(argv)
+
+    if arguments.command == "backup":
+        destination = _backup()
+        print(f"Backup created: {destination}")
+        return
 
     if (arguments.start is None) != (arguments.end is None):
         parser.error("--start and --end must be specified together")
