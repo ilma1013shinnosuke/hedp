@@ -1,10 +1,12 @@
 # hedp
 
-Python project for HEDP.
+HEDP is a long-lived household energy data platform. See [PROJECT.md](PROJECT.md)
+for its purpose and principles, [SPECIFICATION.md](SPECIFICATION.md) for the
+current technical contract, and
+[FusionSolar knowledge](docs/KNOWLEDGE/FusionSolar.md) for verified vendor API
+details and unknowns.
 
 ## Setup
-
-Create and install into a virtual environment:
 
 ```bash
 python3 -m venv .venv
@@ -12,89 +14,50 @@ source .venv/bin/activate
 python -m pip install -e .
 ```
 
-Set these environment variables:
+Set `HEDP_FUSIONSOLAR_BASE_URL`, `HEDP_FUSIONSOLAR_STATION_DN`,
+`HEDP_FUSIONSOLAR_USERNAME`, `HEDP_FUSIONSOLAR_PASSWORD`, and
+`HEDP_DATABASE_PATH`. Realtime collection also requires the ordered,
+comma-separated `HEDP_FUSIONSOLAR_DEVICE_DNS` value.
 
-- `HEDP_FUSIONSOLAR_BASE_URL`
-- `HEDP_FUSIONSOLAR_STATION_DN`
-- `HEDP_FUSIONSOLAR_USERNAME`
-- `HEDP_FUSIONSOLAR_PASSWORD`
-- `HEDP_DATABASE_PATH`
-
-Collect today's data:
+## Main commands
 
 ```bash
 hedp collect
-```
-
-Collect a date range:
-
-```bash
 hedp collect --start 2026-07-01 --end 2026-07-03
-```
-
-Run daily:
-
-```bash
-hedp collect
-```
-
-Check missing dates:
-
-```bash
+hedp collect-energy-balance --start 2026-07-19 --end 2026-07-19
+hedp collect-device-realtime
+hedp build-energy-balance-records --start 2026-07-19 --end 2026-07-19
 hedp missing --start 2026-01-01 --end 2026-07-20
-```
-
-Backfill missing dates:
-
-```bash
 hedp backfill-missing --start 2026-01-01 --end 2026-07-20
-```
-
-Check saved record quality:
-
-```bash
 hedp quality --start 2026-01-01 --end 2026-07-20
-```
-
-The exit code is 0 when no problems are found and 1 when quality issues are
-found.
-
-Create a manual backup:
-
-```bash
+hedp quality-diagnose --start 2026-01-01 --end 2026-07-20
+hedp quality-energy-balance --start 2026-07-19 --end 2026-07-19
+hedp diagnose-device-realtime
 hedp backup
 ```
 
-Backups are saved in `backups/` next to the database. Copy the SQLite file
-to another device to migrate the data.
+Quality commands that report issue status exit with 0 when no issue is found
+and 1 when issues are found; diagnostic commands exit with 0 after completion.
+Backups are stored in `backups/` next to the database, with the latest 30 kept
+by the daily job. Copying the SQLite file to another device migrates the data.
 
-HEDP is OS-independent. Use the operating system's scheduler to run
-`hedp collect` automatically.
-
-## macOS automatic collection
-
-Install the launchd job:
+## macOS automatic operation
 
 ```bash
 scripts/install_macos_launchd.sh
+scripts/install_macos_device_realtime_launchd.sh
 ```
 
-Uninstall it:
+The daily job runs station collection, previous-day energy-balance collection
+and Record generation, quality checks, and backup from 03:00. The separate
+device-realtime job runs every five minutes. Logs are stored under
+`~/Library/Logs/hedp/`; macOS-specific behavior remains in `scripts/`.
+
+Uninstall the daily job with `scripts/uninstall_macos_launchd.sh`.
+
+## Development checks
 
 ```bash
-scripts/uninstall_macos_launchd.sh
+pytest
+ruff check .
 ```
-
-The job runs `hedp collect` and then `hedp backup` every day at 3:00 AM.
-Backups are saved in `backups/`, and the latest 30 are retained. If the Mac
-is asleep, launchd may run it after the Mac wakes. Check or repair missed
-dates with `hedp missing` and `hedp backfill-missing`.
-
-Logs are stored in `~/Library/Logs/hedp/collect.out.log` and
-`~/Library/Logs/hedp/collect.err.log`.
-
-HEDP itself remains OS-independent; only this automatic execution setup is
-macOS-specific.
-# Data collection policy
-
-FusionSolarなど外部システムから取得可能な履歴値、現在値、状態、設備情報、設定、Signal、アラーム、集計値は、用途が未確定でも原則として無変換のRawDataとして保存します。取得時には補正、欠損補完、推測、単位変換、表示名変換を行わず、Record化と分析は保存後に行います。現在値APIは定期スナップショットとして扱います。

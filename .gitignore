@@ -7,4 +7,11 @@ dist/
 build/
 *.egg-info/
 hedp.db
+*.db
+*.db-*
 backups/
+.env
+.env.*
+*.log
+logs/
+*.plist

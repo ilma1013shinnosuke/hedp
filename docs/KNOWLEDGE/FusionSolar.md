@@ -6,18 +6,19 @@ This document records only behavior supported by the current Python code,
 stored responses, or the observed GAS-era workbook. It does not carry forward
 the GAS architecture.
 
-Evidence labels used below:
+Every API uses one of these current status labels:
 
-- **Python live-confirmed**: the current Python implementation has successfully
-  called the API against the live FusionSolar service and stored the returned
-  response as RawData.
-- **Python implementation-confirmed**: request/parse behavior exists in Python;
-  tests use mocked HTTP responses.
-- **GAS observed**: successful collection or a raw response is recorded in the
-  GAS-era workbook.
-- **DevTools observed**: the workbook explicitly says the value came from a
-  copied browser request.
-- **Unverified**: the available evidence does not establish the behavior.
+- **candidate**: a name or intended capability exists, but the communication
+  contract has not been observed.
+- **devtools-observed**: method, request, or response was captured from the
+  FusionSolar browser application, but no Python collector is implemented.
+- **implementation-confirmed**: a Python collector exists and its communication
+  contract is covered without external communication in tests.
+- **live-confirmed**: the current Python implementation has successfully called
+  the live FusionSolar service and stored the returned response as RawData.
+
+Older GAS workbook evidence is retained as supporting evidence, but is not a
+status label for the current implementation.
 
 The requested legacy sources `00_Config.js`,
 `01_FusionSolarConnector.js`, `02_DeviceCollector.js`,
@@ -101,6 +102,31 @@ Evidence: `FusionSolarClient.get_json`, `post_json`, `_is_auth_failure`,
 
 ## 2. API inventory
 
+### Status overview
+
+#### Implemented
+
+| API | Endpoint | Method | Parameters | Response status | History/time series | Status | Next verification action |
+|---|---|---|---|---|---|---|---|
+| `station-kpi-list` | `/rest/pvms/web/report/v1/station/station-kpi-list` | POST | Request body documented below | Stored response confirmed | One day per request; hourly points | live-confirmed | Monitor compatibility and retention |
+| `energy-balance` | `/rest/pvms/web/station/v1/overview/energy-balance` | GET | `stationDn`, `timeDim`, `queryTime`, `timeZone`, `timeZoneStr`, `dateStr`, `_` | Stored response and derived Records confirmed | Daily `timeDim=2`; 288 five-minute points | live-confirmed | Confirm units and uncertain key semantics |
+| `device-realtime-data` | `/rest/pvms/web/device/v1/device-realtime-data` | GET | `deviceDn`, `_` | Stored responses confirmed for four configured devices | Current snapshot; no history parameter observed | live-confirmed | Verify authoritative device discovery and meter behavior |
+
+#### Unconfirmed or partially confirmed
+
+| API/capability | Endpoint | Method | Parameters | Response status | History/time series | Status | Next verification action |
+|---|---|---|---|---|---|---|---|
+| Battery DC detail / `query-battery-dc` | unknown | unknown | unknown; `deviceDn`/`moduleId` unknown | unknown | unknown | candidate | Capture battery-module request and response in DevTools |
+| Device inventory / topology / equipment structure | unknown | unknown | `stationDn` relationship unknown | unknown | unknown | candidate | Capture device-list and equipment screens |
+| Configuration | unknown | unknown | unknown | unknown | unknown | candidate | Capture configuration screen requests |
+| Signal definition/master | unknown | unknown | unknown | Realtime response embeds Signal entries; dedicated API unknown | unknown | candidate | Capture any Signal/master request separately |
+| Alarms | unknown | unknown | unknown | unknown | Current-state behavior unknown | candidate | Capture active-alarm screen request and response |
+| Alarm history | unknown | unknown | pagination and time range unknown | unknown | Historical behavior unknown | candidate | Capture past-alarm query, pagination, and range |
+| Operation history | unknown | unknown | unknown | unknown | Historical behavior unknown | candidate | Capture operation-history screen requests |
+| Maintenance or fault history | unknown | unknown | unknown | unknown | Historical behavior unknown | candidate | Capture maintenance/fault screen requests |
+| Monthly energy-balance | Same observed path as `energy-balance` | GET | `timeDim=4` observed; other details as daily request not yet proven | Response not retained as Python RawData | Monthly dimension observed | devtools-observed | Capture complete request and response for a month |
+| Yearly energy-balance | Same observed path as `energy-balance` | GET | `timeDim=5` observed; other details as daily request not yet proven | Response not retained as Python RawData | Yearly dimension observed | devtools-observed | Capture complete request and response for a year |
+
 ### energy-balance
 
 | Field | Confirmed information |
@@ -112,7 +138,7 @@ Evidence: `FusionSolarClient.get_json`, `post_json`, `_is_auth_failure`,
 | Date specification | `queryTime` is Unix epoch milliseconds for target-day midnight in Asia/Tokyo; `dateStr` is `YYYY-MM-DD 00:00:00`; `_` is request-time Unix epoch milliseconds. Observed dimensions are `timeDim=2` for day, `4` for month, and `5` for year. Only day collection is implemented. |
 | `stationDn` / `deviceDn` / `moduleId` | `stationDn=NE=33812827` is DevTools-observed. No `deviceDn` or `moduleId` evidence. |
 | Available information | For `timeDim=2`, `xAxis` contains 288 timestamps at 5-minute intervals from 00:00 through 23:55. Each confirmed 5-minute series array corresponds positionally to `xAxis`. The Python collector preserves the entire response, including `"--"`, without interpreting or converting values. Units and the exact meaning of some keys remain unconfirmed. |
-| Evidence state | **Python implementation-confirmed**, **GAS observed**, and **DevTools observed**. Three recent past days have 288 points/day in `96_QA_FusionSolar_5分`; raw rows exist in `12_RAW_FusionSolar_5分`. Python live communication is not yet confirmed. |
+| Evidence state | **live-confirmed**. The Python collector has called the live service and stored the unchanged response as RawData; request behavior is covered by tests. Earlier DevTools and GAS workbook evidence also exists. |
 | Past dates | Yes for observed recent dates (2026-07-17 through 2026-07-19). Older range and retention limit are unverified. |
 | Recommended collector | `FusionSolarEnergyBalanceCollector` |
 
@@ -157,7 +183,7 @@ keys are not yet confirmed.
 | Date specification | `statTime`: Unix epoch milliseconds for target-day midnight in Asia/Tokyo |
 | `stationDn` / `deviceDn` / `moduleId` | `stationDn` is sent as `moList=[{"moType": 20801, "moString": stationDn}]`. No `deviceDn` or `moduleId`. |
 | Available information | Hourly `fmtCollectTimeStr`, `productPower`, `inverterPower`, `onGridPower`, optional `buyPower`, and `powerProfit` |
-| Evidence state | **Python live-confirmed**, **Python implementation-confirmed**, and **GAS observed**. |
+| Evidence state | **live-confirmed**. |
 | Past dates | Yes. The local database contains collected data from 2022-12-15 through 2026-07-20; Python requests one day at a time. |
 | Recommended collector | Existing `FusionSolarCollector` (retain); a future rename is not required by this inventory. |
 
@@ -183,7 +209,7 @@ FusionSolar RawData rows with the listed response keys; workbook
 | Date specification | None observed; this is a current/realtime response |
 | `stationDn` / `deviceDn` / `moduleId` | `deviceDn` is used. No `stationDn` or `moduleId` evidence. |
 | Available information | Top-level `buildCode`, `data`, `failCode`, `params`, `success`; within `data`: device `status`, `groupName`, `signals`, `pv2mppt`. Signals expose `id`, `name`, `unit`, display `value`, optional `realValue`, and optional `latestTime`. |
-| Evidence state | **GAS observed** for 4/4 candidate device DNs with HTTP 200 and stored raw JSON. Not implemented in Python. |
+| Evidence state | **live-confirmed** for all four configured candidate device DNs. Python stores one unchanged response per device with the requested `deviceDn` in RawData metadata. |
 | Past dates | No historical query is observed. Only the response's latest/current signal timestamp is available. |
 | Recommended collector | `FusionSolarDeviceRealtimeCollector` |
 
@@ -218,7 +244,7 @@ Confirmed device signal groups include:
 | Date specification | Unverified |
 | `stationDn` / `deviceDn` / `moduleId` | All unverified |
 | Available information | Unverified; no raw response was found. Do not infer fields from `device-realtime-data`. |
-| Evidence state | **Unverified** |
+| Evidence state | **candidate** |
 | Past dates | Unverified |
 | Recommended collector | `FusionSolarBatteryDcCollector`, only after endpoint, request, identifiers, and raw response are observed |
 
@@ -230,23 +256,23 @@ public search. The expected legacy source/function was not available.
 
 | Data class | API/evidence | Raw data confirmed | Record status |
 |---|---|---:|---|
-| Generation | `station-kpi-list`: `productPower`, `inverterPower`; `energy-balance`: 5-minute PV; `device-realtime-data`: inverter daily/cumulative energy and active power | Yes | Station KPI fields are Recordized; other sources are not implemented in Python |
-| Consumption | `energy-balance`: 5-minute load; `station-kpi-list`: no separately named consumption key beyond the existing KPI semantics | Yes in normalized GAS raw | Not implemented for energy-balance |
-| Grid import | `station-kpi-list`: optional `buyPower`; `energy-balance`: 5-minute import and daily QA total; meter signal names include positive active electricity | Yes for station/energy-balance; meter values not usable in observed response | `buyPower` Recordized; others unimplemented |
-| Grid export | `station-kpi-list`: `onGridPower`; `energy-balance`: 5-minute export and daily QA total; meter signal name includes reverse active energy | Yes for station/energy-balance; meter values not usable in observed response | `onGridPower` Recordized; others unimplemented |
+| Generation | `station-kpi-list`: `productPower`, `inverterPower`; `energy-balance`: 5-minute PV; `device-realtime-data`: inverter daily/cumulative energy and active power | Yes | Station KPI and confirmed energy-balance fields are Recordized; realtime Signals are RawData only |
+| Consumption | `energy-balance`: 5-minute load; `station-kpi-list`: no separately named consumption key beyond the existing KPI semantics | Yes | Confirmed energy-balance fields are Recordized |
+| Grid import | `station-kpi-list`: optional `buyPower`; `energy-balance`: 5-minute import and daily QA total; meter signal names include positive active electricity | Yes for station/energy-balance; meter values not usable in observed response | Confirmed station and energy-balance keys are Recordized; meter Signals are not |
+| Grid export | `station-kpi-list`: `onGridPower`; `energy-balance`: 5-minute export and daily QA total; meter signal name includes reverse active energy | Yes for station/energy-balance; meter values not usable in observed response | Confirmed station and energy-balance keys are Recordized; meter Signals are not |
 | Battery SOC | `device-realtime-data`, battery signal 10006 | Yes | Unimplemented |
-| Battery charge | `energy-balance` 5-minute normalized charge; `device-realtime-data` energy charged today and signed charge/discharge power | Yes | Unimplemented |
-| Battery discharge | `energy-balance` 5-minute normalized discharge; `device-realtime-data` energy discharged today and signed charge/discharge power | Yes | Unimplemented |
+| Battery charge | `energy-balance` 5-minute charge; `device-realtime-data` energy charged today and signed charge/discharge power | Yes | Energy-balance is Recordized; realtime Signals are not |
+| Battery discharge | `energy-balance` 5-minute discharge; `device-realtime-data` energy discharged today and signed charge/discharge power | Yes | Energy-balance is Recordized; realtime Signals are not |
 | Battery DC information | `device-realtime-data` confirms bus voltage; `query-battery-dc` is unverified | Bus voltage only | Unimplemented |
 | Inverter | `device-realtime-data` inverter signal set | Yes | Unimplemented |
 | Meter | `device-realtime-data` meter signal definitions | Names yes; measured values no (`-`) | Unimplemented |
 | Device status | `device-realtime-data`: top-level status plus battery/inverter status signals | Yes | Unimplemented |
 | Alarms | No confirmed API or response fields | No | Unimplemented |
 | Equipment topology | Four hard-coded candidate DNs and coarse `groupName`/`pv2mppt`; no confirmed discovery/topology API | Partial | Unimplemented |
-| 5-minute series | `energy-balance`, 288 points/day observed | Yes in normalized GAS raw; Python preserves the API response as RawData | RawData collection implemented; Record conversion unimplemented |
+| 5-minute series | `energy-balance`, 288 points/day observed | Yes; Python preserves the API response as RawData | Confirmed numeric values are Recordized; raw missing markers remain unchanged |
 | 1-hour series | `station-kpi-list`, 24-point/day behavior observed; `13_RAW_FusionSolar_時間` | Yes | Five KPI fields are Recordized |
-| Daily aggregation | `energy-balance` QA totals; inverter daily energy; legacy report files | Yes, but from multiple evidence types | Not separately Recordized by the current Python builder |
-| Monthly aggregation | No confirmed Web API request/response | No | Unimplemented |
+| Daily aggregation | `energy-balance` totals/ratios; inverter daily energy; legacy report files | Yes, but from multiple evidence types | Confirmed energy-balance daily values are separately Recordized |
+| Monthly aggregation | `energy-balance` with `timeDim=4` is observed, but a complete response is not retained | No Python RawData | Unimplemented |
 
 The names “generation”, “consumption”, “import”, and “export” for
 energy-balance refer to observed normalized columns. Exact raw JSON key names
@@ -282,31 +308,22 @@ URL (`02_GAS設定`). The four device DNs above are recorded as candidate DNs in
 
 ## 5. Recommended implementation order
 
-The existing `station-kpi-list` collector and Record builder should remain as
-the established hourly path. For new collectors, use this order:
+The hourly station path, daily energy-balance path, and five-minute device
+snapshot path are implemented. Continue in this order:
 
-1. **Energy balance RawData** — use the confirmed day request and save each API
-   response as its own RawData. It is the only observed broad 5-minute source
-   for PV, load, import/export, and battery flow. Preserve raw values and
-   distinguish direct fields from derived normalized values.
-2. **Device realtime RawData** — collect separate RawData per `deviceDn`, first
-   for battery `NE=33812831`, inverter `NE=33812830`, then meter candidate
-   `NE=33812829`, while retaining the unknown device response. Store every
-   observed signal before selecting Records.
-3. **Record builders for the two stored RawData families** — only after raw
-   responses are durably stored; map confirmed response fields without filling
-   missing values or guessing sign conventions.
-4. **Battery DC investigation, then RawData collector** — do not implement
-   `query-battery-dc` until DevTools establishes its endpoint, method,
-   parameters, `deviceDn`/`moduleId`, and a raw response. Once established,
-   prioritize it because battery DC is a target domain.
-5. **Device discovery investigation** — capture `mo-details` or another
-   actually observed discovery request before replacing known candidate DNs.
-6. **Alarms and monthly aggregation** — only after an actual request and raw
-   response are observed; neither API is currently evidenced.
+1. Observe battery DC detail, then add one RawData collector per confirmed API.
+2. Observe authoritative device inventory/topology before replacing configured
+   candidate DNs.
+3. Observe configuration and dedicated Signal/master APIs for the planned
+   03:10 collection.
+4. Observe active alarms and alarm history before implementing the planned
+   five-minute alarm collection.
+5. Confirm complete monthly and yearly energy-balance requests and responses.
+6. Add Record conversion only after each new response is durably stored and its
+   fields, units, and identifiers are confirmed.
 
-This order intentionally stores one RawData per API call before Record
-conversion and does not infer missing points, fields, device IDs, or signs.
+Every step preserves one RawData per API call and avoids inferred fields,
+device identifiers, values, units, or signs.
 
 ## 6. Unknowns
 
@@ -326,15 +343,77 @@ conversion and does not infer missing points, fields, device IDs, or signs.
 - Any confirmed `mo-details` endpoint, parameters, or response.
 - Any usable `moduleId`; the only occurrence is an empty schema column.
 - Alarm API, alarm fields, and historical alarm availability.
-- A confirmed monthly-aggregation API.
+- Complete monthly and yearly request/response contracts beyond the observed
+  `timeDim=4` and `timeDim=5` values.
 - Cookie names/lifetime, CSRF lifetime, request-rate limits, and CAPTCHA
   recovery procedure.
-# Collection operations
+## 7. Collection operations
 
-`device-realtime-data` is implementation-confirmed in Python. Its complete response, including all Signal values, is retained unchanged every five minutes. Device type assignments remain unconfirmed.
+`device-realtime-data` is live-confirmed in Python. Its complete response, including all Signal values, is retained unchanged every five minutes. Device type assignments remain unconfirmed.
 
 Equipment, configuration, and Signal-specific APIs are planned for daily collection at 03:10 Asia/Tokyo after their method, endpoint, request, and response have been observed. Their future collectors belong at the existing API-to-Collector-to-RawData boundary; no endpoint is inferred here.
 
 Alarm collection is planned every five minutes after live DevTools verification. A history API would deduplicate by alarm ID or occurrence time; a current-state API would store snapshots and derive transitions later. No unverified alarm API is implemented.
 
 Energy-balance `xAxis` contains 288 five-minute timestamps for a day. The confirmed arrays are paired by index, `"--"` is retained in RawData and omitted only from derived Records, and uncertain units and meanings (including `mainsUsePower`, `disGridPower`, and `radiationDosePower`) remain explicitly unknown.
+
+## 8. DevTools API discovery procedure
+
+Use the browser's Network panel once to inspect these screens in sequence:
+
+1. Home/overview
+2. Device list
+3. PCS detail
+4. Battery detail
+5. Battery module detail
+6. Meter detail
+7. Active alarms
+8. Past alarms
+9. Equipment information
+10. Configuration
+11. Month view
+12. Year view
+
+For each relevant JSON request, record only:
+
+- Request method and pathname
+- Query parameter names, without secret values
+- Request body keys, without credentials or tokens
+- Response top-level keys and keys directly under `data`
+- Whether a time array exists, its length and interval, and the selected period
+- Pagination fields
+- The role and location of `deviceDn`, `stationDn`, and any module identifier
+- The shape of a non-sensitive error response when one occurs naturally
+
+Never record or share Cookie, Authorization, CSRF tokens, session IDs,
+passwords, complete request headers, “Copy as cURL” output, or a complete HAR.
+Do not deliberately trigger an authentication or equipment error.
+
+The safe sharing format is the Network Request URL reduced to pathname and
+query *names*, the Method, a copied response after confirming it contains no
+secret, and screenshots that contain no credential or token. Before sharing
+JSON, inspect it for user identity, authentication, session, and account data.
+
+## 9. API discovery template
+
+Copy this section within this document for each observed API:
+
+### API name
+
+- Status: `candidate | devtools-observed | implementation-confirmed | live-confirmed`
+- Observed date:
+- Screen:
+- Method:
+- Path:
+- Query parameter names:
+- Request body keys:
+- Response top-level keys:
+- Response data keys:
+- Time-series:
+- Interval:
+- Historical range:
+- Missing-value representation:
+- Device/station identifiers:
+- Sensitive fields present:
+- Notes:
+- Implementation decision:
