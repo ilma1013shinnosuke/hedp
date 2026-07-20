@@ -46,6 +46,15 @@ hedp diagnose-device-realtime
 hedp backup
 hedp daily-health --verbose
 hedp daily-health --json
+hedp switchbot devices refresh
+hedp switchbot collect --dry-run
+hedp switchbot collect
+hedp switchbot import inspect runtime/import/switchbot
+hedp switchbot import run runtime/import/switchbot --dry-run
+hedp switchbot import report
+hedp switchbot observations latest
+hedp switchbot gaps
+hedp switchbot hourly rebuild
 ```
 
 Quality commands that report issue status exit with 0 when no issue is found
@@ -60,6 +69,7 @@ scripts/install_macos_launchd.sh
 scripts/install_macos_device_realtime_launchd.sh
 scripts/install_macos_equipment_launchd.sh
 scripts/install_macos_daily_health_launchd.sh
+scripts/install_macos_switchbot_launchd.sh
 ```
 
 The daily job runs station collection, previous-day energy-balance collection
@@ -79,6 +89,21 @@ than hidden. JSON logs are written to
 `~/Library/Logs/hedp/daily-health.out.log`, with execution errors in
 `daily-health.err.log`. When an issue is reported, rerun
 `hedp daily-health --verbose` and the existing quality/diagnose commands.
+
+SwitchBot uses an independent Open API v1.1 adapter. Credentials remain in
+the Git-ignored, mode-0600 `.env`; they are not copied into launchd plists or
+SQLite. The hourly job runs at minute 05, retains complete status responses,
+and does not fabricate observations missed during Mac sleep. Daily health uses
+hourly criteria and treats empty Hub/Remote bodies as successful communication.
+
+Historical SwitchBot CSV/XLSX exports are inspected before import and streamed
+without hourly thinning. Naive timestamps are interpreted as Asia/Tokyo,
+exact duplicates are skipped, differing values at one timestamp are retained
+and audited, and missing periods are never interpolated. Inspect and dry-run
+reports must be checked before a real import.
+Historical export files are not part of the repository. The current deployment
+has not imported them; import execution and performance measurement remain a
+separate operation requiring the original files.
 
 Uninstall the daily job with `scripts/uninstall_macos_launchd.sh`.
 

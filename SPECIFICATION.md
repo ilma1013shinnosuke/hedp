@@ -44,6 +44,12 @@ no Observation layer, and HEDP does not introduce UUIDs.
 - Realtime snapshots with equal payloads are retained when their acquisition
   timestamps differ.
 - Record regeneration prevents exact duplicates.
+- SwitchBot uses independent normalized tables for device identity, API-name
+  history, location history, observations, import audits, conflicts, gaps, and
+  reproducible hourly summaries.
+- SwitchBot historical exports retain second-resolution source values. Exact
+  duplicates are removed idempotently; conflicting values at one timestamp
+  are retained and audited. Missing data is not interpolated.
 
 ## Time rules
 
@@ -72,6 +78,7 @@ does not depend on AI, ChatGPT, or Codex.
 - Current alarms: every five minutes
 - Alarm history: explicit date-range collection
 - Daily health: read-only operational check daily at 03:20
+- SwitchBot status snapshots: hourly at minute 05 in an independent job
 
 ## Quality requirements
 
@@ -105,6 +112,27 @@ or critical with exit codes 0, 1, and 2 respectively. It never repairs data.
 Results are logged by the macOS 03:20 launchd job and are not persisted in a
 new table or RawData source; persistent health history can be added later if
 needed.
+
+SwitchBot daily health checks enabled devices with hourly criteria: 24-hour
+coverage, a 2.5-hour latest/gap threshold, API failures, inventory changes,
+batteries at or below 20%, and the combined zero temperature/humidity/battery
+condition. Null CO2 on unsupported devices and successful empty Hub/Remote
+bodies are normal.
+
+## SwitchBot
+
+Open API v1.1 inventory and status responses are collected without request
+headers or credentials. Complete response JSON is retained beside normalized
+values. Plug Mini (JP) uses the official units: voltage in V,
+`electricCurrent` in mA, `weight` in W, and `electricityOfDay` in minutes.
+Unknown devices and fields remain valid through the raw response.
+
+Historical timestamps are local Asia/Tokyo times and normalize to UTC while
+retaining local timestamps and raw source rows. Exported absolute humidity,
+dew point, and VPD are source values rather than recalculated replacements.
+For API snapshots where temperature, humidity, and battery are all zero,
+temperature and humidity normalize to null, battery remains zero, status is
+`battery_depleted_or_unavailable`, and raw JSON remains unchanged.
 
 ## Security
 

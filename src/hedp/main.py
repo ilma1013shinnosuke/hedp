@@ -27,6 +27,7 @@ from hedp.fusionsolar_energy_balance_record_builder import (
 from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
 from hedp.raw_data import RawData
 from hedp.storage import Storage
+from hedp.switchbot_cli import add_switchbot_parser, run_switchbot
 
 
 def _create_application() -> tuple[Application, sqlite3.Connection]:
@@ -393,7 +394,11 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     health_parser.add_argument("--hours", type=int, default=24)
     health_parser.add_argument("--json", action="store_true")
     health_parser.add_argument("--verbose", action="store_true")
+    add_switchbot_parser(subparsers)
     arguments = parser.parse_args(argv)
+
+    if arguments.command == "switchbot":
+        return run_switchbot(arguments)
 
     if arguments.command == "daily-health":
         checked_at = arguments.at or datetime.now(timezone.utc)

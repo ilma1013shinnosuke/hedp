@@ -35,3 +35,19 @@ def test_daily_health_job_runs_json_at_0320_without_credentials():
     assert "chmod 600" in installer
     assert "plutil -lint" in installer
     assert "HEDP_FUSIONSOLAR_PASSWORD" not in installer
+
+
+def test_switchbot_job_runs_hourly_at_minute_five_without_plist_secrets():
+    runner = (ROOT / "scripts" / "run_switchbot_hourly.sh").read_text()
+    installer = (
+        ROOT / "scripts" / "install_macos_switchbot_launchd.sh"
+    ).read_text()
+    assert "switchbot collect" in runner
+    assert "source .env" in runner
+    assert "set -x" not in runner
+    assert "com.hedp.switchbot.lock" in runner
+    assert "<key>Minute</key><integer>5</integer>" in installer
+    assert "SWITCHBOT_TOKEN" not in installer
+    assert "SWITCHBOT_SECRET" not in installer
+    assert "chmod 600" in installer
+    assert "plutil -lint" in installer

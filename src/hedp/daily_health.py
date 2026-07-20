@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
+import sqlite3
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -16,6 +17,10 @@ class DailyHealthCriteria:
     GAP_WARNING_SECONDS = 900
     LATEST_WARNING_SECONDS = 900
     BACKUP_WARNING_HOURS = 48
+    SWITCHBOT_EXPECTED_INTERVAL_SECONDS = 3600
+    SWITCHBOT_LATEST_WARNING_SECONDS = 9000
+    SWITCHBOT_MINIMUM_DAILY_COLLECTIONS = 18
+    SWITCHBOT_LOW_BATTERY_PERCENT = 20
     BATTERY_MODULES = (1, 2, 3, 4)
     FIVE_MINUTE_SOURCES = (
         "fusionsolar_device_realtime",
@@ -115,6 +120,12 @@ class DailyHealthService:
                 )
             )
 
+        switchbot_summary = self._check_switchbot(
+            start_utc, end_utc, checked_at, warnings
+        )
+        if switchbot_summary is not None:
+            summaries["switchbot_api_v1_1"] = switchbot_summary
+
         backup = self._backup_summary(checked_at, warnings)
         database = {
             "path": str(self.database_path),
@@ -135,6 +146,127 @@ class DailyHealthService:
             "backup_summary": backup,
             "database_summary": database,
         }
+
+    def _check_switchbot(
+        self,
+        start_utc: datetime,
+        end_utc: datetime,
+        checked_at: datetime,
+        warnings: list[dict[str, object]],
+    ) -> dict[str, object] | None:
+        database = self.database_path
+        connection = sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        try:
+            exists = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='switchbot_devices'"
+            ).fetchone()
+            if not exists:
+                return None
+            devices = connection.execute(
+                "SELECT device_id,current_api_name,first_seen_at,current_status "
+                "FROM switchbot_devices "
+                "WHERE enabled=1"
+            ).fetchall()
+            total = 0
+            latest_all = None
+            for device in devices:
+                rows = connection.execute(
+                    """SELECT observed_at_utc,battery_percent,
+                    measurement_status,raw_payload_json
+                    FROM switchbot_observations WHERE device_id=? AND
+                    source='switchbot_api_v1_1' AND observed_at_utc BETWEEN ? AND ?
+                    ORDER BY observed_at_utc""",
+                    (device["device_id"], start_utc.isoformat(), end_utc.isoformat()),
+                ).fetchall()
+                total += len(rows)
+                subject = f"device_id={device['device_id'][-6:]}"
+                if device["current_status"] == "missing":
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject,
+                        "device disappeared from API inventory", None,
+                        "present", "missing",
+                    ))
+                first_seen = datetime.fromisoformat(device["first_seen_at"])
+                if start_utc <= first_seen <= end_utc:
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject, "new device discovered",
+                        first_seen.isoformat(), "known device", "new",
+                    ))
+                failures = connection.execute(
+                    "SELECT count(*) FROM switchbot_collection_events "
+                    "WHERE device_id=? AND success=0 AND collected_at BETWEEN ? AND ?",
+                    (device["device_id"], start_utc.isoformat(), end_utc.isoformat()),
+                ).fetchone()[0]
+                if failures:
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject, "API collection failed",
+                        None, 0, failures,
+                    ))
+                if not rows:
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject,
+                        "no API collection in checked window", None,
+                        f">= {DailyHealthCriteria.SWITCHBOT_MINIMUM_DAILY_COLLECTIONS}", 0,
+                    ))
+                    continue
+                timestamps = [datetime.fromisoformat(row[0]) for row in rows]
+                latest = timestamps[-1]
+                latest_all = max(latest_all, latest) if latest_all else latest
+                delay = (checked_at - latest.astimezone(self.tokyo)).total_seconds()
+                if delay >= DailyHealthCriteria.SWITCHBOT_LATEST_WARNING_SECONDS:
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject, "latest acquisition is delayed",
+                        latest.isoformat(),
+                        f"< {DailyHealthCriteria.SWITCHBOT_LATEST_WARNING_SECONDS}s",
+                        delay,
+                    ))
+                if len(rows) < DailyHealthCriteria.SWITCHBOT_MINIMUM_DAILY_COLLECTIONS:
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject,
+                        "daily collection count is low", latest.isoformat(),
+                        DailyHealthCriteria.SWITCHBOT_MINIMUM_DAILY_COLLECTIONS,
+                        len(rows),
+                    ))
+                gaps = [
+                    (current - previous).total_seconds()
+                    for previous, current in zip(timestamps, timestamps[1:])
+                ]
+                if gaps and max(gaps) >= DailyHealthCriteria.SWITCHBOT_LATEST_WARNING_SECONDS:
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject, "large acquisition gap",
+                        latest.isoformat(),
+                        f"< {DailyHealthCriteria.SWITCHBOT_LATEST_WARNING_SECONDS}s",
+                        max(gaps),
+                    ))
+                last = rows[-1]
+                battery = last["battery_percent"]
+                if battery is not None and battery <= DailyHealthCriteria.SWITCHBOT_LOW_BATTERY_PERCENT:
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject, "battery is low",
+                        latest.isoformat(),
+                        f"> {DailyHealthCriteria.SWITCHBOT_LOW_BATTERY_PERCENT}%",
+                        battery,
+                    ))
+                if last["measurement_status"] == "battery_depleted_or_unavailable":
+                    warnings.append(self._issue(
+                        "switchbot_api_v1_1", subject,
+                        "measurement unavailable with depleted battery",
+                        latest.isoformat(), "valid measurement", last["measurement_status"],
+                    ))
+            return {
+                "source": "switchbot_api_v1_1",
+                "count": total,
+                "latest_timestamp": latest_all.isoformat() if latest_all else None,
+                "seconds_since_latest": (
+                    (checked_at - latest_all.astimezone(self.tokyo)).total_seconds()
+                    if latest_all else None
+                ),
+                "metadata_counts": {"enabled_devices": len(devices)},
+            }
+        finally:
+            connection.close()
 
     def _source_summary(
         self, source: str, items: list[RawData], checked_at: datetime

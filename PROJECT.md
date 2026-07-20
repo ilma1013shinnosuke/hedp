@@ -49,6 +49,10 @@ The intended scope includes solar generation, battery storage, grid power,
 electric vehicles, air conditioning, ventilation, hot water, weather, indoor
 conditions, and household equipment added in the future.
 
+Vendor adapters, including SwitchBot, remain isolated from existing energy
+collectors. High-resolution source history is retained without interpolation;
+derived summaries must remain reproducible from source observations.
+
 ## Non-goals
 
 - Replacing vendor control functions in full
