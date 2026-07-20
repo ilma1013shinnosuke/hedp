@@ -99,11 +99,20 @@ class Storage:
         timezone_name: str = "Asia/Tokyo",
     ) -> list[Record]:
         timezone = ZoneInfo(timezone_name)
+        connection = self._require_connection()
+        rows = connection.execute(
+            """
+            SELECT data
+            FROM records
+            WHERE json_extract(data, '$.source') = ?
+            """,
+            (source,),
+        ).fetchall()
         records = [
             record
-            for record in self.load_records()
-            if record.source == source
-            and start_date
+            for row in rows
+            for record in (Record.from_json(row[0]),)
+            if start_date
             <= record.timestamp.astimezone(timezone).date()
             <= end_date
         ]

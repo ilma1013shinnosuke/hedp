@@ -379,3 +379,36 @@ def test_check_quality_rejects_reverse_range() -> None:
 
     with pytest.raises(ValueError):
         application.check_quality(date(2026, 7, 21), date(2026, 7, 20))
+
+
+def test_check_quality_processes_150000_records_in_one_pass() -> None:
+    class TrackedRecords(list):
+        iterations = 0
+        slices = 0
+
+        def __iter__(self):
+            self.iterations += 1
+            return super().__iter__()
+
+        def __getitem__(self, key):
+            if isinstance(key, slice):
+                self.slices += 1
+            return super().__getitem__(key)
+
+    first = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    records = TrackedRecords(
+        record
+        for point in range(30_000)
+        for record in _quality_records(first + timedelta(minutes=5 * point))
+    )
+    storage = Mock()
+    storage.load_records_for_range.return_value = records
+
+    report = Application(Mock(), storage, Mock()).check_quality(
+        date(2026, 1, 1), date(2026, 12, 31)
+    )
+
+    assert report["summary"]["record_count"] == 150_000
+    assert report["duplicate_records"] == 0
+    assert records.iterations == 1
+    assert records.slices == 0

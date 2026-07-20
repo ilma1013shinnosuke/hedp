@@ -91,30 +91,39 @@ class Application:
             end_date=end_date,
             timezone_name="Asia/Tokyo",
         )
-        duplicate_records = sum(
-            record in records[:index]
-            for index, record in enumerate(records)
-        )
-        invalid_values = sum(
-            type(record.value) not in (int, float)
-            and record.value is not None
-            or isinstance(record.value, float)
-            and not math.isfinite(record.value)
-            for record in records
-        )
-        unexpected_metrics = sorted(
-            {record.metric for record in records} - self.QUALITY_UNITS.keys()
-        )
-        unexpected_units = sum(
-            self.QUALITY_UNITS.get(record.metric) != record.unit
-            for record in records
-        )
-
+        duplicate_records = 0
+        invalid_values = 0
+        unexpected_metric_names = set()
+        unexpected_units = 0
+        seen_records = set()
         records_by_timestamp = {}
         for record in records:
+            record_key = (
+                record.source,
+                record.timestamp,
+                record.metric,
+                _hashable_value(record.value),
+                record.unit,
+            )
+            if record_key in seen_records:
+                duplicate_records += 1
+            else:
+                seen_records.add(record_key)
+            if (
+                type(record.value) not in (int, float)
+                and record.value is not None
+                or isinstance(record.value, float)
+                and not math.isfinite(record.value)
+            ):
+                invalid_values += 1
+            if record.metric not in self.QUALITY_UNITS:
+                unexpected_metric_names.add(record.metric)
+            if self.QUALITY_UNITS.get(record.metric) != record.unit:
+                unexpected_units += 1
             records_by_timestamp.setdefault(record.timestamp, set()).add(
                 record.metric
             )
+        unexpected_metrics = sorted(unexpected_metric_names)
         timestamps = sorted(records_by_timestamp)
         expected_metrics = set(self.QUALITY_UNITS)
         missing_metric_points = [
@@ -163,3 +172,16 @@ class Application:
                 ),
             },
         }
+
+
+def _hashable_value(value: object) -> object:
+    if isinstance(value, list):
+        return (list, tuple(_hashable_value(item) for item in value))
+    if isinstance(value, dict):
+        return (
+            dict,
+            frozenset(
+                (key, _hashable_value(item)) for key, item in value.items()
+            ),
+        )
+    return value
