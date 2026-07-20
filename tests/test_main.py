@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock, call, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -109,6 +110,60 @@ def test_cli_collect_runs_today_and_prints_success(capsys) -> None:
 
     main_function.assert_called_once_with()
     assert capsys.readouterr().out == "Collected 1 RawData item.\n"
+
+
+def test_cli_collect_energy_balance_runs_today_in_tokyo(capsys) -> None:
+    application = Mock()
+    connection = Mock()
+
+    with (
+        patch(
+            "hedp.main._create_energy_balance_application",
+            return_value=(application, connection),
+        ),
+        patch("hedp.main.datetime") as datetime_class,
+    ):
+        datetime_class.now.return_value = datetime(
+            2026, 7, 21, 8, 30, tzinfo=ZoneInfo("Asia/Tokyo")
+        )
+        result = cli(["collect-energy-balance"])
+
+    assert result is None
+    application.run_energy_balance_for_date.assert_called_once_with(
+        date(2026, 7, 21)
+    )
+    connection.close.assert_called_once_with()
+    assert capsys.readouterr().out == (
+        "Collected 1 energy-balance RawData item(s).\n"
+    )
+
+
+def test_cli_collect_energy_balance_runs_date_range(capsys) -> None:
+    application = Mock()
+    connection = Mock()
+    application.run_energy_balance_range.return_value = [Mock(), Mock()]
+
+    with patch(
+        "hedp.main._create_energy_balance_application",
+        return_value=(application, connection),
+    ):
+        cli(
+            [
+                "collect-energy-balance",
+                "--start",
+                "2026-07-20",
+                "--end",
+                "2026-07-21",
+            ]
+        )
+
+    application.run_energy_balance_range.assert_called_once_with(
+        date(2026, 7, 20), date(2026, 7, 21)
+    )
+    connection.close.assert_called_once_with()
+    assert capsys.readouterr().out == (
+        "Collected 2 energy-balance RawData item(s).\n"
+    )
 
 
 def test_cli_backup_uses_storage_only_and_closes_connection(

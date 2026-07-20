@@ -106,13 +106,13 @@ Evidence: `FusionSolarClient.get_json`, `post_json`, `_is_auth_failure`,
 | Field | Confirmed information |
 |---|---|
 | API name | `energy-balance` |
-| HTTP method | Unverified; the legacy request code/sample URL was not available |
-| Endpoint | Full path unverified |
-| Required parameters | Exact names unverified. `stationDn` is present in the DevTools-derived sample URL configuration; a target day is used by the observed collector. |
-| Date specification | Day-by-day collection is observed; exact URL parameter name and encoding are unavailable. |
+| HTTP method | `GET` |
+| Endpoint | `/rest/pvms/web/station/v1/overview/energy-balance` |
+| Required parameters | `stationDn`, `timeDim=2`, `queryTime`, `timeZone=9`, `timeZoneStr=Asia/Tokyo`, `dateStr`, `_` |
+| Date specification | `queryTime` is Unix epoch milliseconds for target-day midnight in Asia/Tokyo; `dateStr` is `YYYY-MM-DD 00:00:00`; `_` is request-time Unix epoch milliseconds. Observed dimensions are `timeDim=2` for day, `4` for month, and `5` for year. Only day collection is implemented. |
 | `stationDn` / `deviceDn` / `moduleId` | `stationDn=NE=33812827` is DevTools-observed. No `deviceDn` or `moduleId` evidence. |
-| Available information | Observed normalized 5-minute fields: PV, load/consumption, battery charge, battery discharge, grid import, grid export, and self-use energy. Daily API totals for PV, load, import, and export are also recorded in QA. |
-| Evidence state | **GAS observed** and **DevTools observed**. Three recent past days have 288 points/day in `96_QA_FusionSolar_5分`; raw rows exist in `12_RAW_FusionSolar_5分`. Not Python-implemented. |
+| Available information | For `timeDim=2`, `xAxis` contains 288 timestamps at 5-minute intervals from 00:00 through 23:55. Each confirmed 5-minute series array corresponds positionally to `xAxis`. The Python collector preserves the entire response, including `"--"`, without interpreting or converting values. Units and the exact meaning of some keys remain unconfirmed. |
+| Evidence state | **Python implementation-confirmed**, **GAS observed**, and **DevTools observed**. Three recent past days have 288 points/day in `96_QA_FusionSolar_5分`; raw rows exist in `12_RAW_FusionSolar_5分`. Python live communication is not yet confirmed. |
 | Past dates | Yes for observed recent dates (2026-07-17 through 2026-07-19). Older range and retention limit are unverified. |
 | Recommended collector | `FusionSolarEnergyBalanceCollector` |
 
@@ -120,11 +120,31 @@ Evidence: workbook `01_変更履歴` row for version 0.1.0,
 `02_GAS設定` keys `STATION_DN` and `ENERGY_BALANCE_SAMPLE_URL`,
 `12_RAW_FusionSolar_5分`, `96_QA_FusionSolar_5分`, and `99_取込履歴` rows
 labelled `FusionSolar Web API`. The GAS source/function expected in
-`03_EnergyCollector.js` was not available, so method, endpoint, raw response
-keys, and function name remain unverified. Values in
+`03_EnergyCollector.js` was not available, so its function name remains
+unverified. Python request construction is implemented by
+`FusionSolarEnergyBalanceCollector.collect_for_date` in
+`src/hedp/fusionsolar_energy_balance_collector.py`. Values in
 `12_RAW_FusionSolar_5分` are parser output, not proof that identically named
 keys occur in the API JSON; `quality=measured_import_derived` also proves that
 at least some normalized values may be derived rather than direct keys.
+
+Confirmed top-level response keys are `success`, `data`, and `failCode`.
+Confirmed `data` keys are:
+
+- Station/capability metadata: `stationDn`, `stationTimezone`,
+  `clientTimezone`, `existInverter`, `existMeter`, `existEnergyStore`,
+  `existCharge`, `existIrradiation`, and `existUsePower`.
+- Five-minute arrays: `productPower`, `dieselProductPower`, `mainsUsePower`,
+  `onGridPower`, `disGridPower`, `usePower`, `selfUsePower`, `chargePower`,
+  `dischargePower`, `radiationDosePower`, and `xAxis`.
+- Totals and ratios: `totalProductPower`, `totalSelfUsePower`,
+  `totalOnGridPower`, `totalBuyPower`, `totalUsePower`, `selfProvide`,
+  `onGridPowerRatio`, `selfUsePowerRatioByProduct`, `buyPowerRatio`, and
+  `selfUsePowerRatioByUse`.
+
+The response uses `"--"` for some series entries. It is retained as a raw
+string, not converted to zero or null. Units and the exact semantics of some
+keys are not yet confirmed.
 
 ### station-kpi-list
 
@@ -223,7 +243,7 @@ public search. The expected legacy source/function was not available.
 | Device status | `device-realtime-data`: top-level status plus battery/inverter status signals | Yes | Unimplemented |
 | Alarms | No confirmed API or response fields | No | Unimplemented |
 | Equipment topology | Four hard-coded candidate DNs and coarse `groupName`/`pv2mppt`; no confirmed discovery/topology API | Partial | Unimplemented |
-| 5-minute series | `energy-balance`, 288 points/day observed | Yes in normalized GAS raw | Unimplemented in Python |
+| 5-minute series | `energy-balance`, 288 points/day observed | Yes in normalized GAS raw; Python preserves the API response as RawData | RawData collection implemented; Record conversion unimplemented |
 | 1-hour series | `station-kpi-list`, 24-point/day behavior observed; `13_RAW_FusionSolar_時間` | Yes | Five KPI fields are Recordized |
 | Daily aggregation | `energy-balance` QA totals; inverter daily energy; legacy report files | Yes, but from multiple evidence types | Not separately Recordized by the current Python builder |
 | Monthly aggregation | No confirmed Web API request/response | No | Unimplemented |
@@ -265,10 +285,10 @@ URL (`02_GAS設定`). The four device DNs above are recorded as candidate DNs in
 The existing `station-kpi-list` collector and Record builder should remain as
 the established hourly path. For new collectors, use this order:
 
-1. **Energy balance RawData** — establish the exact captured request first,
-   then save each API response as its own RawData. It is the only observed
-   broad 5-minute source for PV, load, import/export, and battery flow. Preserve
-   raw values and distinguish direct fields from derived normalized values.
+1. **Energy balance RawData** — use the confirmed day request and save each API
+   response as its own RawData. It is the only observed broad 5-minute source
+   for PV, load, import/export, and battery flow. Preserve raw values and
+   distinguish direct fields from derived normalized values.
 2. **Device realtime RawData** — collect separate RawData per `deviceDn`, first
    for battery `NE=33812831`, inverter `NE=33812830`, then meter candidate
    `NE=33812829`, while retaining the unknown device response. Store every
@@ -292,8 +312,8 @@ conversion and does not infer missing points, fields, device IDs, or signs.
 
 - The contents and function names of all requested legacy GAS files and
   `FUSIONSOLAR_STATUS.md` are unavailable.
-- `energy-balance`: method, full endpoint, exact parameter names, raw response
-  keys, pagination/limits, historical retention, and GAS function name.
+- `energy-balance`: units, exact semantics of some confirmed keys,
+  pagination/limits, historical retention, and GAS function name.
 - `query-battery-dc`: all communication details, identifiers, response fields,
   history support, and evidence state beyond its candidate name.
 - Whether `_` is required by `device-realtime-data`, its rate limit, unknown-DN

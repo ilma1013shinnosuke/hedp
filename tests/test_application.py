@@ -139,6 +139,52 @@ def test_run_range_propagates_collection_error() -> None:
     storage.save_records.assert_not_called()
 
 
+def test_run_energy_balance_for_date_saves_only_raw_data() -> None:
+    target_date = date(2026, 7, 20)
+    raw_data = Mock(spec=RawData)
+    collector = Mock()
+    collector.collect_for_date.return_value = raw_data
+    storage = Mock()
+    record_builder = Mock()
+    application = Application(
+        Mock(), storage, record_builder, energy_balance_collector=collector
+    )
+
+    result = application.run_energy_balance_for_date(target_date)
+
+    assert result is raw_data
+    collector.collect_for_date.assert_called_once_with(target_date)
+    storage.save_rawdata.assert_called_once_with(raw_data)
+    storage.save_records.assert_not_called()
+    record_builder.build.assert_not_called()
+
+
+def test_run_energy_balance_range_saves_each_raw_data_only() -> None:
+    raw_data_list = [Mock(spec=RawData), Mock(spec=RawData)]
+    collector = Mock()
+    collector.collect_range.return_value = raw_data_list
+    storage = Mock()
+    record_builder = Mock()
+    application = Application(
+        Mock(), storage, record_builder, energy_balance_collector=collector
+    )
+
+    result = application.run_energy_balance_range(
+        date(2026, 7, 20), date(2026, 7, 21)
+    )
+
+    assert result is raw_data_list
+    collector.collect_range.assert_called_once_with(
+        date(2026, 7, 20), date(2026, 7, 21)
+    )
+    assert storage.save_rawdata.call_args_list == [
+        call(raw_data_list[0]),
+        call(raw_data_list[1]),
+    ]
+    storage.save_records.assert_not_called()
+    record_builder.build.assert_not_called()
+
+
 def test_find_missing_dates_returns_dates_in_order() -> None:
     storage = Mock()
     storage.get_record_dates.return_value = {

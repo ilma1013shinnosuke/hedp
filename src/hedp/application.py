@@ -2,9 +2,13 @@ from collections import Counter
 from datetime import date, timedelta
 from datetime import datetime
 import math
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from hedp.fusionsolar_collector import FusionSolarCollector
+from hedp.fusionsolar_energy_balance_collector import (
+    FusionSolarEnergyBalanceCollector,
+)
 from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
 from hedp.raw_data import RawData
 from hedp.storage import Storage
@@ -31,10 +35,14 @@ class Application:
         collector: FusionSolarCollector,
         storage: Storage,
         record_builder: FusionSolarRecordBuilder,
+        energy_balance_collector: Optional[
+            FusionSolarEnergyBalanceCollector
+        ] = None,
     ) -> None:
         self.collector = collector
         self.storage = storage
         self.record_builder = record_builder
+        self.energy_balance_collector = energy_balance_collector
 
     def run(self) -> RawData:
         raw_data = self.collector.collect()
@@ -51,6 +59,25 @@ class Application:
             self.storage.save_rawdata(raw_data)
             records = self.record_builder.build(raw_data)
             self.storage.save_records(records)
+        return raw_data_list
+
+    def run_energy_balance_for_date(self, target_date: date) -> RawData:
+        if self.energy_balance_collector is None:
+            raise RuntimeError("Energy-balance collector is not configured")
+        raw_data = self.energy_balance_collector.collect_for_date(target_date)
+        self.storage.save_rawdata(raw_data)
+        return raw_data
+
+    def run_energy_balance_range(
+        self, start_date: date, end_date: date
+    ) -> list[RawData]:
+        if self.energy_balance_collector is None:
+            raise RuntimeError("Energy-balance collector is not configured")
+        raw_data_list = self.energy_balance_collector.collect_range(
+            start_date, end_date
+        )
+        for raw_data in raw_data_list:
+            self.storage.save_rawdata(raw_data)
         return raw_data_list
 
     def find_missing_dates(

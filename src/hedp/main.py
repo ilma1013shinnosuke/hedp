@@ -9,6 +9,9 @@ from hedp.application import Application
 from hedp.configuration import Configuration
 from hedp.fusionsolar_client import FusionSolarClient
 from hedp.fusionsolar_collector import FusionSolarCollector
+from hedp.fusionsolar_energy_balance_collector import (
+    FusionSolarEnergyBalanceCollector,
+)
 from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
 from hedp.raw_data import RawData
 from hedp.storage import Storage
@@ -28,6 +31,27 @@ def _create_application() -> tuple[Application, sqlite3.Connection]:
     connection = storage.connect()
     try:
         application = Application(collector, storage, record_builder)
+    except Exception:
+        connection.close()
+        raise
+    return application, connection
+
+
+def _create_energy_balance_application() -> tuple[
+    Application, sqlite3.Connection
+]:
+    configuration = Configuration.from_environment()
+    client = FusionSolarClient(
+        base_url=configuration.base_url,
+        station_dn=configuration.station_dn,
+        username=configuration.username,
+        password=configuration.password,
+    )
+    collector = FusionSolarEnergyBalanceCollector(client)
+    storage = Storage(configuration.database_path)
+    connection = storage.connect()
+    try:
+        application = Application(None, storage, None, collector)  # type: ignore[arg-type]
     except Exception:
         connection.close()
         raise
@@ -159,6 +183,9 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     collect_parser = subparsers.add_parser("collect")
     collect_parser.add_argument("--start", type=_date_argument)
     collect_parser.add_argument("--end", type=_date_argument)
+    energy_balance_parser = subparsers.add_parser("collect-energy-balance")
+    energy_balance_parser.add_argument("--start", type=_date_argument)
+    energy_balance_parser.add_argument("--end", type=_date_argument)
     missing_parser = subparsers.add_parser("missing")
     missing_parser.add_argument("--start", type=_date_argument, required=True)
     missing_parser.add_argument("--end", type=_date_argument, required=True)
@@ -208,6 +235,25 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         diagnosis = _quality_diagnose(arguments.start, arguments.end)
         _print_quality_diagnosis(diagnosis)
         return 0
+
+    if arguments.command == "collect-energy-balance":
+        application, connection = _create_energy_balance_application()
+        try:
+            if arguments.start is None:
+                today = datetime.now(ZoneInfo("Asia/Tokyo")).date()
+                raw_data_list = [
+                    application.run_energy_balance_for_date(today)
+                ]
+            else:
+                raw_data_list = application.run_energy_balance_range(
+                    arguments.start, arguments.end
+                )
+        finally:
+            connection.close()
+        print(
+            f"Collected {len(raw_data_list)} energy-balance RawData item(s)."
+        )
+        return
 
     if arguments.command == "collect":
         if arguments.start is None:
