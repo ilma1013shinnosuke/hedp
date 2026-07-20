@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import Mock, call, patch
 
 import pytest
 
 from hedp.configuration import Configuration
-from hedp.main import main
+from hedp.main import cli, main
 from hedp.raw_data import RawData
 
 
@@ -98,5 +98,70 @@ def test_main_closes_connection_when_application_raises() -> None:
 
         with pytest.raises(RuntimeError, match="failed"):
             main()
+
+    connection.close.assert_called_once_with()
+
+
+def test_cli_collect_runs_today_and_prints_success(capsys) -> None:
+    with patch("hedp.main.main") as main_function:
+        cli(["collect"])
+
+    main_function.assert_called_once_with()
+    assert capsys.readouterr().out == "Collected 1 RawData item.\n"
+
+
+def test_cli_collects_date_range_and_closes_connection(capsys) -> None:
+    application = Mock()
+    connection = Mock()
+    application.run_range.return_value = [Mock(), Mock(), Mock()]
+
+    with patch(
+        "hedp.main._create_application",
+        return_value=(application, connection),
+    ):
+        cli(["collect", "--start", "2026-07-01", "--end", "2026-07-03"])
+
+    application.run_range.assert_called_once_with(
+        date(2026, 7, 1), date(2026, 7, 3)
+    )
+    connection.close.assert_called_once_with()
+    assert capsys.readouterr().out == "Collected 3 RawData items.\n"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["collect", "--start", "2026-07-01"],
+        ["collect", "--end", "2026-07-03"],
+        ["collect", "--start", "invalid", "--end", "2026-07-03"],
+        ["collect", "--start", "2026-07-03", "--end", "2026-07-01"],
+    ],
+)
+def test_cli_rejects_invalid_date_arguments(arguments) -> None:
+    with pytest.raises(SystemExit) as raised:
+        cli(arguments)
+
+    assert raised.value.code == 2
+
+
+def test_cli_closes_connection_when_range_run_raises() -> None:
+    application = Mock()
+    connection = Mock()
+    application.run_range.side_effect = RuntimeError("failed")
+
+    with patch(
+        "hedp.main._create_application",
+        return_value=(application, connection),
+    ):
+        with pytest.raises(RuntimeError, match="failed"):
+            cli(
+                [
+                    "collect",
+                    "--start",
+                    "2026-07-01",
+                    "--end",
+                    "2026-07-03",
+                ]
+            )
 
     connection.close.assert_called_once_with()

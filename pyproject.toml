@@ -13,6 +13,9 @@ dependencies = [
     "requests>=2.31",
 ]
 
+[project.scripts]
+hedp = "hedp.main:cli"
+
 [dependency-groups]
 dev = [
     "pytest>=8",

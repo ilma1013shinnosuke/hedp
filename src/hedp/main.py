@@ -1,3 +1,8 @@
+import argparse
+import sqlite3
+from datetime import date
+from typing import Optional
+
 from hedp.application import Application
 from hedp.configuration import Configuration
 from hedp.fusionsolar_client import FusionSolarClient
@@ -7,7 +12,7 @@ from hedp.raw_data import RawData
 from hedp.storage import Storage
 
 
-def main() -> RawData:
+def _create_application() -> tuple[Application, sqlite3.Connection]:
     configuration = Configuration.from_environment()
     client = FusionSolarClient(
         base_url=configuration.base_url,
@@ -21,10 +26,57 @@ def main() -> RawData:
     connection = storage.connect()
     try:
         application = Application(collector, storage, record_builder)
+    except Exception:
+        connection.close()
+        raise
+    return application, connection
+
+
+def main() -> RawData:
+    application, connection = _create_application()
+    try:
         return application.run()
     finally:
         connection.close()
 
 
+def _date_argument(value: str) -> date:
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "date must use YYYY-MM-DD format"
+        ) from error
+    if parsed.isoformat() != value:
+        raise argparse.ArgumentTypeError("date must use YYYY-MM-DD format")
+    return parsed
+
+
+def cli(argv: Optional[list[str]] = None) -> None:
+    parser = argparse.ArgumentParser(prog="hedp")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    collect_parser = subparsers.add_parser("collect")
+    collect_parser.add_argument("--start", type=_date_argument)
+    collect_parser.add_argument("--end", type=_date_argument)
+    arguments = parser.parse_args(argv)
+
+    if (arguments.start is None) != (arguments.end is None):
+        parser.error("--start and --end must be specified together")
+    if arguments.start is not None and arguments.start > arguments.end:
+        parser.error("--start must not be after --end")
+
+    if arguments.start is None:
+        main()
+        print("Collected 1 RawData item.")
+        return
+
+    application, connection = _create_application()
+    try:
+        raw_data_list = application.run_range(arguments.start, arguments.end)
+    finally:
+        connection.close()
+    print(f"Collected {len(raw_data_list)} RawData items.")
+
+
 if __name__ == "__main__":
-    main()
+    cli()
