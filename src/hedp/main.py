@@ -74,7 +74,18 @@ def _backup() -> Path:
     return destination
 
 
-def cli(argv: Optional[list[str]] = None) -> None:
+def _quality(start_date: date, end_date: date) -> dict[str, object]:
+    configuration = Configuration.from_environment()
+    storage = Storage(configuration.database_path)
+    connection = storage.connect()
+    try:
+        application = Application(None, storage, None)  # type: ignore[arg-type]
+        return application.check_quality(start_date, end_date)
+    finally:
+        connection.close()
+
+
+def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     parser = argparse.ArgumentParser(prog="hedp")
     subparsers = parser.add_subparsers(dest="command", required=True)
     collect_parser = subparsers.add_parser("collect")
@@ -87,6 +98,9 @@ def cli(argv: Optional[list[str]] = None) -> None:
     backfill_parser.add_argument("--start", type=_date_argument, required=True)
     backfill_parser.add_argument("--end", type=_date_argument, required=True)
     subparsers.add_parser("backup")
+    quality_parser = subparsers.add_parser("quality")
+    quality_parser.add_argument("--start", type=_date_argument, required=True)
+    quality_parser.add_argument("--end", type=_date_argument, required=True)
     arguments = parser.parse_args(argv)
 
     if arguments.command == "backup":
@@ -98,6 +112,26 @@ def cli(argv: Optional[list[str]] = None) -> None:
         parser.error("--start and --end must be specified together")
     if arguments.start is not None and arguments.start > arguments.end:
         parser.error("--start must not be after --end")
+
+    if arguments.command == "quality":
+        report = _quality(arguments.start, arguments.end)
+        summary = report["summary"]
+        assert isinstance(summary, dict)
+        issue_counts = {
+            "Duplicate records": report["duplicate_records"],
+            "Invalid values": report["invalid_values"],
+            "Unexpected metrics": len(report["unexpected_metrics"]),
+            "Unexpected units": report["unexpected_units"],
+            "Missing metric points": len(report["missing_metric_points"]),
+            "Irregular intervals": len(report["irregular_intervals"]),
+        }
+        print(f"Records: {summary['record_count']}")
+        print(f"Timestamps: {summary['timestamp_count']}")
+        for label, count in issue_counts.items():
+            print(f"{label}: {count}")
+        issues_found = any(issue_counts.values())
+        print("Quality issues found." if issues_found else "Quality check passed.")
+        return 1 if issues_found else 0
 
     if arguments.command == "collect":
         if arguments.start is None:

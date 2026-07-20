@@ -50,6 +50,15 @@ Backfill missing dates:
 hedp backfill-missing --start 2026-01-01 --end 2026-07-20
 ```
 
+Check saved record quality:
+
+```bash
+hedp quality --start 2026-01-01 --end 2026-07-20
+```
+
+The exit code is 0 when no problems are found and 1 when quality issues are
+found.
+
 Create a manual backup:
 
 ```bash

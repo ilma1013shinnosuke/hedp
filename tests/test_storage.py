@@ -91,6 +91,59 @@ def test_save_and_load_records(tmp_path) -> None:
         connection.close()
 
 
+def test_load_records_for_range_filters_timezone_source_and_sorts(
+    tmp_path,
+) -> None:
+    storage = Storage(str(tmp_path / "test.db"))
+    connection = storage.connect()
+    records = [
+        Record(
+            "fusionsolar",
+            datetime(2026, 7, 19, 15, 5, tzinfo=timezone.utc),
+            "productPower",
+            1,
+            "kW",
+        ),
+        Record(
+            "fusionsolar",
+            datetime(2026, 7, 19, 15, tzinfo=timezone.utc),
+            "powerProfit",
+            2,
+            "JPY",
+        ),
+        Record(
+            "fusionsolar",
+            datetime(2026, 7, 19, 15, tzinfo=timezone.utc),
+            "buyPower",
+            3,
+            "kW",
+        ),
+        Record(
+            "other",
+            datetime(2026, 7, 19, 15, tzinfo=timezone.utc),
+            "productPower",
+            4,
+            "kW",
+        ),
+        Record(
+            "fusionsolar",
+            datetime(2026, 7, 20, 15, tzinfo=timezone.utc),
+            "productPower",
+            5,
+            "kW",
+        ),
+    ]
+
+    try:
+        storage.save_records(records)
+
+        assert storage.load_records_for_range(
+            "fusionsolar", date(2026, 7, 20), date(2026, 7, 20)
+        ) == [records[2], records[1], records[0]]
+    finally:
+        connection.close()
+
+
 def test_save_rawdata_ignores_same_source_and_payload(tmp_path) -> None:
     storage = Storage(str(tmp_path / "test.db"))
     connection = storage.connect()

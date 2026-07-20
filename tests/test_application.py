@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import Mock, call
 
 import pytest
@@ -252,3 +252,130 @@ def test_backfill_missing_stops_after_error() -> None:
     collector.collect_for_date.assert_called_once_with(missing_dates[0])
     record_builder.build.assert_not_called()
     storage.save_records.assert_not_called()
+
+
+def _quality_records(timestamp: datetime) -> list[Record]:
+    units = {
+        "productPower": "kW",
+        "inverterPower": "kW",
+        "onGridPower": "kW",
+        "buyPower": "kW",
+        "powerProfit": "JPY",
+    }
+    return [
+        Record("fusionsolar", timestamp, metric, 1, unit)
+        for metric, unit in units.items()
+    ]
+
+
+def test_check_quality_returns_no_issues_for_normal_data() -> None:
+    first = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    records = _quality_records(first) + _quality_records(
+        first + timedelta(minutes=5)
+    )
+    storage = Mock()
+    storage.load_records_for_range.return_value = records
+    application = Application(Mock(), storage, Mock())
+
+    report = application.check_quality(
+        date(2026, 7, 20), date(2026, 7, 20)
+    )
+
+    assert report == {
+        "duplicate_records": 0,
+        "invalid_values": 0,
+        "unexpected_metrics": [],
+        "unexpected_units": 0,
+        "missing_metric_points": [],
+        "irregular_intervals": [],
+        "summary": {
+            "record_count": 10,
+            "timestamp_count": 2,
+            "first_timestamp": first.isoformat(),
+            "last_timestamp": (first + timedelta(minutes=5)).isoformat(),
+        },
+    }
+
+
+def test_check_quality_reports_all_quality_issues() -> None:
+    first = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    second = first + timedelta(minutes=10)
+    next_day = datetime(2026, 7, 21, tzinfo=timezone.utc)
+    duplicate = _quality_records(first)[0]
+    records = [
+        *_quality_records(first),
+        duplicate,
+        duplicate,
+        Record("fusionsolar", second, "productPower", float("nan"), "kW"),
+        Record("fusionsolar", second, "inverterPower", float("inf"), "kW"),
+        Record("fusionsolar", second, "onGridPower", 1, "W"),
+        Record("fusionsolar", second, "unknown", 1, "kW"),
+        *_quality_records(next_day),
+    ]
+    storage = Mock()
+    storage.load_records_for_range.return_value = records
+    application = Application(Mock(), storage, Mock())
+
+    report = application.check_quality(
+        date(2026, 7, 20), date(2026, 7, 21)
+    )
+
+    assert report["duplicate_records"] == 2
+    assert report["invalid_values"] == 2
+    assert report["unexpected_metrics"] == ["unknown"]
+    assert report["unexpected_units"] == 2
+    assert report["missing_metric_points"] == [
+        {
+            "timestamp": second.isoformat(),
+            "missing_metrics": ["buyPower", "powerProfit"],
+        }
+    ]
+    assert report["irregular_intervals"] == [
+        {
+            "previous": first.isoformat(),
+            "current": second.isoformat(),
+            "minutes": 10.0,
+        }
+    ]
+
+
+def test_check_quality_treats_none_as_present_and_valid() -> None:
+    timestamp = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    records = _quality_records(timestamp)
+    records[0] = Record(
+        "fusionsolar", timestamp, "productPower", None, "kW"
+    )
+    storage = Mock()
+    storage.load_records_for_range.return_value = records
+
+    report = Application(Mock(), storage, Mock()).check_quality(
+        date(2026, 7, 20), date(2026, 7, 20)
+    )
+
+    assert report["invalid_values"] == 0
+    assert report["missing_metric_points"] == []
+
+
+def test_check_quality_returns_empty_summary_for_no_data() -> None:
+    storage = Mock()
+    storage.load_records_for_range.return_value = []
+
+    report = Application(Mock(), storage, Mock()).check_quality(
+        date(2026, 7, 20), date(2026, 7, 20)
+    )
+
+    assert report["summary"] == {
+        "record_count": 0,
+        "timestamp_count": 0,
+        "first_timestamp": None,
+        "last_timestamp": None,
+    }
+    assert report["missing_metric_points"] == []
+    assert report["irregular_intervals"] == []
+
+
+def test_check_quality_rejects_reverse_range() -> None:
+    application = Application(Mock(), Mock(), Mock())
+
+    with pytest.raises(ValueError):
+        application.check_quality(date(2026, 7, 21), date(2026, 7, 20))

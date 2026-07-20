@@ -176,6 +176,117 @@ def test_cli_backup_closes_connection_when_backup_raises(tmp_path) -> None:
     connection.close.assert_called_once_with()
 
 
+def _quality_report(issue_count: int = 0) -> dict[str, object]:
+    return {
+        "duplicate_records": issue_count,
+        "invalid_values": 0,
+        "unexpected_metrics": [],
+        "unexpected_units": 0,
+        "missing_metric_points": [],
+        "irregular_intervals": [],
+        "summary": {"record_count": 5, "timestamp_count": 1},
+    }
+
+
+@pytest.mark.parametrize(
+    ("issue_count", "expected_code", "message"),
+    [
+        (0, 0, "Quality check passed."),
+        (1, 1, "Quality issues found."),
+    ],
+)
+def test_cli_quality_prints_result_and_returns_exit_code(
+    issue_count, expected_code, message, capsys
+) -> None:
+    with patch("hedp.main._quality", return_value=_quality_report(issue_count)):
+        result = cli(
+            ["quality", "--start", "2026-07-01", "--end", "2026-07-20"]
+        )
+
+    assert result == expected_code
+    assert capsys.readouterr().out == (
+        "Records: 5\n"
+        "Timestamps: 1\n"
+        f"Duplicate records: {issue_count}\n"
+        "Invalid values: 0\n"
+        "Unexpected metrics: 0\n"
+        "Unexpected units: 0\n"
+        "Missing metric points: 0\n"
+        "Irregular intervals: 0\n"
+        f"{message}\n"
+    )
+
+
+def test_quality_uses_only_sqlite_and_closes_connection(tmp_path) -> None:
+    configuration = Configuration(
+        base_url="https://example.test",
+        station_dn="station-dn",
+        username="user",
+        password="password",
+        database_path=str(tmp_path / "hedp.db"),
+    )
+
+    with (
+        patch("hedp.main.Configuration") as configuration_class,
+        patch("hedp.main.FusionSolarClient") as client_class,
+        patch("hedp.main.FusionSolarCollector") as collector_class,
+        patch("hedp.main.FusionSolarRecordBuilder") as builder_class,
+        patch("hedp.main.Storage") as storage_class,
+        patch("hedp.main.Application") as application_class,
+    ):
+        configuration_class.from_environment.return_value = configuration
+        storage = storage_class.return_value
+        connection = storage.connect.return_value
+        application_class.return_value.check_quality.return_value = (
+            _quality_report()
+        )
+
+        result = cli(
+            ["quality", "--start", "2026-07-01", "--end", "2026-07-20"]
+        )
+
+    assert result == 0
+    application_class.assert_called_once_with(None, storage, None)
+    client_class.assert_not_called()
+    collector_class.assert_not_called()
+    builder_class.assert_not_called()
+    connection.close.assert_called_once_with()
+
+
+def test_quality_closes_connection_when_check_raises(tmp_path) -> None:
+    configuration = Configuration(
+        base_url="https://example.test",
+        station_dn="station-dn",
+        username="user",
+        password="password",
+        database_path=str(tmp_path / "hedp.db"),
+    )
+
+    with (
+        patch("hedp.main.Configuration") as configuration_class,
+        patch("hedp.main.Storage") as storage_class,
+        patch("hedp.main.Application") as application_class,
+    ):
+        configuration_class.from_environment.return_value = configuration
+        connection = storage_class.return_value.connect.return_value
+        application_class.return_value.check_quality.side_effect = RuntimeError(
+            "failed"
+        )
+
+        with pytest.raises(RuntimeError, match="failed"):
+            cli(
+                [
+                    "quality",
+                    "--start",
+                    "2026-07-01",
+                    "--end",
+                    "2026-07-20",
+                ]
+            )
+
+    connection.close.assert_called_once_with()
+
+
 def test_cli_collects_date_range_and_closes_connection(capsys) -> None:
     application = Mock()
     connection = Mock()

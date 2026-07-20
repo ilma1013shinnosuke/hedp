@@ -91,6 +91,24 @@ class Storage:
         ).fetchall()
         return [Record.from_json(row[0]) for row in rows]
 
+    def load_records_for_range(
+        self,
+        source: str,
+        start_date: date,
+        end_date: date,
+        timezone_name: str = "Asia/Tokyo",
+    ) -> list[Record]:
+        timezone = ZoneInfo(timezone_name)
+        records = [
+            record
+            for record in self.load_records()
+            if record.source == source
+            and start_date
+            <= record.timestamp.astimezone(timezone).date()
+            <= end_date
+        ]
+        return sorted(records, key=lambda record: (record.timestamp, record.metric))
+
     def backup(self, destination_path: str) -> None:
         connection = self._require_connection()
         destination = Path(destination_path)
