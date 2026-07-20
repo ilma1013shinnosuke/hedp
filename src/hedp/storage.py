@@ -2,6 +2,7 @@ import sqlite3
 from typing import Optional
 
 from hedp.raw_data import RawData
+from hedp.record import Record
 
 
 class Storage:
@@ -14,6 +15,14 @@ class Storage:
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS raw_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                data TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 data TEXT NOT NULL
             )
@@ -36,6 +45,21 @@ class Storage:
             "SELECT data FROM raw_data ORDER BY id"
         ).fetchall()
         return [RawData.from_json(row[0]) for row in rows]
+
+    def save_records(self, records: list[Record]) -> None:
+        connection = self._require_connection()
+        connection.executemany(
+            "INSERT INTO records (data) VALUES (?)",
+            [(record.to_json(),) for record in records],
+        )
+        connection.commit()
+
+    def load_records(self) -> list[Record]:
+        connection = self._require_connection()
+        rows = connection.execute(
+            "SELECT data FROM records ORDER BY id"
+        ).fetchall()
+        return [Record.from_json(row[0]) for row in rows]
 
     def _require_connection(self) -> sqlite3.Connection:
         if self._connection is None:
