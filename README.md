@@ -18,8 +18,9 @@ Set `HEDP_FUSIONSOLAR_BASE_URL`, `HEDP_FUSIONSOLAR_STATION_DN`,
 `HEDP_FUSIONSOLAR_USERNAME`, `HEDP_FUSIONSOLAR_PASSWORD`, and
 `HEDP_DATABASE_PATH`. Realtime collection also requires the ordered,
 comma-separated `HEDP_FUSIONSOLAR_DEVICE_DNS` value.
-Battery DC collection requires `HEDP_FUSIONSOLAR_BATTERY_DN` and the observed
-comma-separated `HEDP_FUSIONSOLAR_BATTERY_SIGIDS` value.
+Battery DC collection uses the confirmed battery DeviceDN and Signal IDs by
+default. `HEDP_FUSIONSOLAR_BATTERY_DN` and
+`HEDP_FUSIONSOLAR_BATTERY_SIGIDS` are optional overrides.
 
 ## Main commands
 
@@ -60,8 +61,10 @@ scripts/install_macos_equipment_launchd.sh
 
 The daily job runs station collection, previous-day energy-balance collection
 and Record generation, quality checks, and backup from 03:00. The separate
-device-realtime and current-alarm job runs every five minutes. The equipment
-job collects battery DC data daily at 03:10. Logs are stored under
+realtime job collects device snapshots, battery DC, and current alarms every
+five minutes with one shared FusionSolar session. The independent equipment
+job also collects battery DC daily at 03:10 as a daily recovery/health
+snapshot. Logs are stored under
 `~/Library/Logs/hedp/`; macOS-specific behavior remains in `scripts/`.
 
 Uninstall the daily job with `scripts/uninstall_macos_launchd.sh`.

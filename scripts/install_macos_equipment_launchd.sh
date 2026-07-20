@@ -17,8 +17,6 @@ DOMAIN="gui/$(id -u)"
 : "${HEDP_FUSIONSOLAR_BASE_URL:?Set HEDP_FUSIONSOLAR_BASE_URL before installing.}"
 : "${HEDP_FUSIONSOLAR_STATION_DN:?Set HEDP_FUSIONSOLAR_STATION_DN before installing.}"
 : "${HEDP_FUSIONSOLAR_USERNAME:?Set HEDP_FUSIONSOLAR_USERNAME before installing.}"
-: "${HEDP_FUSIONSOLAR_BATTERY_DN:?Set HEDP_FUSIONSOLAR_BATTERY_DN before installing.}"
-: "${HEDP_FUSIONSOLAR_BATTERY_SIGIDS:?Set HEDP_FUSIONSOLAR_BATTERY_SIGIDS before installing.}"
 if [[ -z "${HEDP_FUSIONSOLAR_PASSWORD:-}" ]]; then
     read -r -s -p "HEDP_FUSIONSOLAR_PASSWORD: " HEDP_FUSIONSOLAR_PASSWORD
     printf '\n'
@@ -36,8 +34,13 @@ umask 077
     printf '  <key>ProgramArguments</key><array><string>%s</string></array>\n' "$(xml_escape "${RUN_SCRIPT}")"
     printf '  <key>WorkingDirectory</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}")"
     printf '%s\n' '  <key>StartCalendarInterval</key><dict>' '    <key>Hour</key><integer>3</integer>' '    <key>Minute</key><integer>10</integer>' '  </dict>' '  <key>EnvironmentVariables</key><dict>'
-    for name in HEDP_FUSIONSOLAR_BASE_URL HEDP_FUSIONSOLAR_STATION_DN HEDP_FUSIONSOLAR_USERNAME HEDP_FUSIONSOLAR_PASSWORD HEDP_FUSIONSOLAR_BATTERY_DN HEDP_FUSIONSOLAR_BATTERY_SIGIDS; do
+    for name in HEDP_FUSIONSOLAR_BASE_URL HEDP_FUSIONSOLAR_STATION_DN HEDP_FUSIONSOLAR_USERNAME HEDP_FUSIONSOLAR_PASSWORD; do
         printf '    <key>%s</key><string>%s</string>\n' "${name}" "$(xml_escape "${!name}")"
+    done
+    for name in HEDP_FUSIONSOLAR_BATTERY_DN HEDP_FUSIONSOLAR_BATTERY_SIGIDS; do
+        if [[ -n "${!name:-}" ]]; then
+            printf '    <key>%s</key><string>%s</string>\n' "${name}" "$(xml_escape "${!name}")"
+        fi
     done
     printf '    <key>HEDP_DATABASE_PATH</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}/hedp.db")"
     printf '%s\n' '  </dict>'

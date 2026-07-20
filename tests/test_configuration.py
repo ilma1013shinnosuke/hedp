@@ -22,11 +22,23 @@ def test_battery_dc_configuration(monkeypatch):
     assert Configuration.battery_dc_from_environment() == ("NE=1", "1,2")
 
 
-def test_battery_dc_configuration_is_required(monkeypatch):
+def test_battery_dc_configuration_uses_confirmed_defaults(monkeypatch):
     monkeypatch.delenv("HEDP_FUSIONSOLAR_BATTERY_DN", raising=False)
     monkeypatch.delenv("HEDP_FUSIONSOLAR_BATTERY_SIGIDS", raising=False)
-    with pytest.raises(RuntimeError, match="BATTERY_DN.*BATTERY_SIGIDS"):
-        Configuration.battery_dc_from_environment()
+    assert Configuration.battery_dc_from_environment() == (
+        Configuration.CONFIRMED_BATTERY_DEVICE_DN,
+        Configuration.CONFIRMED_BATTERY_SIGIDS,
+    )
+    assert len(Configuration.CONFIRMED_BATTERY_SIGIDS.split(",")) == 50
+
+
+def test_battery_dc_uses_confirmed_device_default(monkeypatch):
+    monkeypatch.delenv("HEDP_FUSIONSOLAR_BATTERY_DN", raising=False)
+    monkeypatch.setenv("HEDP_FUSIONSOLAR_BATTERY_SIGIDS", "1,2")
+    assert Configuration.battery_dc_from_environment() == (
+        Configuration.CONFIRMED_BATTERY_DEVICE_DN,
+        "1,2",
+    )
 
 
 ENVIRONMENT = {

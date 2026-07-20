@@ -61,11 +61,13 @@ does not depend on AI, ChatGPT, or Codex.
 
 ## Current scheduled collection
 
-- `device-realtime`: every five minutes
+- `device-realtime`, Battery DC, and current alarms: every five minutes with a
+  shared client/session and independent failure handling
 - Previous-day `energy-balance`: daily at 03:00
 - `station-kpi`: existing daily collection at 03:00
 - Backup: after the daily collection and quality steps
-- Battery DC: daily at 03:10; confirmed API, configured Signal IDs
+- Battery DC: also daily at 03:10 in an independent job so a failure or outage
+  in the five-minute job does not remove the daily health snapshot
 - Other equipment/configuration/Signal APIs: planned for 03:10; unconfirmed
 - Current alarms: every five minutes
 - Alarm history: explicit date-range collection
@@ -85,8 +87,10 @@ latest timestamps, and gaps greater than ten minutes. API failures are logged
 for the run but are not currently persisted as database events.
 
 Battery DC quality reports response structure, module coverage, empty-module
-responses, and latest snapshots. Alarm quality reports response structure,
-API success flags, configured-device CURRENT coverage, and observed hit counts.
+responses, latest snapshots, and Signal ID-set changes. Alarm quality reports
+response structure, API success flags, configured-device CURRENT coverage,
+five-minute gaps, daily HISTORY counts, pagination consistency, and observed
+hit counts.
 The corresponding diagnose commands always return their aggregate details
 without changing data.
 

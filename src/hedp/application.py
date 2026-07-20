@@ -2,6 +2,7 @@ from collections import Counter
 from datetime import date, timedelta
 from datetime import datetime
 import math
+import logging
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -178,6 +179,32 @@ class Application:
             self.storage.save_rawdata(raw_data)
         return collected, failures
 
+    def run_realtime_snapshot(
+        self,
+        device_dns: list[str],
+        battery_device_dn: str,
+        battery_sigids: str,
+    ) -> dict[str, object]:
+        result: dict[str, object] = {}
+        try:
+            result["device"] = self.run_device_realtime(device_dns)
+        except Exception as error:
+            result["device_error"] = f"{type(error).__name__}: {error}"
+            logging.error("realtime device collection failed: %s", error)
+        try:
+            result["battery"] = self.run_battery_dc(
+                battery_device_dn, battery_sigids, [1, 2, 3, 4]
+            )
+        except Exception as error:
+            result["battery_error"] = f"{type(error).__name__}: {error}"
+            logging.error("realtime battery collection failed: %s", error)
+        try:
+            result["alarm"] = self.run_current_alarms(device_dns)
+        except Exception as error:
+            result["alarm_error"] = f"{type(error).__name__}: {error}"
+            logging.error("realtime alarm collection failed: %s", error)
+        return result
+
     def check_energy_balance_quality(
         self, start_date: date, end_date: date
     ) -> dict[str, object]:
@@ -278,7 +305,9 @@ class Application:
         latest_by_module = {}
         empty_responses = Counter()
         invalid_responses = 0
-        for item in items:
+        signal_sets = {}
+        signal_id_changes = Counter()
+        for item in sorted(items, key=lambda value: value.timestamp):
             module_id = str((item.metadata or {}).get("module_id", "unknown"))
             by_module[module_id] += 1
             previous = latest_by_module.get(module_id)
@@ -291,6 +320,19 @@ class Application:
                 invalid_responses += 1
             elif not data:
                 empty_responses[module_id] += 1
+            else:
+                signal_ids = frozenset(
+                    element.get("id")
+                    for element in data
+                    if isinstance(element, dict) and "id" in element
+                )
+                previous_signals = signal_sets.get(module_id)
+                if (
+                    previous_signals is not None
+                    and signal_ids != previous_signals
+                ):
+                    signal_id_changes[module_id] += 1
+                signal_sets[module_id] = signal_ids
         return {
             "collection_count": len(items),
             "by_module": dict(sorted(by_module.items())),
@@ -302,6 +344,13 @@ class Application:
                 sorted(empty_responses.items())
             ),
             "invalid_responses": invalid_responses,
+            "signal_ids_by_module": {
+                key: sorted(value, key=str)
+                for key, value in sorted(signal_sets.items())
+            },
+            "signal_id_changes_by_module": dict(
+                sorted(signal_id_changes.items())
+            ),
         }
 
     def check_battery_dc_quality(self) -> dict[str, object]:
@@ -331,6 +380,10 @@ class Application:
         by_source = Counter()
         by_device = Counter()
         latest_current_by_device = {}
+        current_timestamps = {}
+        history_by_date = Counter()
+        pagination_groups = {}
+        legacy_pagination_metadata = 0
         invalid_responses = 0
         non_success_responses = 0
         total_hits = 0
@@ -339,6 +392,9 @@ class Application:
             device_dn = str((item.metadata or {}).get("device_dn", "unknown"))
             by_device[device_dn] += 1
             if item.source == "fusionsolar_alarm_current":
+                current_timestamps.setdefault(device_dn, []).append(
+                    item.timestamp
+                )
                 previous = latest_current_by_device.get(device_dn)
                 if previous is None or item.timestamp > previous:
                     latest_current_by_device[device_dn] = item.timestamp
@@ -351,6 +407,62 @@ class Application:
                 invalid_responses += 1
             else:
                 total_hits += len(data["hits"])
+            metadata = item.metadata or {}
+            target_date = metadata.get("target_date")
+            if item.source == "fusionsolar_alarm_history" and isinstance(
+                target_date, str
+            ):
+                history_by_date[target_date] += 1
+            collection_id = metadata.get("collection_id")
+            page_no = metadata.get("page_no")
+            page_size = metadata.get("page_size")
+            if (
+                isinstance(collection_id, str)
+                and isinstance(page_no, int)
+                and isinstance(page_size, int)
+            ):
+                if (
+                    item.source == "fusionsolar_alarm_current"
+                    and collection_id.startswith("CURRENT:")
+                ):
+                    collection_id = (
+                        f"{collection_id}:{item.timestamp.isoformat()}"
+                    )
+                pagination_groups.setdefault(collection_id, []).append(item)
+            else:
+                legacy_pagination_metadata += 1
+        current_gaps = Counter()
+        for device_dn, timestamps in current_timestamps.items():
+            ordered = sorted(set(timestamps))
+            current_gaps[device_dn] = sum(
+                (current - previous).total_seconds() > 600
+                for previous, current in zip(ordered, ordered[1:])
+            )
+        pagination_issues = 0
+        for group in pagination_groups.values():
+            pages = sorted(
+                int((item.metadata or {})["page_no"]) for item in group
+            )
+            if pages != list(range(1, len(pages) + 1)):
+                pagination_issues += 1
+                continue
+            total_counts = set()
+            for item in group:
+                group_data = item.payload.get("data")
+                if isinstance(group_data, dict):
+                    total_counts.add(group_data.get("totalCount"))
+            if len(total_counts) > 1:
+                pagination_issues += 1
+                continue
+            total_count = next(iter(total_counts), None)
+            collected_hits = sum(
+                len(item.payload["data"]["hits"])
+                for item in group
+                if isinstance(item.payload.get("data"), dict)
+                and isinstance(item.payload["data"].get("hits"), list)
+            )
+            if isinstance(total_count, int) and collected_hits < total_count:
+                pagination_issues += 1
         return {
             "collection_count": len(items),
             "by_source": dict(sorted(by_source.items())),
@@ -362,6 +474,10 @@ class Application:
             "total_hits": total_hits,
             "invalid_responses": invalid_responses,
             "non_success_responses": non_success_responses,
+            "history_by_date": dict(sorted(history_by_date.items())),
+            "current_gaps_by_device": dict(sorted(current_gaps.items())),
+            "pagination_issues": pagination_issues,
+            "legacy_pagination_metadata": legacy_pagination_metadata,
         }
 
     def check_alarm_quality(
@@ -378,6 +494,8 @@ class Application:
         issue_count = (
             int(diagnosis["invalid_responses"])
             + int(diagnosis["non_success_responses"])
+            + int(diagnosis["pagination_issues"])
+            + sum(diagnosis["current_gaps_by_device"].values())
             + len(missing_current_devices)
         )
         return {

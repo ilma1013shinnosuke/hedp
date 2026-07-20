@@ -135,6 +135,79 @@ def test_alarm_quality_reports_hits_and_missing_current_device():
     assert report["issue_count"] == 1
 
 
+def test_realtime_snapshot_continues_independent_collectors():
+    application = Application(None, Mock(), None)
+    application.run_device_realtime = Mock(side_effect=RuntimeError("device"))
+    application.run_battery_dc = Mock(return_value=([Mock()], []))
+    application.run_current_alarms = Mock(return_value=([Mock()], []))
+
+    result = application.run_realtime_snapshot(
+        ["NE=1"], "NE=battery", "1,2"
+    )
+
+    assert "device_error" in result
+    assert len(result["battery"][0]) == 1
+    assert len(result["alarm"][0]) == 1
+    application.run_battery_dc.assert_called_once_with(
+        "NE=battery", "1,2", [1, 2, 3, 4]
+    )
+    application.run_current_alarms.assert_called_once_with(["NE=1"])
+
+
+def test_battery_diagnose_detects_signal_id_set_changes():
+    storage = Mock()
+    storage.load_rawdata.return_value = [
+        RawData(
+            "fusionsolar_battery_dc",
+            datetime(2026, 7, 20, hour, tzinfo=timezone.utc),
+            {"success": True, "data": [{"id": signal_id}]},
+            metadata={"device_dn": "NE=1", "module_id": 1},
+        )
+        for hour, signal_id in ((0, 10), (1, 11))
+    ]
+    report = Application(None, storage, None).diagnose_battery_dc()
+    assert report["signal_ids_by_module"] == {"1": [11]}
+    assert report["signal_id_changes_by_module"] == {"1": 1}
+    assert report["latest_by_module"]["1"].startswith("2026-07-20T01:00")
+
+
+def test_alarm_diagnose_reports_daily_history_gaps_and_pagination_issue():
+    storage = Mock()
+    current_metadata = {
+        "device_dn": "NE=1",
+        "collection_id": "current-run",
+        "page_no": 1,
+        "page_size": 10,
+    }
+    history_metadata = {
+        "device_dn": "NE=1",
+        "collection_id": "history-run",
+        "page_no": 1,
+        "page_size": 10,
+        "target_date": "2026-07-19",
+    }
+    storage.load_rawdata.return_value = [
+        RawData(
+            "fusionsolar_alarm_current",
+            datetime(2026, 7, 20, 0, minute, tzinfo=timezone.utc),
+            {"success": True, "data": {"totalCount": 0, "hits": []}},
+            metadata={**current_metadata, "collection_id": f"current-{minute}"},
+        )
+        for minute in (0, 15)
+    ] + [
+        RawData(
+            "fusionsolar_alarm_history",
+            datetime(2026, 7, 20, 1, tzinfo=timezone.utc),
+            {"success": True, "data": {"totalCount": 2, "hits": [{}]}},
+            metadata=history_metadata,
+        )
+    ]
+    report = Application(None, storage, None).diagnose_alarms()
+    assert report["history_by_date"] == {"2026-07-19": 1}
+    assert report["current_gaps_by_device"] == {"NE=1": 1}
+    assert report["pagination_issues"] == 1
+
+
 def test_run_range_processes_each_raw_data_in_order() -> None:
     raw_data_list = [
         RawData(

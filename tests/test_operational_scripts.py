@@ -6,8 +6,7 @@ ROOT = Path(__file__).parents[1]
 
 def test_five_minute_script_collects_realtime_and_current_alarms():
     script = (ROOT / "scripts" / "run_device_realtime.sh").read_text()
-    assert "collect-device-realtime" in script
-    assert "collect-alarms-current" in script
+    assert "collect-realtime" in script
     assert "com.hedp.device-realtime.lock" in script
 
 

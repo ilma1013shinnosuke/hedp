@@ -135,6 +135,27 @@ def _create_alarm_application() -> tuple[Application, sqlite3.Connection]:
     return application, connection
 
 
+def _create_realtime_application() -> tuple[Application, sqlite3.Connection]:
+    configuration = Configuration.from_environment()
+    client = FusionSolarClient(
+        base_url=configuration.base_url,
+        station_dn=configuration.station_dn,
+        username=configuration.username,
+        password=configuration.password,
+    )
+    storage = Storage(configuration.database_path)
+    connection = storage.connect()
+    application = Application(
+        None,
+        storage,
+        None,
+        device_realtime_collector=FusionSolarDeviceRealtimeCollector(client),
+        battery_dc_collector=FusionSolarBatteryDcCollector(client),
+        alarm_collector=FusionSolarAlarmCollector(client),
+    )
+    return application, connection
+
+
 def main() -> RawData:
     application, connection = _create_application()
     try:
@@ -267,6 +288,7 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     device_group = device_parser.add_mutually_exclusive_group()
     device_group.add_argument("--all", action="store_true")
     device_group.add_argument("--device-dn")
+    subparsers.add_parser("collect-realtime")
     battery_parser = subparsers.add_parser("collect-battery-dc")
     battery_parser.add_argument("--device-dn")
     battery_parser.add_argument("--sigids")
@@ -364,6 +386,31 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
             f"Failed {len(failures)}."
         )
         return 1 if failures and not raw_data_list else 0
+
+    if arguments.command == "collect-realtime":
+        device_dns = Configuration.device_dns_from_environment()
+        battery_device_dn, battery_sigids = (
+            Configuration.battery_dc_from_environment()
+        )
+        application, connection = _create_realtime_application()
+        try:
+            report = application.run_realtime_snapshot(
+                device_dns, battery_device_dn, battery_sigids
+            )
+        finally:
+            connection.close()
+        failed_parts = [key for key in report if key.endswith("_error")]
+        for name in ("device", "battery", "alarm"):
+            value = report.get(name)
+            if isinstance(value, tuple):
+                collected, failures = value
+                print(
+                    f"{name}: collected {len(collected)}, "
+                    f"failed {len(failures)}"
+                )
+                if failures and not collected:
+                    failed_parts.append(name)
+        return 1 if failed_parts else 0
 
     if arguments.command == "collect-battery-dc":
         if arguments.device_dn and arguments.sigids:
@@ -477,6 +524,23 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
             connection.close()
         print(f"Collections: {report['collection_count']}")
         print(f"Invalid responses: {report['invalid_responses']}")
+        if "by_module" in report:
+            print("By module:")
+            _print_counts(report["by_module"])
+            print("Empty responses by module:")
+            _print_counts(report["empty_responses_by_module"])
+            print("Signal ID changes by module:")
+            _print_counts(report["signal_id_changes_by_module"])
+        if "by_source" in report:
+            print("By source:")
+            _print_counts(report["by_source"])
+            print("By device:")
+            _print_counts(report["by_device"])
+            print("History by date:")
+            _print_counts(report["history_by_date"])
+            print("Current gaps by device:")
+            _print_counts(report["current_gaps_by_device"])
+            print(f"Pagination issues: {report['pagination_issues']}")
         if "total_hits" in report:
             print(f"Alarm hits: {report['total_hits']}")
         if "issue_count" in report:
