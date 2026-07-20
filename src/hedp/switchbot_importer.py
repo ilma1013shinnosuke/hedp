@@ -7,6 +7,7 @@ from itertools import zip_longest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
+import unicodedata
 from zoneinfo import ZoneInfo
 import xml.etree.ElementTree as ElementTree
 import zipfile
@@ -32,6 +33,8 @@ DEVICE_BY_FILENAME = {
     "玄関": "EA56DAD63611",
     "車内": "C1BD4CEC2D7B",
     "書斎": "D064886F78EF",
+    "洗面": "E11EBC4B5382",
+    "寝室": "E4BD97F06AB2",
 }
 TOKYO = ZoneInfo("Asia/Tokyo")
 
@@ -273,7 +276,17 @@ class SwitchBotImporter:
                         values.append(value)
                     if header is None:
                         header = values
-                        if tuple(header) != CSV_COLUMNS:
+                        if tuple(header) != CSV_COLUMNS and (
+                            len(header) == len(CSV_COLUMNS)
+                            and header[0] == "Timestamp"
+                            and header[1].startswith("Temperature_Celsius(")
+                            and header[2] == "Relative_Humidity(%)"
+                            and header[3].startswith("Absolute_Humidity(")
+                            and header[4].startswith("DPT_Celsius(")
+                            and header[5] == "VPD(kPa)"
+                        ):
+                            header = list(CSV_COLUMNS)
+                        elif tuple(header) != CSV_COLUMNS:
                             raise ValueError(f"Unexpected columns in {path.name}")
                     else:
                         if values and values[0] and "-" not in values[0]:
@@ -305,7 +318,8 @@ class SwitchBotImporter:
 
     @staticmethod
     def _device_id(path: Path) -> str:
+        filename = unicodedata.normalize("NFC", path.name)
         for prefix, device_id in DEVICE_BY_FILENAME.items():
-            if path.name.startswith(prefix):
+            if filename.startswith(prefix):
                 return device_id
         raise ValueError(f"Unknown SwitchBot history filename: {path.name}")

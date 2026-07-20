@@ -142,6 +142,14 @@ def test_import_blocks_different_value_same_timestamp_and_bad_rows(tmp_path):
     assert report["invalid_rows"] == 1
 
 
+def test_import_filename_mapping_accepts_decomposed_japanese(tmp_path):
+    path = tmp_path / "リビング_data分.csv"
+    assert SwitchBotImporter._device_id(path) == "E888C195493C"
+    assert SwitchBotImporter._device_id(tmp_path / "洗面_data.csv") == (
+        "E11EBC4B5382"
+    )
+
+
 def test_exact_observation_conflict_keeps_both(tmp_path):
     storage = _storage(tmp_path)
     base = {
