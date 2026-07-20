@@ -76,9 +76,10 @@ Uninstall it:
 scripts/uninstall_macos_launchd.sh
 ```
 
-The job runs `hedp collect` every day at 3:00 AM. If the Mac is asleep,
-launchd may run it after the Mac wakes. Check or repair missed dates with
-`hedp missing` and `hedp backfill-missing`.
+The job runs `hedp collect` and then `hedp backup` every day at 3:00 AM.
+Backups are saved in `backups/`, and the latest 30 are retained. If the Mac
+is asleep, launchd may run it after the Mac wakes. Check or repair missed
+dates with `hedp missing` and `hedp backfill-missing`.
 
 Logs are stored in `~/Library/Logs/hedp/collect.out.log` and
 `~/Library/Logs/hedp/collect.err.log`.

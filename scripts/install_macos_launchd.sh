@@ -9,6 +9,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 HEDP_COMMAND="${REPOSITORY_ROOT}/.venv/bin/hedp"
+RUN_DAILY_SCRIPT="${SCRIPT_DIR}/run_daily.sh"
 PLIST_PATH="${HOME}/Library/LaunchAgents/com.hedp.collect.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
 LABEL="com.hedp.collect"
@@ -19,11 +20,15 @@ if [[ ! -x "${HEDP_COMMAND}" ]]; then
     exit 1
 fi
 
+if [[ ! -f "${RUN_DAILY_SCRIPT}" ]]; then
+    echo "Script not found: ${RUN_DAILY_SCRIPT}" >&2
+    exit 1
+fi
+chmod +x "${RUN_DAILY_SCRIPT}"
+
 : "${HEDP_FUSIONSOLAR_BASE_URL:?Set HEDP_FUSIONSOLAR_BASE_URL before installing.}"
 : "${HEDP_FUSIONSOLAR_STATION_DN:?Set HEDP_FUSIONSOLAR_STATION_DN before installing.}"
 : "${HEDP_FUSIONSOLAR_USERNAME:?Set HEDP_FUSIONSOLAR_USERNAME before installing.}"
-: "${HEDP_DATABASE_PATH:?Set HEDP_DATABASE_PATH before installing.}"
-
 read -r -s -p "HEDP_FUSIONSOLAR_PASSWORD: " HEDP_FUSIONSOLAR_PASSWORD
 printf '\n'
 if [[ -z "${HEDP_FUSIONSOLAR_PASSWORD}" ]]; then
@@ -41,12 +46,12 @@ xml_escape() {
 }
 
 REPOSITORY_ROOT_XML="$(xml_escape "${REPOSITORY_ROOT}")"
-HEDP_COMMAND_XML="$(xml_escape "${HEDP_COMMAND}")"
+RUN_DAILY_SCRIPT_XML="$(xml_escape "${RUN_DAILY_SCRIPT}")"
 BASE_URL_XML="$(xml_escape "${HEDP_FUSIONSOLAR_BASE_URL}")"
 STATION_DN_XML="$(xml_escape "${HEDP_FUSIONSOLAR_STATION_DN}")"
 USERNAME_XML="$(xml_escape "${HEDP_FUSIONSOLAR_USERNAME}")"
 PASSWORD_XML="$(xml_escape "${HEDP_FUSIONSOLAR_PASSWORD}")"
-DATABASE_PATH_XML="$(xml_escape "${HEDP_DATABASE_PATH}")"
+DATABASE_PATH_XML="$(xml_escape "${REPOSITORY_ROOT}/hedp.db")"
 OUT_LOG_XML="$(xml_escape "${LOG_DIRECTORY}/collect.out.log")"
 ERR_LOG_XML="$(xml_escape "${LOG_DIRECTORY}/collect.err.log")"
 
@@ -60,7 +65,7 @@ umask 077
     printf '%s\n' '<dict>'
     printf '%s\n' '  <key>Label</key>' "  <string>${LABEL}</string>"
     printf '%s\n' '  <key>ProgramArguments</key>' '  <array>'
-    printf '%s\n' "    <string>${HEDP_COMMAND_XML}</string>" '    <string>collect</string>' '  </array>'
+    printf '%s\n' "    <string>${RUN_DAILY_SCRIPT_XML}</string>" '  </array>'
     printf '%s\n' '  <key>WorkingDirectory</key>' "  <string>${REPOSITORY_ROOT_XML}</string>"
     printf '%s\n' '  <key>StartCalendarInterval</key>' '  <dict>'
     printf '%s\n' '    <key>Hour</key>' '    <integer>3</integer>'
