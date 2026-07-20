@@ -11,6 +11,7 @@ class RawData:
     timestamp: datetime
     payload: dict[str, object]
     target_date: date | None = None
+    metadata: dict[str, object] | None = None
 
     def to_json(self) -> str:
         return json.dumps(
@@ -23,6 +24,7 @@ class RawData:
                     if self.target_date is not None
                     else None
                 ),
+                "metadata": self.metadata,
             }
         )
 
@@ -39,4 +41,5 @@ class RawData:
                 if target_date is not None
                 else None
             ),
+            metadata=data.get("metadata"),
         )

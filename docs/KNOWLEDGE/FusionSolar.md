@@ -329,3 +329,12 @@ conversion and does not infer missing points, fields, device IDs, or signs.
 - A confirmed monthly-aggregation API.
 - Cookie names/lifetime, CSRF lifetime, request-rate limits, and CAPTCHA
   recovery procedure.
+# Collection operations
+
+`device-realtime-data` is implementation-confirmed in Python. Its complete response, including all Signal values, is retained unchanged every five minutes. Device type assignments remain unconfirmed.
+
+Equipment, configuration, and Signal-specific APIs are planned for daily collection at 03:10 Asia/Tokyo after their method, endpoint, request, and response have been observed. Their future collectors belong at the existing API-to-Collector-to-RawData boundary; no endpoint is inferred here.
+
+Alarm collection is planned every five minutes after live DevTools verification. A history API would deduplicate by alarm ID or occurrence time; a current-state API would store snapshots and derive transitions later. No unverified alarm API is implemented.
+
+Energy-balance `xAxis` contains 288 five-minute timestamps for a day. The confirmed arrays are paired by index, `"--"` is retained in RawData and omitted only from derived Records, and uncertain units and meanings (including `mainsUsePower`, `disGridPower`, and `radiationDosePower`) remain explicitly unknown.

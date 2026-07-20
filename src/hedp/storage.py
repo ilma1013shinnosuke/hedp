@@ -44,6 +44,29 @@ class Storage:
             if raw_data.target_date is not None
             else None
         )
+        if raw_data.source == "fusionsolar_device_realtime":
+            connection.execute(
+                """
+                INSERT INTO raw_data (data)
+                SELECT ?
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM raw_data
+                    WHERE json_extract(data, '$.source') = ?
+                      AND json_extract(data, '$.timestamp') = ?
+                      AND json(json_extract(data, '$.metadata')) = json(?)
+                      AND json(json_extract(data, '$.payload')) = json(?)
+                )
+                """,
+                (
+                    data,
+                    raw_data.source,
+                    raw_data.timestamp.isoformat(),
+                    json.dumps(raw_data.metadata),
+                    payload,
+                ),
+            )
+            connection.commit()
+            return
         connection.execute(
             """
             INSERT INTO raw_data (data)
@@ -62,6 +85,21 @@ class Storage:
             (data, raw_data.source, target_date, target_date, payload),
         )
         connection.commit()
+
+    def load_rawdata_for_range(
+        self, source: str, start_date: date, end_date: date
+    ) -> list[RawData]:
+        connection = self._require_connection()
+        rows = connection.execute(
+            """
+            SELECT data FROM raw_data
+            WHERE json_extract(data, '$.source') = ?
+              AND json_extract(data, '$.target_date') BETWEEN ? AND ?
+            ORDER BY json_extract(data, '$.target_date'), id
+            """,
+            (source, start_date.isoformat(), end_date.isoformat()),
+        ).fetchall()
+        return [RawData.from_json(row[0]) for row in rows]
 
     def load_rawdata(self) -> list[RawData]:
         connection = self._require_connection()

@@ -12,6 +12,12 @@ from hedp.fusionsolar_collector import FusionSolarCollector
 from hedp.fusionsolar_energy_balance_collector import (
     FusionSolarEnergyBalanceCollector,
 )
+from hedp.fusionsolar_device_realtime_collector import (
+    FusionSolarDeviceRealtimeCollector,
+)
+from hedp.fusionsolar_energy_balance_record_builder import (
+    FusionSolarEnergyBalanceRecordBuilder,
+)
 from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
 from hedp.raw_data import RawData
 from hedp.storage import Storage
@@ -51,10 +57,37 @@ def _create_energy_balance_application() -> tuple[
     storage = Storage(configuration.database_path)
     connection = storage.connect()
     try:
-        application = Application(None, storage, None, collector)  # type: ignore[arg-type]
+        application = Application(
+            None,
+            storage,
+            None,
+            collector,
+            energy_balance_record_builder=FusionSolarEnergyBalanceRecordBuilder(),
+        )
     except Exception:
         connection.close()
         raise
+    return application, connection
+
+
+def _create_device_realtime_application() -> tuple[
+    Application, sqlite3.Connection
+]:
+    configuration = Configuration.from_environment()
+    client = FusionSolarClient(
+        base_url=configuration.base_url,
+        station_dn=configuration.station_dn,
+        username=configuration.username,
+        password=configuration.password,
+    )
+    storage = Storage(configuration.database_path)
+    connection = storage.connect()
+    application = Application(
+        None,
+        storage,
+        None,
+        device_realtime_collector=FusionSolarDeviceRealtimeCollector(client),
+    )
     return application, connection
 
 
@@ -103,7 +136,7 @@ def _quality(start_date: date, end_date: date) -> dict[str, object]:
     storage = Storage(configuration.database_path)
     connection = storage.connect()
     try:
-        application = Application(None, storage, None)  # type: ignore[arg-type]
+        application = Application(None, storage, None)
         return application.check_quality(start_date, end_date)
     finally:
         connection.close()
@@ -114,7 +147,7 @@ def _quality_diagnose(start_date: date, end_date: date) -> dict[str, object]:
     storage = Storage(configuration.database_path)
     connection = storage.connect()
     try:
-        application = Application(None, storage, None)  # type: ignore[arg-type]
+        application = Application(None, storage, None)
         return application.diagnose_quality(start_date, end_date)
     finally:
         connection.close()
@@ -186,6 +219,17 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     energy_balance_parser = subparsers.add_parser("collect-energy-balance")
     energy_balance_parser.add_argument("--start", type=_date_argument)
     energy_balance_parser.add_argument("--end", type=_date_argument)
+    device_parser = subparsers.add_parser("collect-device-realtime")
+    device_group = device_parser.add_mutually_exclusive_group()
+    device_group.add_argument("--all", action="store_true")
+    device_group.add_argument("--device-dn")
+    build_energy_parser = subparsers.add_parser("build-energy-balance-records")
+    build_energy_parser.add_argument("--start", type=_date_argument, required=True)
+    build_energy_parser.add_argument("--end", type=_date_argument, required=True)
+    energy_quality_parser = subparsers.add_parser("quality-energy-balance")
+    energy_quality_parser.add_argument("--start", type=_date_argument, required=True)
+    energy_quality_parser.add_argument("--end", type=_date_argument, required=True)
+    subparsers.add_parser("diagnose-device-realtime")
     missing_parser = subparsers.add_parser("missing")
     missing_parser.add_argument("--start", type=_date_argument, required=True)
     missing_parser.add_argument("--end", type=_date_argument, required=True)
@@ -206,9 +250,11 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         print(f"Backup created: {destination}")
         return
 
-    if (arguments.start is None) != (arguments.end is None):
+    argument_start = getattr(arguments, "start", None)
+    argument_end = getattr(arguments, "end", None)
+    if (argument_start is None) != (argument_end is None):
         parser.error("--start and --end must be specified together")
-    if arguments.start is not None and arguments.start > arguments.end:
+    if argument_start is not None and argument_start > argument_end:
         parser.error("--start must not be after --end")
 
     if arguments.command == "quality":
@@ -234,6 +280,60 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     if arguments.command == "quality-diagnose":
         diagnosis = _quality_diagnose(arguments.start, arguments.end)
         _print_quality_diagnosis(diagnosis)
+        return 0
+
+    if arguments.command == "collect-device-realtime":
+        device_dns = (
+            [arguments.device_dn]
+            if arguments.device_dn
+            else Configuration.device_dns_from_environment()
+        )
+        application, connection = _create_device_realtime_application()
+        try:
+            raw_data_list, failures = application.run_device_realtime(device_dns)
+        finally:
+            connection.close()
+        print(
+            f"Collected {len(raw_data_list)} device-realtime RawData item(s). "
+            f"Failed {len(failures)}."
+        )
+        return 1 if failures and not raw_data_list else 0
+
+    if arguments.command == "build-energy-balance-records":
+        application, connection = _create_energy_balance_application()
+        try:
+            record_count = application.build_energy_balance_records(
+                arguments.start, arguments.end
+            )
+        finally:
+            connection.close()
+        print(f"Built {record_count} energy-balance Record item(s).")
+        return 0
+
+    if arguments.command == "quality-energy-balance":
+        application, connection = _create_energy_balance_application()
+        try:
+            report = application.check_energy_balance_quality(
+                arguments.start, arguments.end
+            )
+        finally:
+            connection.close()
+        print(f"RawData: {report['raw_data_count']}")
+        print(f"Quality issues: {len(report['issues'])}")
+        print(f"RawData without Records: {len(report['raw_data_without_records'])}")
+        return 1 if report["issues"] or report["raw_data_without_records"] else 0
+
+    if arguments.command == "diagnose-device-realtime":
+        configuration = Configuration.from_environment()
+        storage = Storage(configuration.database_path)
+        connection = storage.connect()
+        try:
+            report = Application(None, storage, None).diagnose_device_realtime()
+        finally:
+            connection.close()
+        print(f"Collections: {report['collection_count']}")
+        for device_dn, count in report["by_device"].items():
+            print(f"{device_dn}: {count}")
         return 0
 
     if arguments.command == "collect-energy-balance":

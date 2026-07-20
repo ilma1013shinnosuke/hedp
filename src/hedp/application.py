@@ -9,6 +9,12 @@ from hedp.fusionsolar_collector import FusionSolarCollector
 from hedp.fusionsolar_energy_balance_collector import (
     FusionSolarEnergyBalanceCollector,
 )
+from hedp.fusionsolar_device_realtime_collector import (
+    FusionSolarDeviceRealtimeCollector,
+)
+from hedp.fusionsolar_energy_balance_record_builder import (
+    FusionSolarEnergyBalanceRecordBuilder,
+)
 from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
 from hedp.raw_data import RawData
 from hedp.storage import Storage
@@ -32,19 +38,29 @@ class Application:
 
     def __init__(
         self,
-        collector: FusionSolarCollector,
+        collector: Optional[FusionSolarCollector],
         storage: Storage,
-        record_builder: FusionSolarRecordBuilder,
+        record_builder: Optional[FusionSolarRecordBuilder],
         energy_balance_collector: Optional[
             FusionSolarEnergyBalanceCollector
+        ] = None,
+        device_realtime_collector: Optional[
+            FusionSolarDeviceRealtimeCollector
+        ] = None,
+        energy_balance_record_builder: Optional[
+            FusionSolarEnergyBalanceRecordBuilder
         ] = None,
     ) -> None:
         self.collector = collector
         self.storage = storage
         self.record_builder = record_builder
         self.energy_balance_collector = energy_balance_collector
+        self.device_realtime_collector = device_realtime_collector
+        self.energy_balance_record_builder = energy_balance_record_builder
 
     def run(self) -> RawData:
+        if self.collector is None or self.record_builder is None:
+            raise RuntimeError("Station collector is not configured")
         raw_data = self.collector.collect()
         self.storage.save_rawdata(raw_data)
         records = self.record_builder.build(raw_data)
@@ -54,6 +70,8 @@ class Application:
     def run_range(
         self, start_date: date, end_date: date
     ) -> list[RawData]:
+        if self.collector is None or self.record_builder is None:
+            raise RuntimeError("Station collector is not configured")
         raw_data_list = self.collector.collect_range(start_date, end_date)
         for raw_data in raw_data_list:
             self.storage.save_rawdata(raw_data)
@@ -66,6 +84,10 @@ class Application:
             raise RuntimeError("Energy-balance collector is not configured")
         raw_data = self.energy_balance_collector.collect_for_date(target_date)
         self.storage.save_rawdata(raw_data)
+        if self.energy_balance_record_builder is not None:
+            self.storage.save_records(
+                self.energy_balance_record_builder.build(raw_data)
+            )
         return raw_data
 
     def run_energy_balance_range(
@@ -78,7 +100,127 @@ class Application:
         )
         for raw_data in raw_data_list:
             self.storage.save_rawdata(raw_data)
+            if self.energy_balance_record_builder is not None:
+                self.storage.save_records(
+                    self.energy_balance_record_builder.build(raw_data)
+                )
         return raw_data_list
+
+    def build_energy_balance_records(
+        self, start_date: date, end_date: date
+    ) -> int:
+        if self.energy_balance_record_builder is None:
+            raise RuntimeError("Energy-balance record builder is not configured")
+        count = 0
+        for raw_data in self.storage.load_rawdata_for_range(
+            "fusionsolar_energy_balance", start_date, end_date
+        ):
+            records = self.energy_balance_record_builder.build(raw_data)
+            self.storage.save_records(records)
+            count += len(records)
+        return count
+
+    def run_device_realtime(
+        self, device_dns: list[str]
+    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+        if self.device_realtime_collector is None:
+            raise RuntimeError("Device-realtime collector is not configured")
+        collected, failures = self.device_realtime_collector.collect_devices(
+            device_dns
+        )
+        for raw_data in collected:
+            self.storage.save_rawdata(raw_data)
+        return collected, failures
+
+    def check_energy_balance_quality(
+        self, start_date: date, end_date: date
+    ) -> dict[str, object]:
+        if start_date > end_date:
+            raise ValueError("start_date must not be after end_date")
+        if self.energy_balance_record_builder is None:
+            raise RuntimeError("Energy-balance record builder is not configured")
+        raw_items = self.storage.load_rawdata_for_range(
+            "fusionsolar_energy_balance", start_date, end_date
+        )
+        issues = []
+        valid_counts = Counter()
+        missing_markers = Counter()
+        for raw_data in raw_items:
+            try:
+                records = self.energy_balance_record_builder.build(raw_data)
+            except ValueError as error:
+                issues.append(
+                    {"target_date": raw_data.target_date.isoformat(), "error": str(error)}
+                )
+                continue
+            data = raw_data.payload["data"]
+            for metric in self.energy_balance_record_builder.SERIES:
+                values = data[metric]
+                missing_markers[metric] += sum(
+                    value == "--" or value is None for value in values
+                )
+                valid_counts[metric] += sum(
+                    record.metric == metric for record in records
+                )
+            missing_daily = [
+                metric
+                for metric in self.energy_balance_record_builder.DAILY
+                if metric not in data
+            ]
+            if missing_daily:
+                issues.append(
+                    {
+                        "target_date": raw_data.target_date.isoformat(),
+                        "error": "missing daily values: " + ", ".join(missing_daily),
+                    }
+                )
+        raw_dates = {item.target_date for item in raw_items}
+        record_dates = self.storage.get_record_dates(
+            "fusionsolar_energy_balance", start_date, end_date
+        )
+        return {
+            "raw_data_count": len(raw_items),
+            "issues": issues,
+            "missing_markers_by_series": dict(missing_markers),
+            "valid_values_by_series": dict(valid_counts),
+            "raw_data_without_records": sorted(
+                value.isoformat() for value in raw_dates - record_dates if value
+            ),
+        }
+
+    def diagnose_device_realtime(self) -> dict[str, object]:
+        items = [
+            item
+            for item in self.storage.load_rawdata()
+            if item.source == "fusionsolar_device_realtime"
+        ]
+        by_device = Counter(
+            str((item.metadata or {}).get("device_dn", "unknown"))
+            for item in items
+        )
+        latest = {}
+        gaps = Counter()
+        timestamps = {}
+        for item in items:
+            device_dn = str((item.metadata or {}).get("device_dn", "unknown"))
+            timestamps.setdefault(device_dn, []).append(item.timestamp)
+            if device_dn not in latest or item.timestamp > latest[device_dn]:
+                latest[device_dn] = item.timestamp
+        for device_dn, values in timestamps.items():
+            ordered = sorted(set(values))
+            gaps[device_dn] = sum(
+                (current - previous).total_seconds() > 600
+                for previous, current in zip(ordered, ordered[1:])
+            )
+        return {
+            "collection_count": len(items),
+            "by_device": dict(sorted(by_device.items())),
+            "latest_by_device": {
+                key: value.isoformat() for key, value in sorted(latest.items())
+            },
+            "large_gaps_by_device": dict(sorted(gaps.items())),
+            "api_failure_count": None,
+        }
 
     def find_missing_dates(
         self, start_date: date, end_date: date

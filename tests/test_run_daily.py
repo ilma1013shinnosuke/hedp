@@ -50,7 +50,12 @@ def test_run_daily_collects_backs_up_and_retains_latest_30(tmp_path) -> None:
     )
 
     assert result.returncode == 0
-    assert call_log.read_text().splitlines() == ["collect", "backup"]
+    assert call_log.read_text().splitlines() == [
+        "collect",
+        "collect-energy-balance",
+        "quality",
+        "backup",
+    ]
     assert sorted(path.name for path in backups.glob("hedp-*.db")) == [
         *backup_names[-30:],
         invalid_backup.name,
@@ -58,7 +63,7 @@ def test_run_daily_collects_backs_up_and_retains_latest_30(tmp_path) -> None:
     assert database.is_file()
 
 
-def test_run_daily_stops_after_failed_command(tmp_path) -> None:
+def test_run_daily_preserves_partial_data_and_backs_up_after_failure(tmp_path) -> None:
     _, run_daily = _daily_script_repository(tmp_path)
     call_log = tmp_path / "calls.log"
 
@@ -75,7 +80,12 @@ def test_run_daily_stops_after_failed_command(tmp_path) -> None:
     )
 
     assert result.returncode != 0
-    assert call_log.read_text().splitlines() == ["collect"]
+    assert call_log.read_text().splitlines() == [
+        "collect",
+        "collect-energy-balance",
+        "quality",
+        "backup",
+    ]
 
 
 def test_run_daily_fails_when_backup_fails(tmp_path) -> None:
@@ -95,4 +105,9 @@ def test_run_daily_fails_when_backup_fails(tmp_path) -> None:
     )
 
     assert result.returncode != 0
-    assert call_log.read_text().splitlines() == ["collect", "backup"]
+    assert call_log.read_text().splitlines() == [
+        "collect",
+        "collect-energy-balance",
+        "quality",
+        "backup",
+    ]

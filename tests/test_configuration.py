@@ -3,6 +3,19 @@ import pytest
 from hedp.configuration import Configuration
 
 
+def test_device_dns_are_trimmed_deduplicated_and_ordered(monkeypatch):
+    monkeypatch.setenv(
+        "HEDP_FUSIONSOLAR_DEVICE_DNS", " NE=2,NE=1,,NE=2 "
+    )
+    assert Configuration.device_dns_from_environment() == ["NE=2", "NE=1"]
+
+
+def test_device_dns_must_be_configured(monkeypatch):
+    monkeypatch.delenv("HEDP_FUSIONSOLAR_DEVICE_DNS", raising=False)
+    with pytest.raises(RuntimeError, match="HEDP_FUSIONSOLAR_DEVICE_DNS"):
+        Configuration.device_dns_from_environment()
+
+
 ENVIRONMENT = {
     "HEDP_FUSIONSOLAR_BASE_URL": "https://example.test",
     "HEDP_FUSIONSOLAR_STATION_DN": "station-dn",

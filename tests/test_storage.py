@@ -53,6 +53,31 @@ def test_backup_copies_data_creates_parent_overwrites_and_preserves_source(
         connection.close()
 
 
+def test_device_realtime_same_payload_at_different_times_is_saved(
+    tmp_path,
+) -> None:
+    storage = Storage(str(tmp_path / "device.db"))
+    connection = storage.connect()
+    try:
+        first = RawData(
+            source="fusionsolar_device_realtime",
+            timestamp=datetime(2026, 7, 20, 0, tzinfo=timezone.utc),
+            payload={"data": {"value": "--"}},
+            metadata={"device_dn": "NE=1"},
+        )
+        second = RawData(
+            source=first.source,
+            timestamp=datetime(2026, 7, 20, 0, 5, tzinfo=timezone.utc),
+            payload=first.payload,
+            metadata=first.metadata,
+        )
+        storage.save_rawdata(first)
+        storage.save_rawdata(second)
+        assert storage.load_rawdata() == [first, second]
+    finally:
+        connection.close()
+
+
 def test_save_and_load_rawdata(tmp_path) -> None:
     storage = Storage(str(tmp_path / "test.db"))
     connection = storage.connect()

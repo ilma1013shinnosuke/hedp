@@ -33,3 +33,13 @@ class Configuration:
                 f"Missing required environment variables: {', '.join(missing)}"
             )
         return cls(**values)
+
+    @staticmethod
+    def device_dns_from_environment() -> list[str]:
+        value = os.environ.get("HEDP_FUSIONSOLAR_DEVICE_DNS")
+        if value is None or not value.strip():
+            raise RuntimeError(
+                "Missing required environment variable: "
+                "HEDP_FUSIONSOLAR_DEVICE_DNS"
+            )
+        return list(dict.fromkeys(item.strip() for item in value.split(",") if item.strip()))

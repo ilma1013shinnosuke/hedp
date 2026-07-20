@@ -29,8 +29,10 @@ chmod +x "${RUN_DAILY_SCRIPT}"
 : "${HEDP_FUSIONSOLAR_BASE_URL:?Set HEDP_FUSIONSOLAR_BASE_URL before installing.}"
 : "${HEDP_FUSIONSOLAR_STATION_DN:?Set HEDP_FUSIONSOLAR_STATION_DN before installing.}"
 : "${HEDP_FUSIONSOLAR_USERNAME:?Set HEDP_FUSIONSOLAR_USERNAME before installing.}"
-read -r -s -p "HEDP_FUSIONSOLAR_PASSWORD: " HEDP_FUSIONSOLAR_PASSWORD
-printf '\n'
+if [[ -z "${HEDP_FUSIONSOLAR_PASSWORD:-}" ]]; then
+    read -r -s -p "HEDP_FUSIONSOLAR_PASSWORD: " HEDP_FUSIONSOLAR_PASSWORD
+    printf '\n'
+fi
 if [[ -z "${HEDP_FUSIONSOLAR_PASSWORD}" ]]; then
     echo "HEDP_FUSIONSOLAR_PASSWORD must not be empty." >&2
     exit 1

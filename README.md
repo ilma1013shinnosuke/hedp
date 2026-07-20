@@ -95,3 +95,6 @@ Logs are stored in `~/Library/Logs/hedp/collect.out.log` and
 
 HEDP itself remains OS-independent; only this automatic execution setup is
 macOS-specific.
+# Data collection policy
+
+FusionSolarなど外部システムから取得可能な履歴値、現在値、状態、設備情報、設定、Signal、アラーム、集計値は、用途が未確定でも原則として無変換のRawDataとして保存します。取得時には補正、欠損補完、推測、単位変換、表示名変換を行わず、Record化と分析は保存後に行います。現在値APIは定期スナップショットとして扱います。
