@@ -1,4 +1,6 @@
+from collections import Counter
 from datetime import date, timedelta
+from datetime import datetime
 import math
 from zoneinfo import ZoneInfo
 
@@ -173,6 +175,78 @@ class Application:
             },
         }
 
+    def diagnose_quality(
+        self, start_date: date, end_date: date
+    ) -> dict[str, object]:
+        quality = self.check_quality(start_date, end_date)
+        timezone = ZoneInfo("Asia/Tokyo")
+
+        missing_by_metric = Counter()
+        missing_combinations = Counter()
+        missing_by_hour = Counter()
+        missing_by_month = Counter()
+        missing_points = quality["missing_metric_points"]
+        assert isinstance(missing_points, list)
+        for point in missing_points:
+            missing_metrics = tuple(point["missing_metrics"])
+            missing_by_metric.update(missing_metrics)
+            missing_combinations[missing_metrics] += 1
+            timestamp = datetime.fromisoformat(point["timestamp"]).astimezone(
+                timezone
+            )
+            missing_by_hour[str(timestamp.hour)] += 1
+            missing_by_month[timestamp.strftime("%Y-%m")] += 1
+
+        intervals_by_minutes = Counter()
+        intervals_shorter_than_five = 0
+        intervals_longer_than_five = 0
+        intervals_by_hour = Counter()
+        intervals_by_month = Counter()
+        irregular_intervals = quality["irregular_intervals"]
+        assert isinstance(irregular_intervals, list)
+        for interval in irregular_intervals:
+            minutes = interval["minutes"]
+            intervals_by_minutes[minutes] += 1
+            if minutes < 5:
+                intervals_shorter_than_five += 1
+            else:
+                intervals_longer_than_five += 1
+            current = datetime.fromisoformat(interval["current"]).astimezone(
+                timezone
+            )
+            intervals_by_hour[str(current.hour)] += 1
+            intervals_by_month[current.strftime("%Y-%m")] += 1
+
+        return {
+            "missing_metrics_by_metric": dict(sorted(missing_by_metric.items())),
+            "missing_combinations": [
+                {"missing_metrics": list(metrics), "count": count}
+                for metrics, count in sorted(
+                    missing_combinations.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
+            ],
+            "missing_by_hour": _sorted_hour_counts(missing_by_hour),
+            "missing_by_month": dict(sorted(missing_by_month.items())),
+            "missing_examples": missing_points[:20],
+            "irregular_intervals_by_minutes": dict(
+                sorted(intervals_by_minutes.items())
+            ),
+            "irregular_intervals_shorter_than_5_minutes": (
+                intervals_shorter_than_five
+            ),
+            "irregular_intervals_longer_than_5_minutes": (
+                intervals_longer_than_five
+            ),
+            "irregular_intervals_by_hour": _sorted_hour_counts(
+                intervals_by_hour
+            ),
+            "irregular_intervals_by_month": dict(
+                sorted(intervals_by_month.items())
+            ),
+            "irregular_interval_examples": irregular_intervals[:20],
+        }
+
 
 def _hashable_value(value: object) -> object:
     if isinstance(value, list):
@@ -185,3 +259,7 @@ def _hashable_value(value: object) -> object:
             ),
         )
     return value
+
+
+def _sorted_hour_counts(counts: Counter) -> dict[str, int]:
+    return dict(sorted(counts.items(), key=lambda item: int(item[0])))

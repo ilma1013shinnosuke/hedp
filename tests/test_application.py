@@ -412,3 +412,101 @@ def test_check_quality_processes_150000_records_in_one_pass() -> None:
     assert report["duplicate_records"] == 0
     assert records.iterations == 1
     assert records.slices == 0
+
+
+def test_diagnose_quality_aggregates_missing_and_irregular_details() -> None:
+    application = Application(Mock(), Mock(), Mock())
+    application.check_quality = Mock(
+        return_value={
+            "missing_metric_points": [
+                {
+                    "timestamp": "2026-01-01T15:00:00+00:00",
+                    "missing_metrics": ["buyPower", "powerProfit"],
+                },
+                {
+                    "timestamp": "2026-01-01T15:05:00+00:00",
+                    "missing_metrics": ["buyPower", "powerProfit"],
+                },
+                {
+                    "timestamp": "2026-02-01T03:00:00+00:00",
+                    "missing_metrics": ["onGridPower"],
+                },
+            ],
+            "irregular_intervals": [
+                {
+                    "previous": "2026-01-01T14:58:00+00:00",
+                    "current": "2026-01-01T15:00:00+00:00",
+                    "minutes": 2.0,
+                },
+                {
+                    "previous": "2026-01-01T15:00:00+00:00",
+                    "current": "2026-01-01T15:10:00+00:00",
+                    "minutes": 10.0,
+                },
+                {
+                    "previous": "2026-02-01T03:00:00+00:00",
+                    "current": "2026-02-01T03:10:00+00:00",
+                    "minutes": 10.0,
+                },
+            ],
+        }
+    )
+
+    diagnosis = application.diagnose_quality(
+        date(2026, 1, 1), date(2026, 2, 28)
+    )
+
+    assert diagnosis["missing_metrics_by_metric"] == {
+        "buyPower": 2,
+        "onGridPower": 1,
+        "powerProfit": 2,
+    }
+    assert diagnosis["missing_combinations"] == [
+        {"missing_metrics": ["buyPower", "powerProfit"], "count": 2},
+        {"missing_metrics": ["onGridPower"], "count": 1},
+    ]
+    assert diagnosis["missing_by_hour"] == {"0": 2, "12": 1}
+    assert diagnosis["missing_by_month"] == {"2026-01": 2, "2026-02": 1}
+    assert diagnosis["irregular_intervals_by_minutes"] == {2.0: 1, 10.0: 2}
+    assert diagnosis["irregular_intervals_shorter_than_5_minutes"] == 1
+    assert diagnosis["irregular_intervals_longer_than_5_minutes"] == 2
+    assert diagnosis["irregular_intervals_by_hour"] == {"0": 2, "12": 1}
+    assert diagnosis["irregular_intervals_by_month"] == {
+        "2026-01": 2,
+        "2026-02": 1,
+    }
+    application.check_quality.assert_called_once_with(
+        date(2026, 1, 1), date(2026, 2, 28)
+    )
+
+
+def test_diagnose_quality_limits_examples_to_20() -> None:
+    missing_points = [
+        {
+            "timestamp": f"2026-01-01T00:{minute:02d}:00+00:00",
+            "missing_metrics": ["buyPower"],
+        }
+        for minute in range(25)
+    ]
+    intervals = [
+        {
+            "previous": f"2026-01-01T00:{minute:02d}:00+00:00",
+            "current": f"2026-01-01T00:{minute + 1:02d}:00+00:00",
+            "minutes": 1.0,
+        }
+        for minute in range(25)
+    ]
+    application = Application(Mock(), Mock(), Mock())
+    application.check_quality = Mock(
+        return_value={
+            "missing_metric_points": missing_points,
+            "irregular_intervals": intervals,
+        }
+    )
+
+    diagnosis = application.diagnose_quality(
+        date(2026, 1, 1), date(2026, 1, 1)
+    )
+
+    assert diagnosis["missing_examples"] == missing_points[:20]
+    assert diagnosis["irregular_interval_examples"] == intervals[:20]

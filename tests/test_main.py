@@ -287,6 +287,86 @@ def test_quality_closes_connection_when_check_raises(tmp_path) -> None:
     connection.close.assert_called_once_with()
 
 
+def test_cli_quality_diagnose_prints_details_without_fusionsolar(
+    tmp_path, capsys
+) -> None:
+    configuration = Configuration(
+        base_url="https://example.test",
+        station_dn="station-dn",
+        username="user",
+        password="password",
+        database_path=str(tmp_path / "hedp.db"),
+    )
+    diagnosis = {
+        "missing_metrics_by_metric": {"buyPower": 2},
+        "missing_combinations": [
+            {"missing_metrics": ["buyPower", "powerProfit"], "count": 2}
+        ],
+        "missing_by_hour": {"0": 2},
+        "missing_by_month": {"2026-01": 2},
+        "missing_examples": [
+            {
+                "timestamp": "2026-01-01T00:00:00+09:00",
+                "missing_metrics": ["buyPower", "powerProfit"],
+            }
+        ],
+        "irregular_intervals_by_minutes": {10.0: 1},
+        "irregular_intervals_shorter_than_5_minutes": 0,
+        "irregular_intervals_longer_than_5_minutes": 1,
+        "irregular_intervals_by_hour": {"0": 1},
+        "irregular_intervals_by_month": {"2026-01": 1},
+        "irregular_interval_examples": [
+            {
+                "previous": "2026-01-01T00:00:00+09:00",
+                "current": "2026-01-01T00:10:00+09:00",
+                "minutes": 10.0,
+            }
+        ],
+    }
+
+    with (
+        patch("hedp.main.Configuration") as configuration_class,
+        patch("hedp.main.FusionSolarClient") as client_class,
+        patch("hedp.main.FusionSolarCollector") as collector_class,
+        patch("hedp.main.FusionSolarRecordBuilder") as builder_class,
+        patch("hedp.main.Storage") as storage_class,
+        patch("hedp.main.Application") as application_class,
+    ):
+        configuration_class.from_environment.return_value = configuration
+        storage = storage_class.return_value
+        connection = storage.connect.return_value
+        application_class.return_value.diagnose_quality.return_value = diagnosis
+
+        result = cli(
+            [
+                "quality-diagnose",
+                "--start",
+                "2026-01-01",
+                "--end",
+                "2026-01-31",
+            ]
+        )
+
+    output = capsys.readouterr().out
+    assert result == 0
+    assert "Missing metrics by metric:\n  buyPower: 2\n" in output
+    assert "Missing combinations (top 10):" in output
+    assert "Missing points by hour:" in output
+    assert "Missing points by month:" in output
+    assert "Missing examples (first 20):" in output
+    assert "Irregular intervals by minutes (top 20):" in output
+    assert "Irregular intervals shorter than 5 minutes: 0" in output
+    assert "Irregular intervals longer than 5 minutes: 1" in output
+    assert "Irregular intervals by hour:" in output
+    assert "Irregular intervals by month:" in output
+    assert "Irregular interval examples (first 20):" in output
+    application_class.assert_called_once_with(None, storage, None)
+    client_class.assert_not_called()
+    collector_class.assert_not_called()
+    builder_class.assert_not_called()
+    connection.close.assert_called_once_with()
+
+
 def test_cli_collects_date_range_and_closes_connection(capsys) -> None:
     application = Mock()
     connection = Mock()

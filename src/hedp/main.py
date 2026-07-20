@@ -85,6 +85,74 @@ def _quality(start_date: date, end_date: date) -> dict[str, object]:
         connection.close()
 
 
+def _quality_diagnose(start_date: date, end_date: date) -> dict[str, object]:
+    configuration = Configuration.from_environment()
+    storage = Storage(configuration.database_path)
+    connection = storage.connect()
+    try:
+        application = Application(None, storage, None)  # type: ignore[arg-type]
+        return application.diagnose_quality(start_date, end_date)
+    finally:
+        connection.close()
+
+
+def _print_counts(counts: dict, limit: Optional[int] = None) -> None:
+    items = list(counts.items())
+    if limit is not None:
+        items = sorted(items, key=lambda item: (-item[1], item[0]))[:limit]
+    if not items:
+        print("  None")
+    for key, count in items:
+        print(f"  {key}: {count}")
+
+
+def _print_quality_diagnosis(diagnosis: dict[str, object]) -> None:
+    print("Missing metrics by metric:")
+    _print_counts(diagnosis["missing_metrics_by_metric"])
+    print("Missing combinations (top 10):")
+    combinations = diagnosis["missing_combinations"][:10]
+    if not combinations:
+        print("  None")
+    for combination in combinations:
+        metrics = ", ".join(combination["missing_metrics"])
+        print(f"  {metrics}: {combination['count']}")
+    print("Missing points by hour:")
+    _print_counts(diagnosis["missing_by_hour"])
+    print("Missing points by month:")
+    _print_counts(diagnosis["missing_by_month"])
+    print("Missing examples (first 20):")
+    missing_examples = diagnosis["missing_examples"]
+    if not missing_examples:
+        print("  None")
+    for example in missing_examples:
+        metrics = ", ".join(example["missing_metrics"])
+        print(f"  {example['timestamp']}: {metrics}")
+
+    print("Irregular intervals by minutes (top 20):")
+    _print_counts(diagnosis["irregular_intervals_by_minutes"], limit=20)
+    print(
+        "Irregular intervals shorter than 5 minutes: "
+        f"{diagnosis['irregular_intervals_shorter_than_5_minutes']}"
+    )
+    print(
+        "Irregular intervals longer than 5 minutes: "
+        f"{diagnosis['irregular_intervals_longer_than_5_minutes']}"
+    )
+    print("Irregular intervals by hour:")
+    _print_counts(diagnosis["irregular_intervals_by_hour"])
+    print("Irregular intervals by month:")
+    _print_counts(diagnosis["irregular_intervals_by_month"])
+    print("Irregular interval examples (first 20):")
+    interval_examples = diagnosis["irregular_interval_examples"]
+    if not interval_examples:
+        print("  None")
+    for example in interval_examples:
+        print(
+            f"  {example['previous']} -> {example['current']}: "
+            f"{example['minutes']} minutes"
+        )
+
+
 def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     parser = argparse.ArgumentParser(prog="hedp")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -101,6 +169,9 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     quality_parser = subparsers.add_parser("quality")
     quality_parser.add_argument("--start", type=_date_argument, required=True)
     quality_parser.add_argument("--end", type=_date_argument, required=True)
+    diagnose_parser = subparsers.add_parser("quality-diagnose")
+    diagnose_parser.add_argument("--start", type=_date_argument, required=True)
+    diagnose_parser.add_argument("--end", type=_date_argument, required=True)
     arguments = parser.parse_args(argv)
 
     if arguments.command == "backup":
@@ -132,6 +203,11 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         issues_found = any(issue_counts.values())
         print("Quality issues found." if issues_found else "Quality check passed.")
         return 1 if issues_found else 0
+
+    if arguments.command == "quality-diagnose":
+        diagnosis = _quality_diagnose(arguments.start, arguments.end)
+        _print_quality_diagnosis(diagnosis)
+        return 0
 
     if arguments.command == "collect":
         if arguments.start is None:
