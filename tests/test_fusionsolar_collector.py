@@ -53,6 +53,19 @@ def test_collect_for_date_uses_midnight_and_unmodified_response() -> None:
     assert result.source == "fusionsolar"
     assert result.timestamp.tzinfo is timezone.utc
     assert result.payload is api_response
+    assert result.target_date == date(2026, 7, 20)
+
+
+def test_collect_for_date_preserves_empty_api_response() -> None:
+    client = Mock()
+    client.station_dn = "station/dn"
+    api_response = {"data": {"list": []}}
+    client.post_json.return_value = api_response
+
+    result = FusionSolarCollector(client).collect_for_date(date(2026, 7, 20))
+
+    assert result.target_date == date(2026, 7, 20)
+    assert result.payload is api_response
 
 
 def test_collect_uses_today_in_tokyo() -> None:

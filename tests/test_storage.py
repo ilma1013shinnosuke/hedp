@@ -50,31 +50,43 @@ def test_save_rawdata_ignores_same_source_and_payload(tmp_path) -> None:
         source="fusionsolar",
         timestamp=datetime(2026, 7, 20, tzinfo=timezone.utc),
         payload={"value": 42},
+        target_date=date(2026, 7, 20),
     )
     later_raw_data = RawData(
         source="fusionsolar",
         timestamp=datetime(2026, 7, 21, tzinfo=timezone.utc),
         payload={"value": 42},
+        target_date=date(2026, 7, 20),
+    )
+    different_target_date = RawData(
+        source="fusionsolar",
+        timestamp=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        payload={"value": 42},
+        target_date=date(2026, 7, 21),
     )
     different_source = RawData(
         source="other",
         timestamp=datetime(2026, 7, 21, tzinfo=timezone.utc),
         payload={"value": 42},
+        target_date=date(2026, 7, 20),
     )
     different_payload = RawData(
         source="fusionsolar",
         timestamp=datetime(2026, 7, 21, tzinfo=timezone.utc),
         payload={"value": 43},
+        target_date=date(2026, 7, 20),
     )
 
     try:
         storage.save_rawdata(raw_data)
         storage.save_rawdata(later_raw_data)
+        storage.save_rawdata(different_target_date)
         storage.save_rawdata(different_source)
         storage.save_rawdata(different_payload)
 
         assert storage.load_rawdata() == [
             raw_data,
+            different_target_date,
             different_source,
             different_payload,
         ]
@@ -152,6 +164,47 @@ def test_get_record_dates_converts_timezone_and_filters_range_and_source(
         storage.save_records(records)
 
         assert storage.get_record_dates(
+            source="fusionsolar",
+            start_date=date(2026, 7, 20),
+            end_date=date(2026, 7, 21),
+        ) == {date(2026, 7, 20), date(2026, 7, 21)}
+    finally:
+        connection.close()
+
+
+def test_get_collected_dates_returns_matching_target_dates(tmp_path) -> None:
+    storage = Storage(str(tmp_path / "test.db"))
+    connection = storage.connect()
+    raw_data_list = [
+        RawData(
+            source="fusionsolar",
+            timestamp=datetime(2026, 7, 25, tzinfo=timezone.utc),
+            payload={"day": day},
+            target_date=date(2026, 7, day),
+        )
+        for day in (19, 20, 21, 22)
+    ]
+    raw_data_list.append(
+        RawData(
+            source="other",
+            timestamp=datetime(2026, 7, 25, tzinfo=timezone.utc),
+            payload={"day": 20},
+            target_date=date(2026, 7, 20),
+        )
+    )
+    raw_data_list.append(
+        RawData(
+            source="fusionsolar",
+            timestamp=datetime(2026, 7, 25, tzinfo=timezone.utc),
+            payload={"legacy": True},
+        )
+    )
+
+    try:
+        for raw_data in raw_data_list:
+            storage.save_rawdata(raw_data)
+
+        assert storage.get_collected_dates(
             source="fusionsolar",
             start_date=date(2026, 7, 20),
             end_date=date(2026, 7, 21),

@@ -45,6 +45,11 @@ class Application:
             end_date=end_date,
             timezone_name="Asia/Tokyo",
         )
+        existing_dates |= self.storage.get_collected_dates(
+            source="fusionsolar",
+            start_date=start_date,
+            end_date=end_date,
+        )
         missing_dates = []
         target_date = start_date
         while target_date <= end_date:

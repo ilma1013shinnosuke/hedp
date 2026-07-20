@@ -50,6 +50,7 @@ class FusionSolarCollector:
             source="fusionsolar",
             timestamp=datetime.now(timezone.utc),
             payload=payload,
+            target_date=target_date,
         )
 
     def collect_range(

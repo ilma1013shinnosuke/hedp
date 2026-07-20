@@ -38,6 +38,11 @@ class Storage:
         connection = self._require_connection()
         data = raw_data.to_json()
         payload = json.dumps(raw_data.payload)
+        target_date = (
+            raw_data.target_date.isoformat()
+            if raw_data.target_date is not None
+            else None
+        )
         connection.execute(
             """
             INSERT INTO raw_data (data)
@@ -46,10 +51,14 @@ class Storage:
                 SELECT 1
                 FROM raw_data
                 WHERE json_extract(data, '$.source') = ?
+                  AND (
+                      (? IS NULL AND json_extract(data, '$.target_date') IS NULL)
+                      OR json_extract(data, '$.target_date') = ?
+                  )
                   AND json(json_extract(data, '$.payload')) = json(?)
             )
             """,
-            (data, raw_data.source, payload),
+            (data, raw_data.source, target_date, target_date, payload),
         )
         connection.commit()
 
@@ -96,6 +105,20 @@ class Storage:
             and start_date
             <= record.timestamp.astimezone(timezone).date()
             <= end_date
+        }
+
+    def get_collected_dates(
+        self,
+        source: str,
+        start_date: date,
+        end_date: date,
+    ) -> set[date]:
+        return {
+            raw_data.target_date
+            for raw_data in self.load_rawdata()
+            if raw_data.source == source
+            and raw_data.target_date is not None
+            and start_date <= raw_data.target_date <= end_date
         }
 
     def _require_connection(self) -> sqlite3.Connection:

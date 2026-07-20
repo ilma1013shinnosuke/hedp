@@ -145,18 +145,24 @@ def test_find_missing_dates_returns_dates_in_order() -> None:
         date(2026, 7, 20),
         date(2026, 7, 22),
     }
+    storage.get_collected_dates.return_value = {date(2026, 7, 23)}
     application = Application(Mock(), storage, Mock())
 
     result = application.find_missing_dates(
         date(2026, 7, 20), date(2026, 7, 23)
     )
 
-    assert result == [date(2026, 7, 21), date(2026, 7, 23)]
+    assert result == [date(2026, 7, 21)]
     storage.get_record_dates.assert_called_once_with(
         source="fusionsolar",
         start_date=date(2026, 7, 20),
         end_date=date(2026, 7, 23),
         timezone_name="Asia/Tokyo",
+    )
+    storage.get_collected_dates.assert_called_once_with(
+        source="fusionsolar",
+        start_date=date(2026, 7, 20),
+        end_date=date(2026, 7, 23),
     )
 
 
@@ -164,8 +170,8 @@ def test_find_missing_dates_returns_empty_when_complete() -> None:
     storage = Mock()
     storage.get_record_dates.return_value = {
         date(2026, 7, 20),
-        date(2026, 7, 21),
     }
+    storage.get_collected_dates.return_value = {date(2026, 7, 21)}
     application = Application(Mock(), storage, Mock())
 
     assert application.find_missing_dates(
