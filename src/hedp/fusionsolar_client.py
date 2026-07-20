@@ -225,11 +225,22 @@ class FusionSolarClient:
         auth_messages = []
         if data is not None:
             for source in (data, FusionSolarClient._nested_data(data)):
+                for key in (
+                    "captcha",
+                    "needCaptcha",
+                    "needVerifyCode",
+                    "verifyCodeRequired",
+                    "verificationCodeRequired",
+                ):
+                    if source.get(key) is True:
+                        raise RuntimeError(
+                            "FusionSolar requires CAPTCHA or a verification code"
+                        )
                 for key in ("errorMsg", "message"):
                     value = source.get(key)
                     if isinstance(value, str) and value:
                         auth_messages.append(value)
-        message = " ".join([response.text, *auth_messages]).strip()
+        message = " ".join(auth_messages).strip()
         challenge_markers = (
             "captcha",
             "verification code",

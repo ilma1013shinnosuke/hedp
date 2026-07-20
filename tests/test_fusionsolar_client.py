@@ -256,6 +256,16 @@ def test_auth_challenge_rejects_other_non_empty_message() -> None:
         )
 
 
+def test_auth_challenge_ignores_verifycode_field_in_normal_json() -> None:
+    response = make_response(
+        json_data={"verifycode": ""}, text='{"verifycode": ""}'
+    )
+
+    FusionSolarClient._raise_for_auth_challenge(
+        response, {"verifycode": ""}
+    )
+
+
 def test_transition_url_is_found_recursively() -> None:
     data = {
         "nested": {
