@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from typing import Optional
 
@@ -34,15 +35,19 @@ class Storage:
     def save_rawdata(self, raw_data: RawData) -> None:
         connection = self._require_connection()
         data = raw_data.to_json()
+        payload = json.dumps(raw_data.payload)
         connection.execute(
             """
             INSERT INTO raw_data (data)
             SELECT ?
             WHERE NOT EXISTS (
-                SELECT 1 FROM raw_data WHERE data = ?
+                SELECT 1
+                FROM raw_data
+                WHERE json_extract(data, '$.source') = ?
+                  AND json(json_extract(data, '$.payload')) = json(?)
             )
             """,
-            (data, data),
+            (data, raw_data.source, payload),
         )
         connection.commit()
 
