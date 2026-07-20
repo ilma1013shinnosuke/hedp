@@ -44,6 +44,8 @@ hedp quality-diagnose --start 2026-01-01 --end 2026-07-20
 hedp quality-energy-balance --start 2026-07-19 --end 2026-07-19
 hedp diagnose-device-realtime
 hedp backup
+hedp daily-health --verbose
+hedp daily-health --json
 ```
 
 Quality commands that report issue status exit with 0 when no issue is found
@@ -57,6 +59,7 @@ by the daily job. Copying the SQLite file to another device migrates the data.
 scripts/install_macos_launchd.sh
 scripts/install_macos_device_realtime_launchd.sh
 scripts/install_macos_equipment_launchd.sh
+scripts/install_macos_daily_health_launchd.sh
 ```
 
 The daily job runs station collection, previous-day energy-balance collection
@@ -66,6 +69,16 @@ five minutes with one shared FusionSolar session. The independent equipment
 job also collects battery DC daily at 03:10 as a daily recovery/health
 snapshot. Logs are stored under
 `~/Library/Logs/hedp/`; macOS-specific behavior remains in `scripts/`.
+
+The read-only daily health check runs independently at 03:20. It checks recent
+collection coverage and gaps, previous-day daily data and derived Records,
+backup freshness, and SQLite integrity. Exit status is 0 for healthy, 1 for
+warnings, and 2 when the check cannot run or the database is unhealthy. It
+does not repair data. Mac sleep gaps of 15 minutes or more are reported rather
+than hidden. JSON logs are written to
+`~/Library/Logs/hedp/daily-health.out.log`, with execution errors in
+`daily-health.err.log`. When an issue is reported, rerun
+`hedp daily-health --verbose` and the existing quality/diagnose commands.
 
 Uninstall the daily job with `scripts/uninstall_macos_launchd.sh`.
 

@@ -1,12 +1,14 @@
 import argparse
+import json
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 from hedp.application import Application
 from hedp.configuration import Configuration
+from hedp.daily_health import DailyHealthService
 from hedp.fusionsolar_client import FusionSolarClient
 from hedp.fusionsolar_alarm_collector import FusionSolarAlarmCollector
 from hedp.fusionsolar_battery_dc_collector import (
@@ -176,6 +178,20 @@ def _date_argument(value: str) -> date:
     return parsed
 
 
+def _datetime_argument(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "datetime must use ISO 8601 format"
+        ) from error
+    if parsed.tzinfo is None:
+        raise argparse.ArgumentTypeError(
+            "datetime must include a timezone offset"
+        )
+    return parsed
+
+
 def _backup() -> Path:
     configuration = Configuration.from_environment()
     storage = Storage(configuration.database_path)
@@ -275,6 +291,47 @@ def _print_quality_diagnosis(diagnosis: dict[str, object]) -> None:
         )
 
 
+def _print_daily_health(report: dict[str, object], verbose: bool) -> None:
+    status = str(report["status"]).upper()
+    print(f"HEDP daily health: {status}")
+    print(
+        f"Checked window: {report['window_start']} - {report['window_end']}"
+    )
+    summaries = report["source_summaries"]
+    print(f"RawData sources: {len(summaries)}")
+    print(f"Warnings: {len(report['warnings'])}")
+    print(f"Critical: {len(report['critical'])}")
+    issues = [*report["critical"], *report["warnings"]]
+    for issue in issues:
+        subject = f" ({issue['subject']})" if issue["subject"] else ""
+        print(f"- {issue['source']}{subject}: {issue['problem']}")
+        print(
+            f"  latest={issue['latest_timestamp']} "
+            f"expected={issue['expected']} actual={issue['actual']}"
+        )
+    if verbose:
+        for source, summary in summaries.items():
+            print(
+                f"- {source}: count={summary['count']} "
+                f"latest={summary['latest_timestamp']} "
+                f"age_seconds={summary['seconds_since_latest']}"
+            )
+        database = report["database_summary"]
+        backup = report["backup_summary"]
+        if database:
+            print(
+                f"- database: integrity={database['integrity']} "
+                f"size={database['size_bytes']} "
+                f"raw={database['raw_data_count']} "
+                f"records={database['record_count']}"
+            )
+        if backup:
+            print(
+                f"- backup: latest={backup['latest_timestamp']} "
+                f"age_hours={backup['age_hours']}"
+            )
+
+
 def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     parser = argparse.ArgumentParser(prog="hedp")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -331,7 +388,55 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     diagnose_parser = subparsers.add_parser("quality-diagnose")
     diagnose_parser.add_argument("--start", type=_date_argument, required=True)
     diagnose_parser.add_argument("--end", type=_date_argument, required=True)
+    health_parser = subparsers.add_parser("daily-health")
+    health_parser.add_argument("--at", type=_datetime_argument)
+    health_parser.add_argument("--hours", type=int, default=24)
+    health_parser.add_argument("--json", action="store_true")
+    health_parser.add_argument("--verbose", action="store_true")
     arguments = parser.parse_args(argv)
+
+    if arguments.command == "daily-health":
+        checked_at = arguments.at or datetime.now(timezone.utc)
+        connection = None
+        try:
+            database_path = Configuration.database_path_from_environment()
+            device_dns = Configuration.device_dns_from_environment()
+            storage = Storage(database_path)
+            connection = storage.connect_readonly()
+            report = DailyHealthService(
+                storage, database_path, device_dns
+            ).check(checked_at, arguments.hours)
+        except Exception as error:
+            report = {
+                "status": "critical",
+                "checked_at": checked_at.isoformat(),
+                "window_start": None,
+                "window_end": checked_at.isoformat(),
+                "warnings": [],
+                "critical": [
+                    {
+                        "source": "daily-health",
+                        "subject": None,
+                        "problem": f"execution failed: {type(error).__name__}",
+                        "latest_timestamp": None,
+                        "expected": "successful read-only check",
+                        "actual": "unavailable",
+                    }
+                ],
+                "source_summaries": {},
+                "backup_summary": {},
+                "database_summary": {},
+            }
+        finally:
+            if connection is not None:
+                connection.close()
+        if arguments.json:
+            print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+        else:
+            _print_daily_health(report, arguments.verbose)
+        if report["status"] == "critical":
+            return 2
+        return 1 if report["status"] == "warning" else 0
 
     if arguments.command == "backup":
         destination = _backup()

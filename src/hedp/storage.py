@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -38,6 +38,13 @@ class Storage:
             """
         )
         self._connection.commit()
+        return self._connection
+
+    def connect_readonly(self) -> sqlite3.Connection:
+        database = Path(self.database_path).resolve()
+        self._connection = sqlite3.connect(
+            f"{database.as_uri()}?mode=ro", uri=True
+        )
         return self._connection
 
     def save_rawdata(self, raw_data: RawData) -> None:
@@ -129,6 +136,27 @@ class Storage:
             "SELECT data FROM raw_data ORDER BY id"
         ).fetchall()
         return [RawData.from_json(row[0]) for row in rows]
+
+    def load_rawdata_in_window(
+        self, start: datetime, end: datetime
+    ) -> list[RawData]:
+        return [
+            item
+            for item in self.load_rawdata()
+            if start <= item.timestamp <= end
+        ]
+
+    def count_rawdata(self) -> int:
+        connection = self._require_connection()
+        return int(connection.execute("SELECT count(*) FROM raw_data").fetchone()[0])
+
+    def count_records(self) -> int:
+        connection = self._require_connection()
+        return int(connection.execute("SELECT count(*) FROM records").fetchone()[0])
+
+    def integrity_check(self) -> list[str]:
+        connection = self._require_connection()
+        return [row[0] for row in connection.execute("PRAGMA integrity_check")]
 
     def save_records(self, records: list[Record]) -> None:
         connection = self._require_connection()

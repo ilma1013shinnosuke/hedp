@@ -1,6 +1,8 @@
 from datetime import date, datetime, timezone
 import sqlite3
 
+import pytest
+
 from hedp.raw_data import RawData
 from hedp.record import Record
 from hedp.storage import Storage
@@ -360,5 +362,38 @@ def test_get_collected_dates_returns_matching_target_dates(tmp_path) -> None:
             start_date=date(2026, 7, 20),
             end_date=date(2026, 7, 21),
         ) == {date(2026, 7, 20), date(2026, 7, 21)}
+    finally:
+        connection.close()
+
+
+def test_readonly_connection_supports_health_aggregates(tmp_path) -> None:
+    database_path = tmp_path / "test.db"
+    writer = Storage(str(database_path))
+    connection = writer.connect()
+    try:
+        writer.save_rawdata(
+            RawData(
+                source="source",
+                timestamp=datetime(2026, 7, 20, tzinfo=timezone.utc),
+                payload={"success": True},
+            )
+        )
+    finally:
+        connection.close()
+
+    reader = Storage(str(database_path))
+    connection = reader.connect_readonly()
+    try:
+        assert reader.integrity_check() == ["ok"]
+        assert reader.count_rawdata() == 1
+        assert reader.count_records() == 0
+        with pytest.raises(sqlite3.OperationalError):
+            reader.save_rawdata(
+                RawData(
+                    source="source",
+                    timestamp=datetime(2026, 7, 21, tzinfo=timezone.utc),
+                    payload={"success": True},
+                )
+            )
     finally:
         connection.close()

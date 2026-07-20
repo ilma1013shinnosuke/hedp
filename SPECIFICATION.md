@@ -71,6 +71,7 @@ does not depend on AI, ChatGPT, or Codex.
 - Other equipment/configuration/Signal APIs: planned for 03:10; unconfirmed
 - Current alarms: every five minutes
 - Alarm history: explicit date-range collection
+- Daily health: read-only operational check daily at 03:20
 
 ## Quality requirements
 
@@ -93,6 +94,17 @@ five-minute gaps, daily HISTORY counts, pagination consistency, and observed
 hit counts.
 The corresponding diagnose commands always return their aggregate details
 without changing data.
+
+Daily health reuses the existing quality and diagnostic results. In one
+read-only run it checks the six current RawData sources, configured device and
+battery-module coverage, 15-minute-or-greater gaps in five-minute collection,
+previous-day daily data, energy-balance shape and Records, alarm-history device
+coverage, backup age under 48 hours, and SQLite `integrity_check`. Thresholds
+are defined together in the daily-health service. Status is healthy, warning,
+or critical with exit codes 0, 1, and 2 respectively. It never repairs data.
+Results are logged by the macOS 03:20 launchd job and are not persisted in a
+new table or RawData source; persistent health history can be added later if
+needed.
 
 ## Security
 

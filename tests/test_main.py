@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock, call, patch
@@ -651,3 +652,107 @@ def test_cli_backfill_closes_connection_when_run_raises() -> None:
             )
 
     connection.close.assert_called_once_with()
+
+
+def _daily_health_report(status="ok"):
+    return {
+        "status": status,
+        "checked_at": "2026-07-21T03:20:00+09:00",
+        "window_start": "2026-07-20T03:20:00+09:00",
+        "window_end": "2026-07-21T03:20:00+09:00",
+        "warnings": [] if status == "ok" else [{
+            "source": "backup",
+            "subject": None,
+            "problem": "recent backup is missing",
+            "latest_timestamp": None,
+            "expected": "< 48h",
+            "actual": None,
+        }],
+        "critical": [],
+        "source_summaries": {},
+        "backup_summary": {},
+        "database_summary": {},
+    }
+
+
+def test_cli_daily_health_json_is_reproducible_and_closes(capsys) -> None:
+    connection = Mock()
+    service = Mock()
+    service.check.return_value = _daily_health_report()
+    with (
+        patch(
+            "hedp.main.Configuration.database_path_from_environment",
+            return_value="hedp.db",
+        ),
+        patch(
+            "hedp.main.Configuration.device_dns_from_environment",
+            return_value=["device-1"],
+        ),
+        patch("hedp.main.Storage") as storage_class,
+        patch("hedp.main.DailyHealthService", return_value=service),
+        patch("hedp.main.FusionSolarClient") as client_class,
+    ):
+        storage_class.return_value.connect_readonly.return_value = connection
+        result = cli([
+            "daily-health", "--at", "2026-07-21T03:20:00+09:00",
+            "--hours", "12", "--json",
+        ])
+
+    assert result == 0
+    checked_at = service.check.call_args.args[0]
+    assert checked_at.isoformat() == "2026-07-21T03:20:00+09:00"
+    assert service.check.call_args.args[1] == 12
+    assert json.loads(capsys.readouterr().out)["status"] == "ok"
+    connection.close.assert_called_once_with()
+    client_class.assert_not_called()
+
+
+def test_cli_daily_health_warning_exit_and_display(capsys) -> None:
+    service = Mock()
+    service.check.return_value = _daily_health_report("warning")
+    with (
+        patch(
+            "hedp.main.Configuration.database_path_from_environment",
+            return_value="hedp.db",
+        ),
+        patch(
+            "hedp.main.Configuration.device_dns_from_environment",
+            return_value=["device-1"],
+        ),
+        patch("hedp.main.Storage") as storage_class,
+        patch("hedp.main.DailyHealthService", return_value=service),
+    ):
+        result = cli(["daily-health", "--verbose"])
+
+    assert result == 1
+    assert "HEDP daily health: WARNING" in capsys.readouterr().out
+    storage_class.return_value.connect_readonly.return_value.close.assert_called_once()
+
+
+def test_cli_daily_health_database_failure_returns_critical(capsys) -> None:
+    with (
+        patch(
+            "hedp.main.Configuration.database_path_from_environment",
+            return_value="missing.db",
+        ),
+        patch(
+            "hedp.main.Configuration.device_dns_from_environment",
+            return_value=["device-1"],
+        ),
+        patch("hedp.main.Storage") as storage_class,
+    ):
+        storage_class.return_value.connect_readonly.side_effect = OSError(
+            "secret detail"
+        )
+        result = cli(["daily-health", "--json"])
+
+    output = capsys.readouterr().out
+    assert result == 2
+    assert json.loads(output)["status"] == "critical"
+    assert "secret detail" not in output
+
+
+def test_cli_daily_health_rejects_naive_at() -> None:
+    with pytest.raises(SystemExit) as raised:
+        cli(["daily-health", "--at", "2026-07-21T03:20:00"])
+    assert raised.value.code == 2

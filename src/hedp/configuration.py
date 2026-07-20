@@ -57,6 +57,15 @@ class Configuration:
         return list(dict.fromkeys(item.strip() for item in value.split(",") if item.strip()))
 
     @staticmethod
+    def database_path_from_environment() -> str:
+        value = os.environ.get("HEDP_DATABASE_PATH", "").strip()
+        if not value:
+            raise RuntimeError(
+                "Missing required environment variable: HEDP_DATABASE_PATH"
+            )
+        return value
+
+    @staticmethod
     def battery_dc_from_environment() -> tuple[str, str]:
         device_dn = os.environ.get(
             "HEDP_FUSIONSOLAR_BATTERY_DN",
