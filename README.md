@@ -52,3 +52,27 @@ hedp backfill-missing --start 2026-01-01 --end 2026-07-20
 
 HEDP is OS-independent. Use the operating system's scheduler to run
 `hedp collect` automatically.
+
+## macOS automatic collection
+
+Install the launchd job:
+
+```bash
+scripts/install_macos_launchd.sh
+```
+
+Uninstall it:
+
+```bash
+scripts/uninstall_macos_launchd.sh
+```
+
+The job runs `hedp collect` every day at 3:00 AM. If the Mac is asleep,
+launchd may run it after the Mac wakes. Check or repair missed dates with
+`hedp missing` and `hedp backfill-missing`.
+
+Logs are stored in `~/Library/Logs/hedp/collect.out.log` and
+`~/Library/Logs/hedp/collect.err.log`.
+
+HEDP itself remains OS-independent; only this automatic execution setup is
+macOS-specific.
