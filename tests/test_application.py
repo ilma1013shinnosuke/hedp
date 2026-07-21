@@ -352,6 +352,9 @@ def test_backfill_missing_energy_balance_collects_only_gaps_and_rebuilds() -> No
     collector = Mock()
     collector.collect_for_date.side_effect = raw_items
     storage = Mock()
+    storage.get_collected_dates.return_value = set(missing)
+    storage.get_record_dates.return_value = set(missing)
+    storage.load_rawdata_for_range.return_value = []
     builder = Mock()
     builder.build.return_value = []
     application = Application(
@@ -360,7 +363,6 @@ def test_backfill_missing_energy_balance_collects_only_gaps_and_rebuilds() -> No
         energy_balance_record_builder=builder,
     )
     application.find_missing_energy_balance_dates = Mock(return_value=missing)
-    application.build_energy_balance_records = Mock(return_value=123)
 
     result = application.backfill_missing_energy_balance(
         date(2026, 7, 19), date(2026, 7, 21)
@@ -370,9 +372,7 @@ def test_backfill_missing_energy_balance_collects_only_gaps_and_rebuilds() -> No
     assert collector.collect_for_date.call_args_list == [
         call(missing[0]), call(missing[1])
     ]
-    application.build_energy_balance_records.assert_called_once_with(
-        date(2026, 7, 19), date(2026, 7, 21)
-    )
+    storage.save_records.assert_called()
 
 
 def test_find_missing_energy_balance_dates_uses_rawdata_coverage() -> None:
@@ -449,6 +449,8 @@ def test_backfill_missing_processes_only_missing_dates_in_order() -> None:
     collector.collect_for_date.side_effect = raw_data_list
     storage = Mock()
     storage.load_rawdata_for_range.return_value = []
+    storage.get_collected_dates.return_value = set(missing_dates)
+    storage.get_record_dates.return_value = set(missing_dates)
     record_builder = Mock()
     record_builder.build.side_effect = records
     application = Application(collector, storage, record_builder)
@@ -508,10 +510,12 @@ def test_backfill_missing_stops_after_error() -> None:
 
 
 def test_backfill_missing_rebuilds_records_from_existing_rawdata() -> None:
-    raw_data = Mock(spec=RawData)
+    raw_data = Mock(spec=RawData, target_date=date(2026, 7, 20))
     records = [Mock()]
     storage = Mock()
     storage.load_rawdata_for_range.return_value = [raw_data]
+    storage.get_collected_dates.return_value = {date(2026, 7, 20)}
+    storage.get_record_dates.return_value = set()
     builder = Mock()
     builder.build.return_value = records
     application = Application(Mock(), storage, builder)

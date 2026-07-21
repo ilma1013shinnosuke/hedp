@@ -159,9 +159,22 @@ class Application:
             start_date, end_date
         ):
             raw_data_list.append(self.run_energy_balance_for_date(target_date))
-        # Also repairs Records for RawData written by a previously interrupted
-        # job. save_records is idempotent, so rebuilding the whole window is safe.
-        self.build_energy_balance_records(start_date, end_date)
+        # Repair only days whose RawData was committed before Record generation.
+        # Rebuilding every day is prohibitively expensive on a large JSON store.
+        raw_dates = self.storage.get_collected_dates(
+            "fusionsolar_energy_balance", start_date, end_date
+        )
+        record_dates = self.storage.get_record_dates(
+            "fusionsolar_energy_balance", start_date, end_date
+        )
+        missing_record_dates = raw_dates - record_dates
+        for raw_data in self.storage.load_rawdata_for_range(
+            "fusionsolar_energy_balance", start_date, end_date
+        ):
+            if raw_data.target_date in missing_record_dates:
+                self.storage.save_records(
+                    self.energy_balance_record_builder.build(raw_data)
+                )
         return raw_data_list
 
     def run_device_realtime(
@@ -571,12 +584,18 @@ class Application:
             records = self.record_builder.build(raw_data)
             self.storage.save_records(records)
             raw_data_list.append(raw_data)
-        # Repair Record generation if an earlier run stopped after RawData was
-        # committed. Exact duplicates are ignored by Storage.save_records.
+        raw_dates = self.storage.get_collected_dates(
+            "fusionsolar", start_date, end_date
+        )
+        record_dates = self.storage.get_record_dates(
+            "fusionsolar", start_date, end_date, "Asia/Tokyo"
+        )
+        missing_record_dates = raw_dates - record_dates
         for raw_data in self.storage.load_rawdata_for_range(
             "fusionsolar", start_date, end_date
         ):
-            self.storage.save_records(self.record_builder.build(raw_data))
+            if raw_data.target_date in missing_record_dates:
+                self.storage.save_records(self.record_builder.build(raw_data))
         return raw_data_list
 
     def check_quality(
