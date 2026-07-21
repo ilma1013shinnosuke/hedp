@@ -372,6 +372,9 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     energy_quality_parser = subparsers.add_parser("quality-energy-balance")
     energy_quality_parser.add_argument("--start", type=_date_argument, required=True)
     energy_quality_parser.add_argument("--end", type=_date_argument, required=True)
+    energy_backfill_parser = subparsers.add_parser("backfill-energy-balance")
+    energy_backfill_parser.add_argument("--start", type=_date_argument, required=True)
+    energy_backfill_parser.add_argument("--end", type=_date_argument, required=True)
     subparsers.add_parser("diagnose-device-realtime")
     subparsers.add_parser("quality-battery-dc")
     subparsers.add_parser("diagnose-battery-dc")
@@ -616,6 +619,20 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         print(f"Quality issues: {len(report['issues'])}")
         print(f"RawData without Records: {len(report['raw_data_without_records'])}")
         return 1 if report["issues"] or report["raw_data_without_records"] else 0
+
+    if arguments.command == "backfill-energy-balance":
+        application, connection = _create_energy_balance_application()
+        try:
+            raw_data_list = application.backfill_missing_energy_balance(
+                arguments.start, arguments.end
+            )
+        finally:
+            connection.close()
+        print(
+            f"Backfilled {len(raw_data_list)} energy-balance RawData item(s) "
+            "and rebuilt Records."
+        )
+        return 0
 
     if arguments.command == "diagnose-device-realtime":
         configuration = Configuration.from_environment()

@@ -131,6 +131,39 @@ class Application:
             count += len(records)
         return count
 
+    def find_missing_energy_balance_dates(
+        self, start_date: date, end_date: date
+    ) -> list[date]:
+        if start_date > end_date:
+            raise ValueError("start_date must not be after end_date")
+        existing_dates = self.storage.get_collected_dates(
+            source="fusionsolar_energy_balance",
+            start_date=start_date,
+            end_date=end_date,
+        )
+        missing_dates = []
+        target_date = start_date
+        while target_date <= end_date:
+            if target_date not in existing_dates:
+                missing_dates.append(target_date)
+            target_date += timedelta(days=1)
+        return missing_dates
+
+    def backfill_missing_energy_balance(
+        self, start_date: date, end_date: date
+    ) -> list[RawData]:
+        if self.energy_balance_collector is None:
+            raise RuntimeError("Energy-balance collector is not configured")
+        raw_data_list = []
+        for target_date in self.find_missing_energy_balance_dates(
+            start_date, end_date
+        ):
+            raw_data_list.append(self.run_energy_balance_for_date(target_date))
+        # Also repairs Records for RawData written by a previously interrupted
+        # job. save_records is idempotent, so rebuilding the whole window is safe.
+        self.build_energy_balance_records(start_date, end_date)
+        return raw_data_list
+
     def run_device_realtime(
         self, device_dns: list[str]
     ) -> tuple[list[RawData], list[tuple[str, str]]]:
@@ -538,6 +571,12 @@ class Application:
             records = self.record_builder.build(raw_data)
             self.storage.save_records(records)
             raw_data_list.append(raw_data)
+        # Repair Record generation if an earlier run stopped after RawData was
+        # committed. Exact duplicates are ignored by Storage.save_records.
+        for raw_data in self.storage.load_rawdata_for_range(
+            "fusionsolar", start_date, end_date
+        ):
+            self.storage.save_records(self.record_builder.build(raw_data))
         return raw_data_list
 
     def check_quality(

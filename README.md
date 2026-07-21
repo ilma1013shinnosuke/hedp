@@ -39,6 +39,7 @@ hedp diagnose-alarms
 hedp build-energy-balance-records --start 2026-07-19 --end 2026-07-19
 hedp missing --start 2026-01-01 --end 2026-07-20
 hedp backfill-missing --start 2026-01-01 --end 2026-07-20
+hedp backfill-energy-balance --start 2026-01-01 --end 2026-07-20
 hedp quality --start 2026-01-01 --end 2026-07-20
 hedp quality-diagnose --start 2026-01-01 --end 2026-07-20
 hedp quality-energy-balance --start 2026-07-19 --end 2026-07-19
@@ -73,8 +74,12 @@ scripts/install_macos_daily_health_launchd.sh
 scripts/install_macos_switchbot_launchd.sh
 ```
 
-The daily job runs station collection, previous-day energy-balance collection
-and Record generation, quality checks, and backup from 03:00. The separate
+The daily job runs station collection, detects and refetches missing station
+and energy-balance days in a rolling 30-day window, rebuilds energy-balance
+Records, runs both quality checks, and backs up from 03:00. Each command has a
+15-minute timeout and an exclusive job lock prevents overlapping runs. Set
+`HEDP_DAILY_COMMAND_TIMEOUT_SECONDS` or `HEDP_DAILY_BACKFILL_DAYS` to tune the
+defaults. The separate
 realtime job collects device snapshots, battery DC, and current alarms every
 five minutes with one shared FusionSolar session. The independent equipment
 job also collects battery DC daily at 03:10 as a daily recovery/health
@@ -105,6 +110,12 @@ reports must be checked before a real import.
 Historical export files are not part of the repository. The current deployment
 imported the available history on 2026-07-21; repeating the import inserted no
 additional observations. Future deployments still require the original files.
+
+The missing `発電所レポート_2024-01.xlsx` was downloaded again and imported on
+2026-07-21 after a zero-conflict dry run. The import added 31 audited days and
+492 Records; an immediate repeat dry run reported all 492 values as exact
+duplicates. The normal station and energy-balance API backfills remain
+independent of this legacy report archive.
 
 Uninstall the daily job with `scripts/uninstall_macos_launchd.sh`.
 

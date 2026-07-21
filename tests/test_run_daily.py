@@ -15,6 +15,10 @@ def _daily_script_repository(tmp_path: Path) -> tuple[Path, Path]:
         Path(__file__).parents[1] / "scripts" / "run_daily.sh",
         run_daily,
     )
+    shutil.copy(
+        Path(__file__).parents[1] / "scripts" / "run_with_timeout.py",
+        scripts / "run_with_timeout.py",
+    )
     run_daily.chmod(0o755)
     hedp = command_directory / "hedp"
     hedp.write_text(
@@ -52,8 +56,10 @@ def test_run_daily_collects_backs_up_and_retains_latest_30(tmp_path) -> None:
     assert result.returncode == 0
     assert call_log.read_text().splitlines() == [
         "collect",
-        "collect-energy-balance",
+        "backfill-missing",
+        "backfill-energy-balance",
         "quality",
+        "quality-energy-balance",
         "backup",
     ]
     assert sorted(path.name for path in backups.glob("hedp-*.db")) == [
@@ -82,8 +88,10 @@ def test_run_daily_preserves_partial_data_and_backs_up_after_failure(tmp_path) -
     assert result.returncode != 0
     assert call_log.read_text().splitlines() == [
         "collect",
-        "collect-energy-balance",
+        "backfill-missing",
+        "backfill-energy-balance",
         "quality",
+        "quality-energy-balance",
         "backup",
     ]
 
@@ -107,7 +115,28 @@ def test_run_daily_fails_when_backup_fails(tmp_path) -> None:
     assert result.returncode != 0
     assert call_log.read_text().splitlines() == [
         "collect",
-        "collect-energy-balance",
+        "backfill-missing",
+        "backfill-energy-balance",
         "quality",
+        "quality-energy-balance",
         "backup",
     ]
+
+
+def test_run_daily_skips_when_lock_is_held(tmp_path) -> None:
+    _, run_daily = _daily_script_repository(tmp_path)
+    lock = tmp_path / "com.hedp.daily.lock"
+    lock.mkdir()
+    call_log = tmp_path / "calls.log"
+
+    result = subprocess.run(
+        [str(run_daily)],
+        env={**os.environ, "TMPDIR": str(tmp_path), "CALL_LOG": str(call_log)},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert "already running" in result.stderr
+    assert not call_log.exists()

@@ -228,6 +228,9 @@ def test_run_range_processes_each_raw_data_in_order() -> None:
     calls.attach_mock(storage.save_rawdata, "save_rawdata")
     calls.attach_mock(record_builder.build, "build")
     calls.attach_mock(storage.save_records, "save_records")
+    calls.attach_mock(
+        storage.load_rawdata_for_range, "load_rawdata_for_range"
+    )
     application = Application(collector, storage, record_builder)
 
     result = application.run_range(date(2026, 7, 20), date(2026, 7, 22))
@@ -343,6 +346,45 @@ def test_run_energy_balance_range_saves_each_raw_data_only() -> None:
     record_builder.build.assert_not_called()
 
 
+def test_backfill_missing_energy_balance_collects_only_gaps_and_rebuilds() -> None:
+    missing = [date(2026, 7, 19), date(2026, 7, 21)]
+    raw_items = [Mock(spec=RawData), Mock(spec=RawData)]
+    collector = Mock()
+    collector.collect_for_date.side_effect = raw_items
+    storage = Mock()
+    builder = Mock()
+    builder.build.return_value = []
+    application = Application(
+        Mock(), storage, Mock(),
+        energy_balance_collector=collector,
+        energy_balance_record_builder=builder,
+    )
+    application.find_missing_energy_balance_dates = Mock(return_value=missing)
+    application.build_energy_balance_records = Mock(return_value=123)
+
+    result = application.backfill_missing_energy_balance(
+        date(2026, 7, 19), date(2026, 7, 21)
+    )
+
+    assert result == raw_items
+    assert collector.collect_for_date.call_args_list == [
+        call(missing[0]), call(missing[1])
+    ]
+    application.build_energy_balance_records.assert_called_once_with(
+        date(2026, 7, 19), date(2026, 7, 21)
+    )
+
+
+def test_find_missing_energy_balance_dates_uses_rawdata_coverage() -> None:
+    storage = Mock()
+    storage.get_collected_dates.return_value = {date(2026, 7, 20)}
+    application = Application(Mock(), storage, Mock())
+
+    assert application.find_missing_energy_balance_dates(
+        date(2026, 7, 19), date(2026, 7, 21)
+    ) == [date(2026, 7, 19), date(2026, 7, 21)]
+
+
 def test_find_missing_dates_returns_dates_in_order() -> None:
     storage = Mock()
     storage.get_record_dates.return_value = {
@@ -406,6 +448,7 @@ def test_backfill_missing_processes_only_missing_dates_in_order() -> None:
     collector = Mock()
     collector.collect_for_date.side_effect = raw_data_list
     storage = Mock()
+    storage.load_rawdata_for_range.return_value = []
     record_builder = Mock()
     record_builder.build.side_effect = records
     application = Application(collector, storage, record_builder)
@@ -415,6 +458,9 @@ def test_backfill_missing_processes_only_missing_dates_in_order() -> None:
     calls.attach_mock(storage.save_rawdata, "save_rawdata")
     calls.attach_mock(record_builder.build, "build")
     calls.attach_mock(storage.save_records, "save_records")
+    calls.attach_mock(
+        storage.load_rawdata_for_range, "load_rawdata_for_range"
+    )
 
     result = application.backfill_missing(
         date(2026, 7, 20), date(2026, 7, 23)
@@ -430,6 +476,9 @@ def test_backfill_missing_processes_only_missing_dates_in_order() -> None:
         call.save_rawdata(raw_data_list[1]),
         call.build(raw_data_list[1]),
         call.save_records(records[1]),
+        call.load_rawdata_for_range(
+            "fusionsolar", date(2026, 7, 20), date(2026, 7, 23)
+        ),
     ]
 
 
@@ -456,6 +505,25 @@ def test_backfill_missing_stops_after_error() -> None:
     collector.collect_for_date.assert_called_once_with(missing_dates[0])
     record_builder.build.assert_not_called()
     storage.save_records.assert_not_called()
+
+
+def test_backfill_missing_rebuilds_records_from_existing_rawdata() -> None:
+    raw_data = Mock(spec=RawData)
+    records = [Mock()]
+    storage = Mock()
+    storage.load_rawdata_for_range.return_value = [raw_data]
+    builder = Mock()
+    builder.build.return_value = records
+    application = Application(Mock(), storage, builder)
+    application.find_missing_dates = Mock(return_value=[])
+
+    result = application.backfill_missing(
+        date(2026, 7, 20), date(2026, 7, 21)
+    )
+
+    assert result == []
+    builder.build.assert_called_once_with(raw_data)
+    storage.save_records.assert_called_once_with(records)
 
 
 def _quality_records(timestamp: datetime) -> list[Record]:
