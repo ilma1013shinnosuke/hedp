@@ -30,7 +30,7 @@ def _daily_script_repository(tmp_path: Path) -> tuple[Path, Path]:
     return repository, run_daily
 
 
-def test_run_daily_collects_backs_up_and_retains_latest_30(tmp_path) -> None:
+def test_run_daily_collects_backs_up_and_retains_latest_compressed(tmp_path) -> None:
     repository, run_daily = _daily_script_repository(tmp_path)
     backups = repository / "backups"
     backups.mkdir()
@@ -63,8 +63,10 @@ def test_run_daily_collects_backs_up_and_retains_latest_30(tmp_path) -> None:
         "backup",
     ]
     assert sorted(path.name for path in backups.glob("hedp-*.db")) == [
-        *backup_names[-30:],
         invalid_backup.name,
+    ]
+    assert sorted(path.name for path in backups.glob("hedp-*.db.gz")) == [
+        backup_names[-1] + ".gz",
     ]
     assert database.is_file()
 

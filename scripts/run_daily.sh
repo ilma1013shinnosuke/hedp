@@ -9,6 +9,7 @@ LOCK_DIRECTORY="${TMPDIR:-/tmp}/com.hedp.daily.lock"
 TIMEOUT_RUNNER="${SCRIPT_DIR}/run_with_timeout.py"
 COMMAND_TIMEOUT_SECONDS="${HEDP_DAILY_COMMAND_TIMEOUT_SECONDS:-900}"
 BACKFILL_DAYS="${HEDP_DAILY_BACKFILL_DAYS:-30}"
+BACKUP_RETENTION_COUNT="${HEDP_BACKUP_RETENTION_COUNT:-1}"
 
 if ! mkdir "${LOCK_DIRECTORY}" 2>/dev/null; then
     echo "Daily job is already running; skipping this launch." >&2
@@ -20,6 +21,45 @@ run_timed() {
     python3 "${TIMEOUT_RUNNER}" "${COMMAND_TIMEOUT_SECONDS}" "$@"
 }
 
+backup_files=()
+refresh_backup_files() {
+    local found=()
+    local backup_file
+    shopt -s nullglob
+    for backup_file in \
+        "${BACKUP_DIRECTORY}"/hedp-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].db \
+        "${BACKUP_DIRECTORY}"/hedp-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].db.gz; do
+        if [[ -f "${backup_file}" && ! -L "${backup_file}" ]]; then
+            found+=("${backup_file}")
+        fi
+    done
+    backup_files=()
+    if ((${#found[@]})); then
+        while IFS= read -r backup_file; do
+            backup_files+=("${backup_file}")
+        done < <(printf '%s\n' "${found[@]}" | sort)
+    fi
+}
+
+prune_backups() {
+    local keep_count="$1"
+    local obsolete_count index
+    refresh_backup_files
+    obsolete_count=$((${#backup_files[@]} - keep_count))
+    for ((index = 0; index < obsolete_count; index++)); do
+        rm -- "${backup_files[index]}"
+    done
+}
+
+compress_backups() {
+    local backup_file
+    shopt -s nullglob
+    for backup_file in "${BACKUP_DIRECTORY}"/hedp-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].db; do
+        [[ -f "${backup_file}" && ! -L "${backup_file}" ]] || continue
+        run_timed gzip -f -- "${backup_file}" || return 1
+    done
+}
+
 cd "${REPOSITORY_ROOT}"
 status=0
 run_timed "${HEDP_COMMAND}" collect || status=1
@@ -29,23 +69,20 @@ run_timed "${HEDP_COMMAND}" backfill-missing --start "${backfill_start}" --end "
 run_timed "${HEDP_COMMAND}" backfill-energy-balance --start "${backfill_start}" --end "${previous_date}" || status=1
 run_timed "${HEDP_COMMAND}" quality --start "${backfill_start}" --end "${previous_date}" || status=1
 run_timed "${HEDP_COMMAND}" quality-energy-balance --start "${backfill_start}" --end "${previous_date}" || status=1
-run_timed "${HEDP_COMMAND}" backup || status=1
-
-if [[ ! -d "${BACKUP_DIRECTORY}" ]]; then
-    exit "${status}"
-fi
-
-shopt -s nullglob
-backup_files=()
-for backup_file in "${BACKUP_DIRECTORY}"/hedp-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].db; do
-    if [[ -f "${backup_file}" && ! -L "${backup_file}" ]]; then
-        backup_files+=("${backup_file}")
+if [[ -d "${BACKUP_DIRECTORY}" ]]; then
+    if compress_backups; then
+        prune_backups "${BACKUP_RETENTION_COUNT}"
+        if run_timed "${HEDP_COMMAND}" backup; then
+            compress_backups || status=1
+            prune_backups "${BACKUP_RETENTION_COUNT}"
+        else
+            status=1
+        fi
+    else
+        status=1
     fi
-done
-
-obsolete_count=$((${#backup_files[@]} - 30))
-for ((index = 0; index < obsolete_count; index++)); do
-    rm -- "${backup_files[index]}"
-done
+else
+    run_timed "${HEDP_COMMAND}" backup || status=1
+fi
 
 exit "${status}"

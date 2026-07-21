@@ -79,7 +79,10 @@ and energy-balance days in a rolling 30-day window, rebuilds energy-balance
 Records, runs both quality checks, and backs up from 03:00. Each command has a
 15-minute timeout and an exclusive job lock prevents overlapping runs. Set
 `HEDP_DAILY_COMMAND_TIMEOUT_SECONDS` or `HEDP_DAILY_BACKFILL_DAYS` to tune the
-defaults. The separate
+defaults. Before creating a backup, existing SQLite backups are compressed and
+old generations are removed so there is room for the new snapshot. The new
+snapshot is then compressed too; one generation is retained by default. Set
+`HEDP_BACKUP_RETENTION_COUNT` to retain more. The separate
 realtime job collects device snapshots, battery DC, and current alarms every
 five minutes with one shared FusionSolar session. The independent equipment
 job also collects battery DC daily at 03:10 as a daily recovery/health
