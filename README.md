@@ -85,8 +85,8 @@ scripts/install_macos_switchbot_launchd.sh
 The daily job runs station collection, detects and refetches missing station
 and energy-balance days in a rolling 30-day window, rebuilds energy-balance
 Records, runs both quality checks, and backs up from 03:00. Each command has a
-15-minute timeout, and every database-writing job shares one lock to prevent
-cross-job SQLite writes. Set
+15-minute timeout, and every database job shares one lock to prevent
+cross-job SQLite conflicts. Set
 `HEDP_DAILY_COMMAND_TIMEOUT_SECONDS` or `HEDP_DAILY_BACKFILL_DAYS` to tune the
 defaults. Before creating a backup, existing SQLite backups are compressed and
 old generations are removed so there is room for the new snapshot. The new

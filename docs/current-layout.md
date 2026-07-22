@@ -52,9 +52,9 @@ GAS版を実装するまでは `cloud/gas/fusionsolar/`を作らない。
 | `run_switchbot_hourly.sh` | SwitchBotの1時間ごとの状態取得 |
 | `run_daily_health.sh` | DBを変更しない日次健全性確認 |
 
-DBへ書く4つの実行スクリプトは `com.hedp.writer.lock`を共有する。これにより、
-別ジョブ同士が同じSQLiteへ同時書込みすることを防ぐ。健全性確認は読み取り専用で
-あり、この書込みロックには参加しない。
+DBを使用する5つの実行スクリプトは `com.hedp.database.lock`を共有する。これにより、
+別ジョブ同士が同じSQLiteを長時間読み書きすることを防ぐ。健全性確認は読み取り専用
+だが、全体整合性検査中に書込みを妨げるため、このロックへ参加する。
 
 ## 現在の実データ
 
