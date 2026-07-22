@@ -1,0 +1,66 @@
+# 現在のファイルと役割
+
+この文書は、整理前の現行コードを安全に移すための対応表である。移動が完了した
+項目は新しい場所へ更新し、古いパスを現役情報として残さない。
+
+## 共通部分
+
+| 現在のファイル | 主な役割 | 将来の分類候補 |
+|---|---|---|
+| `application.py` | 収集、保存、品質確認の進行管理 | 責務を確認しながら各層へ分割 |
+| `configuration.py` | 実行環境から設定を取得 | 共通設定とメーカー設定を分離 |
+| `raw_data.py` | 取得した事実の不変形式 | `storage`の共通モデル |
+| `record.py` | 利用可能な正規化データ | `storage`の共通モデル |
+| `storage.py` | RawDataとRecordのSQLite保存 | `storage` |
+| `daily_health.py` | 読み取り専用の運用点検 | 運用監視。新しい層は作らない |
+| `main.py` | CLIと部品の組み立て | 最後まで薄い入口として維持 |
+
+## FusionSolar
+
+| 現在のファイル | 主な役割 | 将来の場所 |
+|---|---|---|
+| `fusionsolar_client.py` | 認証とHTTP通信 | `adapters/fusionsolar/` |
+| `fusionsolar_collector.py` | 発電所KPI取得 | `adapters/fusionsolar/` |
+| `fusionsolar_energy_balance_collector.py` | 5分電力収支取得 | `adapters/fusionsolar/` |
+| `fusionsolar_device_realtime_collector.py` | 機器現在値取得 | `adapters/fusionsolar/` |
+| `fusionsolar_battery_dc_collector.py` | 蓄電池DC情報取得 | `adapters/fusionsolar/` |
+| `fusionsolar_alarm_collector.py` | 現在・履歴アラーム取得 | `adapters/fusionsolar/` |
+| `fusionsolar_record_builder.py` | KPIをRecordへ変換 | 変換規則を確認して配置 |
+| `fusionsolar_energy_balance_record_builder.py` | 電力収支をRecordへ変換 | 変換規則を確認して配置 |
+| `fusionsolar_report_importer.py` | 旧レポートの監査付き取込 | `adapters/fusionsolar/`内の取込機能 |
+
+現役の検証済みAPI知識は `docs/integrations/fusionsolar/README.md` に置く。
+GAS版を実装するまでは `cloud/gas/fusionsolar/`を作らない。
+
+## SwitchBot
+
+| 現在のファイル | 主な役割 | 将来の場所 |
+|---|---|---|
+| `switchbot_client.py` | Open API通信と署名 | `adapters/switchbot/` |
+| `switchbot_service.py` | 機器一覧と状態取得の進行管理 | 共通収集との境界を確認して移動 |
+| `switchbot_importer.py` | CSV・XLSX履歴取込 | `adapters/switchbot/`内の取込機能 |
+| `switchbot_storage.py` | SwitchBot専用テーブル | 共通Storageとの統合可否を先に判断 |
+| `switchbot_cli.py` | SwitchBot用CLI | 薄い入口を維持して移動 |
+
+## 運用スクリプト
+
+| スクリプト | 稼働内容 |
+|---|---|
+| `run_daily.sh` | 日次取得、欠損補完、品質確認、バックアップ |
+| `run_device_realtime.sh` | 5分ごとの機器現在値・蓄電池・現在アラーム |
+| `run_equipment_daily.sh` | 日次の蓄電池復旧スナップショット |
+| `run_switchbot_hourly.sh` | SwitchBotの1時間ごとの状態取得 |
+| `run_daily_health.sh` | DBを変更しない日次健全性確認 |
+
+DBへ書く4つの実行スクリプトは `com.hedp.writer.lock`を共有する。これにより、
+別ジョブ同士が同じSQLiteへ同時書込みすることを防ぐ。健全性確認は読み取り専用で
+あり、この書込みロックには参加しない。
+
+## 現在の実データ
+
+- `hedp.db`: RawData、Record、SwitchBotデータの現役SQLite。Git管理外。
+- `backups/`: 圧縮済み世代バックアップ。Git管理外。
+- `runtime/`: 取込・調査の実行時ファイル。Git管理外。
+- `~/Library/Logs/hedp/`: launchdの運用ログ。Git管理外、権限0600。
+
+これらはディレクトリ整理では移動・複製しない。

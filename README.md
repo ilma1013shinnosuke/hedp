@@ -3,8 +3,12 @@
 HEDP is a long-lived household energy data platform. See [PROJECT.md](PROJECT.md)
 for its purpose and principles, [SPECIFICATION.md](SPECIFICATION.md) for the
 current technical contract, and
-[FusionSolar knowledge](docs/KNOWLEDGE/FusionSolar.md) for verified vendor API
+[FusionSolar knowledge](docs/integrations/fusionsolar/README.md) for verified vendor API
 details and unknowns.
+
+ディレクトリと命名は [directory policy](docs/directory-policy.md)、現在の
+ファイル対応は [current layout](docs/current-layout.md)、秘密情報と実データは
+[security policy](docs/security-policy.md) を参照してください。
 
 ## Setup
 
@@ -78,7 +82,8 @@ scripts/install_macos_switchbot_launchd.sh
 The daily job runs station collection, detects and refetches missing station
 and energy-balance days in a rolling 30-day window, rebuilds energy-balance
 Records, runs both quality checks, and backs up from 03:00. Each command has a
-15-minute timeout and an exclusive job lock prevents overlapping runs. Set
+15-minute timeout, and every database-writing job shares one lock to prevent
+cross-job SQLite writes. Set
 `HEDP_DAILY_COMMAND_TIMEOUT_SECONDS` or `HEDP_DAILY_BACKFILL_DAYS` to tune the
 defaults. Before creating a backup, existing SQLite backups are compressed and
 old generations are removed so there is room for the new snapshot. The new
@@ -87,7 +92,7 @@ snapshot is then compressed too; one generation is retained by default. Set
 realtime job collects device snapshots, battery DC, and current alarms every
 five minutes with one shared FusionSolar session. The independent equipment
 job also collects battery DC daily at 03:10 as a daily recovery/health
-snapshot. Logs are stored under
+snapshot. Logs are stored with mode `0600` under
 `~/Library/Logs/hedp/`; macOS-specific behavior remains in `scripts/`.
 
 The read-only daily health check runs independently at 03:20. It checks recent

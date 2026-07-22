@@ -14,6 +14,7 @@ hedp.db
 backups/
 .env
 .env.*
+!.env.example
 *.log
 logs/
 runtime/
