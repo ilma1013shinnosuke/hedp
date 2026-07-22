@@ -5,14 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 HEDP_COMMAND="${REPOSITORY_ROOT}/.venv/bin/hedp"
 BACKUP_DIRECTORY="${REPOSITORY_ROOT}/backups"
-LOCK_DIRECTORY="${TMPDIR:-/tmp}/com.hedp.daily.lock"
+LOCK_DIRECTORY="${HEDP_WRITER_LOCK_DIRECTORY:-${TMPDIR:-/tmp}/com.hedp.writer.lock}"
 TIMEOUT_RUNNER="${SCRIPT_DIR}/run_with_timeout.py"
 COMMAND_TIMEOUT_SECONDS="${HEDP_DAILY_COMMAND_TIMEOUT_SECONDS:-900}"
 BACKFILL_DAYS="${HEDP_DAILY_BACKFILL_DAYS:-30}"
 BACKUP_RETENTION_COUNT="${HEDP_BACKUP_RETENTION_COUNT:-1}"
 
 if ! mkdir "${LOCK_DIRECTORY}" 2>/dev/null; then
-    echo "Daily job is already running; skipping this launch." >&2
+    echo "Another HEDP writer is already running; skipping the daily job." >&2
     exit 0
 fi
 trap 'rmdir "${LOCK_DIRECTORY}" 2>/dev/null || true' EXIT

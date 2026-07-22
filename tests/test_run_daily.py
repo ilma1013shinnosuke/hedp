@@ -127,7 +127,7 @@ def test_run_daily_fails_when_backup_fails(tmp_path) -> None:
 
 def test_run_daily_skips_when_lock_is_held(tmp_path) -> None:
     _, run_daily = _daily_script_repository(tmp_path)
-    lock = tmp_path / "com.hedp.daily.lock"
+    lock = tmp_path / "com.hedp.writer.lock"
     lock.mkdir()
     call_log = tmp_path / "calls.log"
 

@@ -26,6 +26,10 @@ fi
 xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"; }
 
 mkdir -p "$(dirname "${PLIST_PATH}")" "${LOG_DIRECTORY}"
+touch "${LOG_DIRECTORY}/equipment.out.log" \
+      "${LOG_DIRECTORY}/equipment.err.log"
+chmod 600 "${LOG_DIRECTORY}/equipment.out.log" \
+          "${LOG_DIRECTORY}/equipment.err.log"
 chmod +x "${RUN_SCRIPT}"
 umask 077
 {

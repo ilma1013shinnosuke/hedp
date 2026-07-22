@@ -3,10 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-LOCK_DIRECTORY="/tmp/com.hedp.equipment.lock"
+LOCK_DIRECTORY="${HEDP_WRITER_LOCK_DIRECTORY:-${TMPDIR:-/tmp}/com.hedp.writer.lock}"
 
 if ! mkdir "${LOCK_DIRECTORY}" 2>/dev/null; then
-    echo "equipment collection is already running" >&2
+    echo "Another HEDP writer is already running; skipping equipment collection" >&2
     exit 0
 fi
 trap 'rmdir "${LOCK_DIRECTORY}"' EXIT

@@ -17,14 +17,16 @@ class SwitchBotStorage:
         self.connection: sqlite3.Connection | None = None
 
     def connect(self) -> sqlite3.Connection:
-        self.connection = sqlite3.connect(self.database_path)
+        self.connection = sqlite3.connect(self.database_path, timeout=30)
         self.connection.row_factory = sqlite3.Row
         self.migrate()
         return self.connection
 
     def connect_readonly(self) -> sqlite3.Connection:
         path = Path(self.database_path).resolve()
-        self.connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+        self.connection = sqlite3.connect(
+            f"{path.as_uri()}?mode=ro", uri=True, timeout=30
+        )
         self.connection.row_factory = sqlite3.Row
         return self.connection
 

@@ -20,7 +20,7 @@ class Storage:
         self._connection: Optional[sqlite3.Connection] = None
 
     def connect(self) -> sqlite3.Connection:
-        self._connection = sqlite3.connect(self.database_path)
+        self._connection = sqlite3.connect(self.database_path, timeout=30)
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS raw_data (
@@ -43,7 +43,7 @@ class Storage:
     def connect_readonly(self) -> sqlite3.Connection:
         database = Path(self.database_path).resolve()
         self._connection = sqlite3.connect(
-            f"{database.as_uri()}?mode=ro", uri=True
+            f"{database.as_uri()}?mode=ro", uri=True, timeout=30
         )
         return self._connection
 

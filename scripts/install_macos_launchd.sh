@@ -58,6 +58,8 @@ OUT_LOG_XML="$(xml_escape "${LOG_DIRECTORY}/collect.out.log")"
 ERR_LOG_XML="$(xml_escape "${LOG_DIRECTORY}/collect.err.log")"
 
 mkdir -p "$(dirname "${PLIST_PATH}")" "${LOG_DIRECTORY}"
+touch "${LOG_DIRECTORY}/collect.out.log" "${LOG_DIRECTORY}/collect.err.log"
+chmod 600 "${LOG_DIRECTORY}/collect.out.log" "${LOG_DIRECTORY}/collect.err.log"
 
 umask 077
 {

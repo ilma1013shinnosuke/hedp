@@ -7,7 +7,7 @@ ROOT = Path(__file__).parents[1]
 def test_five_minute_script_collects_realtime_and_current_alarms():
     script = (ROOT / "scripts" / "run_device_realtime.sh").read_text()
     assert "collect-realtime" in script
-    assert "com.hedp.device-realtime.lock" in script
+    assert "com.hedp.writer.lock" in script
 
 
 def test_equipment_job_runs_battery_dc_at_0310():
@@ -16,7 +16,7 @@ def test_equipment_job_runs_battery_dc_at_0310():
         ROOT / "scripts" / "install_macos_equipment_launchd.sh"
     ).read_text()
     assert "collect-battery-dc" in runner
-    assert "com.hedp.equipment.lock" in runner
+    assert "com.hedp.writer.lock" in runner
     assert "<integer>3</integer>" in installer
     assert "<integer>10</integer>" in installer
     assert "chmod 600" in installer
@@ -45,9 +45,38 @@ def test_switchbot_job_runs_hourly_at_minute_five_without_plist_secrets():
     assert "switchbot collect" in runner
     assert "source .env" in runner
     assert "set -x" not in runner
-    assert "com.hedp.switchbot.lock" in runner
+    assert "com.hedp.writer.lock" in runner
     assert "<key>Minute</key><integer>5</integer>" in installer
     assert "SWITCHBOT_TOKEN" not in installer
     assert "SWITCHBOT_SECRET" not in installer
     assert "chmod 600" in installer
     assert "plutil -lint" in installer
+
+
+def test_all_database_writers_share_one_lock():
+    runners = [
+        "run_daily.sh",
+        "run_device_realtime.sh",
+        "run_equipment_daily.sh",
+        "run_switchbot_hourly.sh",
+    ]
+    for name in runners:
+        script = (ROOT / "scripts" / name).read_text()
+        assert "com.hedp.writer.lock" in script
+        assert "HEDP_WRITER_LOCK_DIRECTORY" in script
+
+
+def test_all_launchd_installers_make_logs_private():
+    installers = [
+        "install_macos_launchd.sh",
+        "install_macos_device_realtime_launchd.sh",
+        "install_macos_equipment_launchd.sh",
+        "install_macos_daily_health_launchd.sh",
+        "install_macos_switchbot_launchd.sh",
+    ]
+    for name in installers:
+        script = (ROOT / "scripts" / name).read_text()
+        assert "touch" in script
+        assert "chmod 600" in script
+        assert ".out.log" in script
+        assert ".err.log" in script
