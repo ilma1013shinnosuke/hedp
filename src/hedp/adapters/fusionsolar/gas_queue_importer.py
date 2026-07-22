@@ -104,10 +104,17 @@ class FusionSolarGasQueueImporter:
             for candidate in candidates:
                 if self._receipt_exists(connection, candidate):
                     continue
-                cursor = connection.execute(
-                    "INSERT INTO raw_data (data) VALUES (?)",
-                    (candidate.raw_data().to_json(),),
-                )
+                existing_raw_id, conflict = self._existing_raw(connection, candidate)
+                if conflict:
+                    raise GasQueueError("same_day_payload_conflict")
+                if existing_raw_id is None:
+                    cursor = connection.execute(
+                        "INSERT INTO raw_data (data) VALUES (?)",
+                        (candidate.raw_data().to_json(),),
+                    )
+                    raw_data_id = cursor.lastrowid
+                else:
+                    raw_data_id = existing_raw_id
                 connection.execute(
                     """INSERT INTO gas_import_receipts
                     (schema_version, source, target_date, payload_sha256,
@@ -120,7 +127,7 @@ class FusionSolarGasQueueImporter:
                         candidate.payload_sha256, candidate.file_name,
                         candidate.envelope_sha256,
                         candidate.collected_at.isoformat(),
-                        datetime.now(timezone.utc).isoformat(), cursor.lastrowid,
+                        datetime.now(timezone.utc).isoformat(), raw_data_id,
                     ),
                 )
             connection.commit()
@@ -242,6 +249,8 @@ class FusionSolarGasQueueImporter:
             raise GasQueueError("request_not_allowed")
         if request.get(key) != value:
             raise GasQueueError("request_dimension_not_allowed")
+        if set(request) != {"method", "endpoint", key}:
+            raise GasQueueError("unexpected_request_field")
 
     @classmethod
     def _reject_secrets(cls, value: Any) -> None:
@@ -313,15 +322,23 @@ class FusionSolarGasQueueImporter:
             if self._receipt_exists(connection, item):
                 duplicates += 1
                 continue
-            rows = connection.execute(
-                "SELECT data FROM raw_data WHERE json_extract(data, '$.source')=? AND json_extract(data, '$.target_date')=?",
-                (item.source, item.target_date.isoformat()),
-            ).fetchall()
-            if any(RawData.from_json(row[0]).payload == item.payload for row in rows):
+            existing_raw_id, conflict = self._existing_raw(connection, item)
+            if existing_raw_id is not None:
                 duplicates += 1
-            elif rows:
+            elif conflict:
                 conflicts += 1
         return duplicates, conflicts
+
+    @staticmethod
+    def _existing_raw(connection: Any, item: Candidate) -> tuple[int | None, bool]:
+        rows = connection.execute(
+            "SELECT id, data FROM raw_data WHERE json_extract(data, '$.source')=? AND json_extract(data, '$.target_date')=?",
+            (item.source, item.target_date.isoformat()),
+        ).fetchall()
+        for raw_id, data in rows:
+            if RawData.from_json(data).payload == item.payload:
+                return int(raw_id), False
+        return None, bool(rows)
 
     @staticmethod
     def _report(status: str, items: list[Candidate], duplicates: int, conflicts: int) -> dict[str, Any]:

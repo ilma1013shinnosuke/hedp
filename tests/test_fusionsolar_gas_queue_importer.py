@@ -10,6 +10,7 @@ from hedp.adapters.fusionsolar.gas_queue_importer import (
     GasQueueError,
 )
 from hedp.storage import Storage
+from hedp.storage import RawData
 
 
 def queue_file(folder: Path, payload=None, **changes) -> Path:
@@ -69,6 +70,41 @@ def test_dry_run_does_not_create_receipt_table(tmp_path):
         "SELECT count(*) FROM sqlite_master WHERE name='gas_import_receipts'"
     ).fetchone()[0] == 0
     assert storage.count_rawdata() == 0
+
+
+def test_existing_raw_gets_receipt_without_duplicate(tmp_path):
+    path = queue_file(tmp_path)
+    envelope = json.loads(path.read_text())
+    payload = json.loads(envelope["payload_text"])
+    storage = Storage(str(tmp_path / "hedp.sqlite3"))
+    connection = storage.connect()
+    storage.save_rawdata(RawData(
+        source="fusionsolar",
+        timestamp=datetime(2026, 7, 21, 13, tzinfo=timezone.utc),
+        target_date=datetime(2026, 7, 21).date(),
+        payload=payload,
+    ))
+
+    report = FusionSolarGasQueueImporter(storage).run(tmp_path)
+
+    assert report["duplicates_skipped"] == 1
+    assert storage.count_rawdata() == 1
+    receipt = connection.execute(
+        "SELECT raw_data_id FROM gas_import_receipts"
+    ).fetchone()
+    assert receipt == (1,)
+
+
+def test_unexpected_request_fields_are_rejected(tmp_path):
+    request = {
+        "method": "POST",
+        "endpoint": "/rest/pvms/web/report/v1/station/station-kpi-list",
+        "statDim": "2",
+        "stationDn": "must-not-travel-with-raw-data",
+    }
+    queue_file(tmp_path, request=request)
+    with pytest.raises(GasQueueError, match="unexpected_request_field"):
+        FusionSolarGasQueueImporter().inspect(tmp_path)
 
 
 @pytest.mark.parametrize(

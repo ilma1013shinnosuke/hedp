@@ -28,10 +28,13 @@
 | `adapters/fusionsolar/record_builder.py` | KPIをRecordへ変換 | 移動済み |
 | `adapters/fusionsolar/energy_balance_record_builder.py` | 電力収支をRecordへ変換 | 移動済み |
 | `adapters/fusionsolar/report_importer.py` | 旧レポートの監査付き取込 | 移動済み |
+| `adapters/fusionsolar/gas_queue_importer.py` | GAS受け渡しRaw JSONの検査・監査付き取込 | 実装済み・未配備 |
 
 現役の検証済みAPI知識は `docs/integrations/fusionsolar/README.md` に置く。
-GAS版FusionSolarの未配備コードは `cloud/gas/fusionsolar/` に置く。現在は前日分Rawを
-Drive受け渡しキューへ保存する実装までで、自動認証、ローカル取込、trigger配備は未完了。
+GAS版FusionSolarの未配備コードは `cloud/gas/fusionsolar/` に置く。前日分Rawを
+Drive受け渡しキューへ保存し、ダウンロード後にMac側で検査・重複判定・監査付き取込を
+行うコードまで実装済みである。認証期限切れの検知と任意メール通知も実装済みだが、
+自動再認証、GAS・trigger配備、実データでの取込確認は未完了である。
 実サービスへ配備するまではローカルlaunchd収集が正本である。
 実環境への段階切替と復旧条件は`docs/cutover-runbook.md`を正本とする。
 
@@ -54,6 +57,7 @@ Drive受け渡しキューへ保存する実装までで、自動認証、ロー
 | `run_equipment_daily.sh` | 日次の蓄電池復旧スナップショット |
 | `run_switchbot_hourly.sh` | SwitchBotの1時間ごとの状態取得 |
 | `run_daily_health.sh` | DBを変更しない日次健全性確認 |
+| `check_post_cutover.py` | 保存済み状態JSONによる切替後24時間監視 |
 
 DBを使用する5つの実行スクリプトは `com.hedp.database.lock`を共有する。これにより、
 別ジョブ同士が同じSQLiteを長時間読み書きすることを防ぐ。健全性確認は読み取り専用
