@@ -136,7 +136,7 @@ Evidence: `FusionSolarClient.get_json`, `post_json`, `_is_auth_failure`,
 | Endpoint | `/rest/pvms/web/station/v1/overview/energy-balance` |
 | Required parameters | `stationDn`, `timeDim=2`, `queryTime`, `timeZone=9`, `timeZoneStr=Asia/Tokyo`, `dateStr`, `_` |
 | Date specification | `queryTime` is Unix epoch milliseconds for target-day midnight in Asia/Tokyo; `dateStr` is `YYYY-MM-DD 00:00:00`; `_` is request-time Unix epoch milliseconds. Observed dimensions are `timeDim=2` for day, `4` for month, and `5` for year. Only day collection is implemented. |
-| `stationDn` / `deviceDn` / `moduleId` | `stationDn=NE=33812827` is DevTools-observed. No `deviceDn` or `moduleId` evidence. |
+| `stationDn` / `deviceDn` / `moduleId` | The configured `stationDn` is DevTools-observed. No `deviceDn` or `moduleId` evidence. |
 | Available information | For `timeDim=2`, `xAxis` contains 288 timestamps at 5-minute intervals from 00:00 through 23:55. Each confirmed 5-minute series array corresponds positionally to `xAxis`. The Python collector preserves the entire response, including `"--"`, without interpreting or converting values. Units and the exact meaning of some keys remain unconfirmed. |
 | Evidence state | **live-confirmed**. The Python collector has called the live service and stored the unchanged response as RawData; request behavior is covered by tests. Earlier DevTools and GAS workbook evidence also exists. |
 | Past dates | Yes for observed recent dates (2026-07-17 through 2026-07-19). Older range and retention limit are unverified. |
@@ -242,7 +242,7 @@ Confirmed device signal groups include:
 | Endpoint | `/rest/pvms/web/device/v1/query-battery-dc` |
 | Required parameters | `dn`, `sigids`, `moduleId`, `_` |
 | Date specification | None observed; current snapshot |
-| `stationDn` / `deviceDn` / `moduleId` | `dn=NE=33812831`; module 1 has data, modules 2–4 return `success=true` with `data=[]` |
+| `stationDn` / `deviceDn` / `moduleId` | The configured battery `dn` returns data for module 1; modules 2–4 return `success=true` with `data=[]` |
 | Available information | Elements contain `dataType`, `enumMap`, `id`, `latestTime`, `name`, `realValue`, `unit`, and `value` |
 | Evidence state | **live-confirmed**; Python has stored unchanged responses for modules 1–4 using the DevTools-confirmed `sigids` |
 | Past dates | No historical parameter observed |
@@ -250,8 +250,8 @@ Confirmed device signal groups include:
 
 Top-level keys are `buildCode`, `data`, `failCode`, `params`, and `success`.
 The complete response is stored unchanged. The confirmed `dn` and `sigids`
-defaults are defined once in `Configuration`; environment variables are
-optional operational overrides.
+are household runtime settings and must be supplied through environment
+variables; their values are not kept in source code or shared documentation.
 
 `quality-battery-dc` checks stored response structure and expected module
 coverage; `diagnose-battery-dc` reports per-module counts, empty responses, and
@@ -266,7 +266,7 @@ latest acquisition times.
 | Endpoint | `/rest/pvms/fm/v1/query` |
 | Common body | `dataType`, `domainType=SOLAR`, `pageNo`, `pageSize`, `nativeMoDn` |
 | History body | Common body plus `occurUTC.begin` and `occurUTC.end` Unix milliseconds |
-| Device DNs | `NE=33812828`, `NE=33812829`, `NE=33812830`, `NE=33812831` |
+| Device DNs | The ordered values configured in `HEDP_FUSIONSOLAR_DEVICE_DNS` |
 | Available information | `offset`, `limit`, `totalCount`, `sizeExceeded`, `groupResult`, `severityStatistics`, `hits` |
 | Evidence state | **live-confirmed**; supporting request/response evidence was first observed in DevTools |
 | Historical availability | Confirmed explicit range for `dataType=HISTORY`; Python uses Asia/Tokyo date boundaries |
@@ -313,17 +313,17 @@ remain unknown without the legacy request/response parser source.
 
 ## 4. Device discovery
 
-### Known device DNs
+### Known device roles
 
-| Device DN | Observed classification | Confidence/evidence |
+| Configured role | Observed classification | Confidence/evidence |
 |---|---|---|
-| `NE=33812828` | Unknown or communication device candidate | No signals; classification unresolved |
-| `NE=33812829` | Power meter candidate | Signal names observed, but all values were `-`; provisional |
-| `NE=33812830` | Inverter / PCS | Inverter status, energy, and rated-power signals; confirmed in workbook |
-| `NE=33812831` | Battery | SOC, charge/discharge, and rated-capacity signals; confirmed in workbook |
+| Device 1 | Unknown or communication device candidate | No signals; classification unresolved |
+| Device 2 | Power meter candidate | Signal names observed, but all values were `-`; provisional |
+| Device 3 | Inverter / PCS | Inverter status, energy, and rated-power signals; confirmed in workbook |
+| Device 4 | Battery | SOC, charge/discharge, and rated-capacity signals; confirmed in workbook |
 
-The station DN is `NE=33812827`, observed from the DevTools energy-balance
-URL (`02_GAS設定`). The four device DNs above are recorded as candidate DNs in
+The station DN is stored only in the local runtime environment after being
+observed from the DevTools energy-balance URL. The four device DNs above are recorded as candidate DNs in
 `20_MST_Device` and were all successfully queried through
 `device-realtime-data`.
 
@@ -337,7 +337,7 @@ URL (`02_GAS設定`). The four device DNs above are recorded as candidate DNs in
   proves only that a schema placeholder existed, not a usable module ID or API.
 - Unresolved: authoritative discovery endpoint, station-to-device mapping,
   device replacement behavior, meter data availability, meaning of
-  `NE=33812828`, and any device/module IDs required by `query-battery-dc`.
+  the unresolved first configured device, and any device/module IDs required by `query-battery-dc`.
 
 ## 5. Recommended implementation order
 
@@ -369,8 +369,8 @@ device identifiers, values, units, or signs.
 - Charge/discharge power sign convention in `device-realtime-data`.
 - Why the meter device returns signal definitions but no values, and whether a
   different endpoint, permission, or operating state is required.
-- An authoritative device-discovery endpoint and the meaning of
-  `NE=33812828`.
+- An authoritative device-discovery endpoint and the meaning of the first
+  configured device.
 - Any confirmed `mo-details` endpoint, parameters, or response.
 - Any usable `moduleId`; the only occurrence is an empty schema column.
 - Alarm `hits` element semantics, retention limits, and which observed ID is

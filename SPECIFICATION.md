@@ -1,4 +1,4 @@
-# HEDP Specification
+# SumiCore Specification
 
 ## Architecture
 
@@ -23,7 +23,7 @@ possible future need.
 - `target_date` is used only by APIs that address a date.
 - `metadata` stores request context, such as a target device, that is outside
   the response payload.
-- HEDP does not insert private keys into `payload`.
+- SumiCore does not insert private keys into `payload`.
 - JSON without the optional metadata field remains readable for backward
   compatibility.
 
