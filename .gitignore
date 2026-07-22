@@ -5,6 +5,9 @@ __pycache__/
 .ruff_cache/
 .idea/
 .venv/
+.venv-legacy-*/
+.venv-failed-*/
+.venv-next/
 dist/
 build/
 *.egg-info/
