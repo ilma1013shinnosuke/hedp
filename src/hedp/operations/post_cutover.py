@@ -6,6 +6,31 @@ from datetime import datetime
 from typing import Any
 
 
+def create_post_cutover_snapshot(
+    *, started_at: str, checked_at: str, integrity: str,
+    raw_count_start: int, raw_count_end: int,
+    old_jobs_running: bool, duplicate_runs_detected: bool,
+    secrets_in_logs: bool, local_config_git_tracked: bool,
+    jobs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build evaluator input only from explicitly supplied, redacted facts."""
+    snapshot = {
+        "started_at": started_at,
+        "checked_at": checked_at,
+        "database": {"integrity": integrity, "raw_count_start": raw_count_start,
+                     "raw_count_end": raw_count_end},
+        "safety": {
+            "old_jobs_running": old_jobs_running,
+            "duplicate_runs_detected": duplicate_runs_detected,
+            "secrets_in_logs": secrets_in_logs,
+            "local_config_git_tracked": local_config_git_tracked,
+        },
+        "jobs": jobs,
+    }
+    evaluate_post_cutover(snapshot)
+    return snapshot
+
+
 def _timestamp(value: object, field: str) -> datetime:
     if not isinstance(value, str):
         raise ValueError(f"{field} must be an ISO 8601 string")

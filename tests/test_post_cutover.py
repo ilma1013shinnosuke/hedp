@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from hedp.operations.post_cutover import evaluate_post_cutover
+from hedp.operations.post_cutover import create_post_cutover_snapshot, evaluate_post_cutover
 
 
 @pytest.fixture
@@ -41,3 +41,17 @@ def test_naive_timestamp_is_rejected(healthy_snapshot: dict[str, object]) -> Non
     snapshot["checked_at"] = "2026-07-22T10:01:00"
     with pytest.raises(ValueError, match="timezone"):
         evaluate_post_cutover(snapshot)
+
+
+def test_snapshot_builder_validates_redacted_facts():
+    snapshot = create_post_cutover_snapshot(
+        started_at="2026-07-21T10:00:00+09:00",
+        checked_at="2026-07-22T10:00:00+09:00",
+        integrity="ok", raw_count_start=10, raw_count_end=12,
+        old_jobs_running=False, duplicate_runs_detected=False,
+        secrets_in_logs=False, local_config_git_tracked=False,
+        jobs=[{"name": "daily", "expected_runs": 1,
+               "successful_runs": 1, "failed_runs": 0}],
+    )
+    assert snapshot["database"]["raw_count_end"] == 12
+    assert evaluate_post_cutover(snapshot)["status"] == "pass"

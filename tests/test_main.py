@@ -756,3 +756,46 @@ def test_cli_daily_health_rejects_naive_at() -> None:
     with pytest.raises(SystemExit) as raised:
         cli(["daily-health", "--at", "2026-07-21T03:20:00"])
     assert raised.value.code == 2
+
+
+def test_cli_gas_queue_inspect_does_not_open_environment_or_database(
+    tmp_path, capsys
+) -> None:
+    report = {"status": "inspected", "files_checked": 1}
+    with (
+        patch("hedp.main.FusionSolarGasQueueImporter") as importer_class,
+        patch("hedp.main.Configuration.database_path_from_environment") as database_path,
+        patch("hedp.main.Storage") as storage_class,
+    ):
+        importer_class.return_value.inspect.return_value = report
+        result = cli(["import-fusionsolar-gas-queue", str(tmp_path), "--inspect"])
+
+    assert result == 0
+    importer_class.return_value.inspect.assert_called_once_with(tmp_path)
+    database_path.assert_not_called()
+    storage_class.assert_not_called()
+    assert json.loads(capsys.readouterr().out) == report
+
+
+def test_cli_gas_queue_dry_run_uses_readonly_database(tmp_path, capsys) -> None:
+    report = {"status": "blocked", "conflicts": 1}
+    connection = Mock()
+    with (
+        patch("hedp.main.FusionSolarGasQueueImporter") as importer_class,
+        patch(
+            "hedp.main.Configuration.database_path_from_environment",
+            return_value="hedp.db",
+        ),
+        patch("hedp.main.Storage") as storage_class,
+    ):
+        storage = storage_class.return_value
+        storage.connect_readonly.return_value = connection
+        importer_class.return_value.run.return_value = report
+        result = cli(["import-fusionsolar-gas-queue", str(tmp_path), "--dry-run"])
+
+    assert result == 1
+    storage.connect_readonly.assert_called_once_with()
+    storage.connect.assert_not_called()
+    importer_class.return_value.run.assert_called_once_with(tmp_path, dry_run=True)
+    connection.close.assert_called_once_with()
+    assert json.loads(capsys.readouterr().out) == report

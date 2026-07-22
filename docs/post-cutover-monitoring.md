@@ -15,6 +15,15 @@
 各jobの期待・成功・失敗回数を記載する。`PYTHONPATH=src python scripts/check_post_cutover.py 状態.json`
 で人向け表示、`--json`で機械向け表示にする。終了コードは合格・警告が0、失敗が1、入力不正が2。
 
+明示的に確認した非秘密情報をJSONへまとめた後、mode 0600の監視入力を作成できる。
+
+```console
+PYTHONPATH=src python scripts/create_post_cutover_snapshot.py facts.json snapshot.json
+PYTHONPATH=src python scripts/check_post_cutover.py snapshot.json --json
+```
+
+作成処理は値を推測しない。認証情報、機器ID、API応答、Raw本文、ログ本文を含めない。
+
 ## チェックリスト
 
 - [ ] 切替直後：旧job停止、新job一回実行、開始件数を記録
