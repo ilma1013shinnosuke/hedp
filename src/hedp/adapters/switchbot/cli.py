@@ -6,11 +6,9 @@ import os
 from pathlib import Path
 
 from hedp.adapters.switchbot.client import SwitchBotClient
-from hedp.adapters.switchbot.household import SwitchBotHouseholdConfiguration
 from hedp.adapters.switchbot.importer import SwitchBotImporter
 from hedp.adapters.switchbot.service import SwitchBotService
 from hedp.adapters.switchbot.storage import SwitchBotStorage
-from hedp.environment import require_compatible_environment
 
 
 def add_switchbot_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -53,21 +51,22 @@ def add_switchbot_parser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def run_switchbot(arguments: argparse.Namespace) -> int:
-    database_path = require_compatible_environment("DATABASE_PATH").strip()
+    database_path = os.environ.get("HEDP_DATABASE_PATH", "").strip()
+    if not database_path:
+        raise RuntimeError("HEDP_DATABASE_PATH is required")
     storage = SwitchBotStorage(database_path)
     storage.connect()
     try:
-        household = SwitchBotHouseholdConfiguration.from_environment()
         group = arguments.switchbot_group
         action = getattr(arguments, "switchbot_action", None)
         if group == "devices" and action in {"refresh"}:
-            service = SwitchBotService(_client(), storage, household)
+            service = SwitchBotService(_client(), storage)
             report = service.refresh_devices(dry_run=arguments.dry_run)
             print(f"Physical devices: {len(report['physical'])}")
             print(f"Infrared remotes: {len(report['infrared'])}")
             return 0
         if group == "collect":
-            report = SwitchBotService(_client(), storage, household).collect(
+            report = SwitchBotService(_client(), storage).collect(
                 dry_run=arguments.dry_run
             )
             succeeded = sum(item["success"] for item in report["results"])
@@ -76,7 +75,7 @@ def run_switchbot(arguments: argparse.Namespace) -> int:
             print(f"Failed: {report['devices'] - succeeded}")
             return 1 if succeeded != report["devices"] else 0
         if group == "import":
-            importer = SwitchBotImporter(storage, household.filename_device_ids)
+            importer = SwitchBotImporter(storage)
             if action == "inspect":
                 report = importer.inspect(arguments.path)
             elif action == "run":

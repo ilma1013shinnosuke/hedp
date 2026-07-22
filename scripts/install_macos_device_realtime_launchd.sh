@@ -8,25 +8,16 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-source "${SCRIPT_DIR}/environment_compatibility.sh"
-sumicore_apply_legacy_environment \
-    FUSIONSOLAR_BASE_URL FUSIONSOLAR_STATION_DN \
-    FUSIONSOLAR_USERNAME FUSIONSOLAR_PASSWORD \
-    FUSIONSOLAR_DEVICE_DNS FUSIONSOLAR_BATTERY_DN \
-    FUSIONSOLAR_BATTERY_SIGIDS
 RUN_SCRIPT="${SCRIPT_DIR}/run_device_realtime.sh"
-PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.device-realtime.plist"
+PLIST_PATH="${HOME}/Library/LaunchAgents/com.hedp.device-realtime.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
-LABEL="com.sumicore.device-realtime"
-LEGACY_LABEL="com.hedp.device-realtime"
+LABEL="com.hedp.device-realtime"
 DOMAIN="gui/$(id -u)"
 
 : "${HEDP_FUSIONSOLAR_BASE_URL:?Set HEDP_FUSIONSOLAR_BASE_URL before installing.}"
 : "${HEDP_FUSIONSOLAR_STATION_DN:?Set HEDP_FUSIONSOLAR_STATION_DN before installing.}"
 : "${HEDP_FUSIONSOLAR_USERNAME:?Set HEDP_FUSIONSOLAR_USERNAME before installing.}"
 : "${HEDP_FUSIONSOLAR_DEVICE_DNS:?Set HEDP_FUSIONSOLAR_DEVICE_DNS before installing.}"
-: "${HEDP_FUSIONSOLAR_BATTERY_DN:?Set HEDP_FUSIONSOLAR_BATTERY_DN before installing.}"
-: "${HEDP_FUSIONSOLAR_BATTERY_SIGIDS:?Set HEDP_FUSIONSOLAR_BATTERY_SIGIDS before installing.}"
 if [[ -z "${HEDP_FUSIONSOLAR_PASSWORD:-}" ]]; then
     read -r -s -p "HEDP_FUSIONSOLAR_PASSWORD: " HEDP_FUSIONSOLAR_PASSWORD
     printf '\n'
@@ -48,7 +39,7 @@ umask 077
     printf '  <key>ProgramArguments</key><array><string>%s</string></array>\n' "$(xml_escape "${RUN_SCRIPT}")"
     printf '  <key>WorkingDirectory</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}")"
     printf '%s\n' '  <key>StartInterval</key><integer>300</integer>' '  <key>EnvironmentVariables</key><dict>'
-    for name in HEDP_FUSIONSOLAR_BASE_URL HEDP_FUSIONSOLAR_STATION_DN HEDP_FUSIONSOLAR_USERNAME HEDP_FUSIONSOLAR_PASSWORD HEDP_FUSIONSOLAR_DEVICE_DNS HEDP_FUSIONSOLAR_BATTERY_DN HEDP_FUSIONSOLAR_BATTERY_SIGIDS; do
+    for name in HEDP_FUSIONSOLAR_BASE_URL HEDP_FUSIONSOLAR_STATION_DN HEDP_FUSIONSOLAR_USERNAME HEDP_FUSIONSOLAR_PASSWORD HEDP_FUSIONSOLAR_DEVICE_DNS; do
         printf '    <key>%s</key><string>%s</string>\n' "${name}" "$(xml_escape "${!name}")"
     done
     printf '    <key>HEDP_DATABASE_PATH</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}/hedp.db")"
@@ -58,6 +49,7 @@ umask 077
     printf '%s\n' '</dict>' '</plist>'
 } > "${PLIST_PATH}"
 chmod 600 "${PLIST_PATH}"
-"${SCRIPT_DIR}/switch_macos_launchd_job.sh" \
-    "${LABEL}" "${PLIST_PATH}" "${LEGACY_LABEL}"
+launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
+launchctl bootstrap "${DOMAIN}" "${PLIST_PATH}"
+launchctl kickstart -k "${DOMAIN}/${LABEL}"
 echo "Installed ${LABEL}."

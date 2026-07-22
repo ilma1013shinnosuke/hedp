@@ -20,4 +20,3 @@ logs/
 runtime/
 *.plist
 HEDP_CODEX_CONTEXT.md
-config/local/

@@ -6,10 +6,11 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
     exit 1
 fi
 
+LABEL="com.hedp.collect"
 DOMAIN="gui/$(id -u)"
-for label in com.sumicore.collect com.hedp.collect; do
-    plist_path="${HOME}/Library/LaunchAgents/${label}.plist"
-    launchctl bootout "${DOMAIN}/${label}" 2>/dev/null || true
-    rm -f "${plist_path}"
-    echo "Uninstalled ${label}."
-done
+PLIST_PATH="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+
+launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
+rm -f "${PLIST_PATH}"
+
+echo "Uninstalled ${LABEL}."

@@ -8,16 +8,11 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-source "${SCRIPT_DIR}/environment_compatibility.sh"
-sumicore_apply_legacy_environment \
-    FUSIONSOLAR_BASE_URL FUSIONSOLAR_STATION_DN \
-    FUSIONSOLAR_USERNAME FUSIONSOLAR_PASSWORD
 HEDP_COMMAND="${REPOSITORY_ROOT}/.venv/bin/hedp"
 RUN_DAILY_SCRIPT="${SCRIPT_DIR}/run_daily.sh"
-PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.collect.plist"
+PLIST_PATH="${HOME}/Library/LaunchAgents/com.hedp.collect.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
-LABEL="com.sumicore.collect"
-LEGACY_LABEL="com.hedp.collect"
+LABEL="com.hedp.collect"
 DOMAIN="gui/$(id -u)"
 
 if [[ ! -x "${HEDP_COMMAND}" ]]; then
@@ -91,7 +86,8 @@ umask 077
 } > "${PLIST_PATH}"
 chmod 600 "${PLIST_PATH}"
 
-"${SCRIPT_DIR}/switch_macos_launchd_job.sh" \
-    "${LABEL}" "${PLIST_PATH}" "${LEGACY_LABEL}"
+launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
+launchctl bootstrap "${DOMAIN}" "${PLIST_PATH}"
+launchctl kickstart -k "${DOMAIN}/${LABEL}"
 
 echo "Installed ${LABEL}."

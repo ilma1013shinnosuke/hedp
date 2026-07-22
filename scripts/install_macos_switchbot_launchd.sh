@@ -9,10 +9,9 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RUN_SCRIPT="${SCRIPT_DIR}/run_switchbot_hourly.sh"
-PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.switchbot.plist"
+PLIST_PATH="${HOME}/Library/LaunchAgents/com.hedp.switchbot.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
-LABEL="com.sumicore.switchbot"
-LEGACY_LABEL="com.hedp.switchbot"
+LABEL="com.hedp.switchbot"
 DOMAIN="gui/$(id -u)"
 
 mkdir -p "$(dirname "${PLIST_PATH}")" "${LOG_DIRECTORY}"
@@ -38,6 +37,8 @@ cat > "${PLIST_PATH}" <<PLIST
 </dict></plist>
 PLIST
 chmod 600 "${PLIST_PATH}"
-"${SCRIPT_DIR}/switch_macos_launchd_job.sh" \
-    "${LABEL}" "${PLIST_PATH}" "${LEGACY_LABEL}"
+plutil -lint "${PLIST_PATH}"
+launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
+launchctl bootstrap "${DOMAIN}" "${PLIST_PATH}"
+launchctl kickstart -k "${DOMAIN}/${LABEL}"
 echo "Installed ${LABEL}."
