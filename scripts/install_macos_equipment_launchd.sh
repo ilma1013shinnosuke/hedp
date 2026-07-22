@@ -9,14 +9,17 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RUN_SCRIPT="${SCRIPT_DIR}/run_equipment_daily.sh"
-PLIST_PATH="${HOME}/Library/LaunchAgents/com.hedp.equipment.plist"
+PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.equipment.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
-LABEL="com.hedp.equipment"
+LABEL="com.sumicore.equipment"
+LEGACY_LABEL="com.hedp.equipment"
 DOMAIN="gui/$(id -u)"
 
 : "${HEDP_FUSIONSOLAR_BASE_URL:?Set HEDP_FUSIONSOLAR_BASE_URL before installing.}"
 : "${HEDP_FUSIONSOLAR_STATION_DN:?Set HEDP_FUSIONSOLAR_STATION_DN before installing.}"
 : "${HEDP_FUSIONSOLAR_USERNAME:?Set HEDP_FUSIONSOLAR_USERNAME before installing.}"
+: "${HEDP_FUSIONSOLAR_BATTERY_DN:?Set HEDP_FUSIONSOLAR_BATTERY_DN before installing.}"
+: "${HEDP_FUSIONSOLAR_BATTERY_SIGIDS:?Set HEDP_FUSIONSOLAR_BATTERY_SIGIDS before installing.}"
 if [[ -z "${HEDP_FUSIONSOLAR_PASSWORD:-}" ]]; then
     read -r -s -p "HEDP_FUSIONSOLAR_PASSWORD: " HEDP_FUSIONSOLAR_PASSWORD
     printf '\n'
@@ -38,13 +41,8 @@ umask 077
     printf '  <key>ProgramArguments</key><array><string>%s</string></array>\n' "$(xml_escape "${RUN_SCRIPT}")"
     printf '  <key>WorkingDirectory</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}")"
     printf '%s\n' '  <key>StartCalendarInterval</key><dict>' '    <key>Hour</key><integer>3</integer>' '    <key>Minute</key><integer>10</integer>' '  </dict>' '  <key>EnvironmentVariables</key><dict>'
-    for name in HEDP_FUSIONSOLAR_BASE_URL HEDP_FUSIONSOLAR_STATION_DN HEDP_FUSIONSOLAR_USERNAME HEDP_FUSIONSOLAR_PASSWORD; do
+    for name in HEDP_FUSIONSOLAR_BASE_URL HEDP_FUSIONSOLAR_STATION_DN HEDP_FUSIONSOLAR_USERNAME HEDP_FUSIONSOLAR_PASSWORD HEDP_FUSIONSOLAR_BATTERY_DN HEDP_FUSIONSOLAR_BATTERY_SIGIDS; do
         printf '    <key>%s</key><string>%s</string>\n' "${name}" "$(xml_escape "${!name}")"
-    done
-    for name in HEDP_FUSIONSOLAR_BATTERY_DN HEDP_FUSIONSOLAR_BATTERY_SIGIDS; do
-        if [[ -n "${!name:-}" ]]; then
-            printf '    <key>%s</key><string>%s</string>\n' "${name}" "$(xml_escape "${!name}")"
-        fi
     done
     printf '    <key>HEDP_DATABASE_PATH</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}/hedp.db")"
     printf '%s\n' '  </dict>'
@@ -53,6 +51,7 @@ umask 077
     printf '%s\n' '</dict>' '</plist>'
 } > "${PLIST_PATH}"
 chmod 600 "${PLIST_PATH}"
+launchctl bootout "${DOMAIN}/${LEGACY_LABEL}" 2>/dev/null || true
 launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
 launchctl bootstrap "${DOMAIN}" "${PLIST_PATH}"
 launchctl kickstart -k "${DOMAIN}/${LABEL}"

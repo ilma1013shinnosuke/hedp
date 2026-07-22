@@ -12,7 +12,7 @@ from hedp.adapters.fusionsolar.energy_balance_collector import (
 
 def test_collect_for_date_gets_full_response_with_confirmed_query() -> None:
     client = Mock()
-    client.station_dn = "NE=33812827"
+    client.station_dn = "NE=1"
     x_axis = [
         f"2026-07-20 {minutes // 60:02d}:{minutes % 60:02d}"
         for minutes in range(0, 24 * 60, 5)
@@ -33,7 +33,7 @@ def test_collect_for_date_gets_full_response_with_confirmed_query() -> None:
         name: ["0.000"] * 287 + ["--"] for name in series_names
     }
     data = {
-        "stationDn": "NE=33812827",
+        "stationDn": "NE=1",
         "stationTimezone": "Asia/Tokyo",
         "clientTimezone": "Asia/Shanghai",
         "existInverter": True,
@@ -76,7 +76,7 @@ def test_collect_for_date_gets_full_response_with_confirmed_query() -> None:
         "/rest/pvms/web/station/v1/overview/energy-balance"
     )
     assert parse_qs(parsed.query) == {
-        "stationDn": ["NE=33812827"],
+        "stationDn": ["NE=1"],
         "timeDim": ["2"],
         "queryTime": [
             str(

@@ -82,3 +82,18 @@ def test_all_launchd_installers_make_logs_private():
         assert "chmod 600" in script
         assert ".out.log" in script
         assert ".err.log" in script
+
+
+def test_installers_switch_from_legacy_to_sumicore_labels():
+    installers = [
+        "install_macos_launchd.sh",
+        "install_macos_device_realtime_launchd.sh",
+        "install_macos_equipment_launchd.sh",
+        "install_macos_daily_health_launchd.sh",
+        "install_macos_switchbot_launchd.sh",
+    ]
+    for name in installers:
+        script = (ROOT / "scripts" / name).read_text()
+        assert 'LABEL="com.sumicore.' in script
+        assert 'LEGACY_LABEL="com.hedp.' in script
+        assert 'bootout "${DOMAIN}/${LEGACY_LABEL}"' in script

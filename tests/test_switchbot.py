@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import Mock
 import zipfile
 
+from hedp.adapters.switchbot.household import SwitchBotHouseholdConfiguration
 from hedp.adapters.switchbot.importer import CSV_COLUMNS, SwitchBotImporter
 from hedp.adapters.switchbot.service import SwitchBotService
 from hedp.adapters.switchbot.storage import SwitchBotStorage
@@ -14,18 +15,43 @@ def _storage(tmp_path):
     return storage
 
 
+FILENAME_DEVICE_IDS = {
+    "車内": "vehicle-sensor",
+    "書斎": "study-sensor",
+    "リビング": "living-sensor",
+    "洗面": "washroom-sensor",
+}
+
+
 def test_refresh_tracks_device_name_and_location_history(tmp_path):
     storage = _storage(tmp_path)
     client = Mock()
     client.devices.return_value = {
         "statusCode": 100,
         "body": {"deviceList": [{
-            "deviceId": "C1BD4CEC2D7B", "deviceName": "外",
+            "deviceId": "outdoor-sensor", "deviceName": "外",
             "deviceType": "WoIOSensor", "future": 1,
         }], "infraredRemoteList": []},
     }
     try:
-        SwitchBotService(client, storage).refresh_devices()
+        household = SwitchBotHouseholdConfiguration(
+            location_history=(
+                {
+                    "device_id": "outdoor-sensor",
+                    "location": "車内",
+                    "purpose": "車内温湿度",
+                    "valid_from": "2023-10-23",
+                    "valid_to": "2026-07-21",
+                },
+                {
+                    "device_id": "outdoor-sensor",
+                    "location": "外",
+                    "purpose": "屋外温湿度",
+                    "valid_from": "2026-07-21",
+                },
+            )
+        )
+        SwitchBotService(client, storage, household).refresh_devices()
         device = storage.devices()[0]
         locations = storage.rows(
             "SELECT * FROM switchbot_device_locations ORDER BY valid_from"
@@ -33,7 +59,7 @@ def test_refresh_tracks_device_name_and_location_history(tmp_path):
     finally:
         storage.close()
     assert device["current_api_name"] == "外"
-    moved = [row for row in locations if row["device_id"] == "C1BD4CEC2D7B"]
+    moved = [row for row in locations if row["device_id"] == "outdoor-sensor"]
     assert [(row["location"], row["valid_from"], row["valid_to"]) for row in moved] == [
         ("車内", "2023-10-23", "2026-07-21"),
         ("外", "2026-07-21", None),
@@ -106,7 +132,7 @@ def test_import_is_streamed_timezone_aware_idempotent_and_conflict_safe(tmp_path
     ]
     _write_csv(path, rows)
     storage = _storage(tmp_path)
-    importer = SwitchBotImporter(storage)
+    importer = SwitchBotImporter(storage, FILENAME_DEVICE_IDS)
     try:
         inspection = importer.inspect(path)["files"][0]
         first = importer.run(path)["files"][0]
@@ -134,7 +160,7 @@ def test_import_blocks_different_value_same_timestamp_and_bad_rows(tmp_path):
     ])
     storage = _storage(tmp_path)
     try:
-        report = SwitchBotImporter(storage).run(path)["files"][0]
+        report = SwitchBotImporter(storage, FILENAME_DEVICE_IDS).run(path)["files"][0]
     finally:
         storage.close()
     assert report["status"] == "blocked"
@@ -144,9 +170,10 @@ def test_import_blocks_different_value_same_timestamp_and_bad_rows(tmp_path):
 
 def test_import_filename_mapping_accepts_decomposed_japanese(tmp_path):
     path = tmp_path / "リビング_data分.csv"
-    assert SwitchBotImporter._device_id(path) == "E888C195493C"
-    assert SwitchBotImporter._device_id(tmp_path / "洗面_data.csv") == (
-        "E11EBC4B5382"
+    importer = SwitchBotImporter(Mock(), FILENAME_DEVICE_IDS)
+    assert importer._device_id(path) == "living-sensor"
+    assert importer._device_id(tmp_path / "洗面_data.csv") == (
+        "washroom-sensor"
     )
 
 

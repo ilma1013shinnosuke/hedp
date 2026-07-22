@@ -1,6 +1,7 @@
-# hedp
+# SumiCore
 
-HEDP is a long-lived household energy data platform. See [PROJECT.md](PROJECT.md)
+SumiCore（旧HEDP）は、家庭の事実を長期保存し、分析・判断・安全な操作へつなぐ基盤です。
+See [PROJECT.md](PROJECT.md)
 for its purpose and principles, [SPECIFICATION.md](SPECIFICATION.md) for the
 current technical contract, and
 [FusionSolar knowledge](docs/integrations/fusionsolar/README.md) for verified vendor API
@@ -12,22 +13,32 @@ details and unknowns.
 [directory policy](docs/directory-policy.md)、現在の
 ファイル対応は [current layout](docs/current-layout.md)、秘密情報と実データは
 [security policy](docs/security-policy.md) を参照してください。
+家庭固有値の置き場所は[local configuration](docs/local-configuration.md)、Python更新は
+[Python runtime](docs/python-runtime.md)、改名は
+[name and renaming](docs/name-and-renaming.md)を参照してください。
 
 ## Setup
 
 ```bash
-python3 -m venv .venv
+python3.12 scripts/check_python_runtime.py
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
 ```
+
+macOS付属のPython 3.9（LibreSSL版）は使用しません。更新と安全な切替は
+[`docs/python-runtime.md`](docs/python-runtime.md)を参照してください。
 
 Set `HEDP_FUSIONSOLAR_BASE_URL`, `HEDP_FUSIONSOLAR_STATION_DN`,
 `HEDP_FUSIONSOLAR_USERNAME`, `HEDP_FUSIONSOLAR_PASSWORD`, and
 `HEDP_DATABASE_PATH`. Realtime collection also requires the ordered,
 comma-separated `HEDP_FUSIONSOLAR_DEVICE_DNS` value.
-Battery DC collection uses the confirmed battery DeviceDN and Signal IDs by
-default. `HEDP_FUSIONSOLAR_BATTERY_DN` and
-`HEDP_FUSIONSOLAR_BATTERY_SIGIDS` are optional overrides.
+Battery DC collection also requires `HEDP_FUSIONSOLAR_BATTERY_DN` and
+`HEDP_FUSIONSOLAR_BATTERY_SIGIDS`; household-specific identifiers have no
+source-code defaults. SwitchBot filename mappings and room history are read
+from the Git-ignored JSON file named by
+`HEDP_SWITCHBOT_HOUSEHOLD_CONFIG_PATH`. A value-free example is under
+`config/examples/`.
 
 ## Main commands
 

@@ -30,7 +30,9 @@
 | `adapters/fusionsolar/report_importer.py` | 旧レポートの監査付き取込 | 移動済み |
 
 現役の検証済みAPI知識は `docs/integrations/fusionsolar/README.md` に置く。
-GAS版を実装するまでは `cloud/gas/fusionsolar/`を作らない。
+GAS版FusionSolarの未配備コードは `cloud/gas/fusionsolar/` に置く。現在は前日分Rawを
+Drive受け渡しキューへ保存する実装までで、自動認証、ローカル取込、trigger配備は未完了。
+実サービスへ配備するまではローカルlaunchd収集が正本である。
 
 ## SwitchBot（移動済み）
 

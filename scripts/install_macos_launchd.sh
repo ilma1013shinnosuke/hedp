@@ -10,9 +10,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 HEDP_COMMAND="${REPOSITORY_ROOT}/.venv/bin/hedp"
 RUN_DAILY_SCRIPT="${SCRIPT_DIR}/run_daily.sh"
-PLIST_PATH="${HOME}/Library/LaunchAgents/com.hedp.collect.plist"
+PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.collect.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
-LABEL="com.hedp.collect"
+LABEL="com.sumicore.collect"
+LEGACY_LABEL="com.hedp.collect"
 DOMAIN="gui/$(id -u)"
 
 if [[ ! -x "${HEDP_COMMAND}" ]]; then
@@ -86,6 +87,7 @@ umask 077
 } > "${PLIST_PATH}"
 chmod 600 "${PLIST_PATH}"
 
+launchctl bootout "${DOMAIN}/${LEGACY_LABEL}" 2>/dev/null || true
 launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
 launchctl bootstrap "${DOMAIN}" "${PLIST_PATH}"
 launchctl kickstart -k "${DOMAIN}/${LABEL}"

@@ -9,9 +9,10 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RUN_SCRIPT="${SCRIPT_DIR}/run_daily_health.sh"
-PLIST_PATH="${HOME}/Library/LaunchAgents/com.hedp.daily-health.plist"
+PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.daily-health.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
-LABEL="com.hedp.daily-health"
+LABEL="com.sumicore.daily-health"
+LEGACY_LABEL="com.hedp.daily-health"
 DOMAIN="gui/$(id -u)"
 
 : "${HEDP_FUSIONSOLAR_DEVICE_DNS:?Set HEDP_FUSIONSOLAR_DEVICE_DNS before installing.}"
@@ -40,6 +41,7 @@ umask 077
 } > "${PLIST_PATH}"
 chmod 600 "${PLIST_PATH}"
 plutil -lint "${PLIST_PATH}"
+launchctl bootout "${DOMAIN}/${LEGACY_LABEL}" 2>/dev/null || true
 launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
 launchctl bootstrap "${DOMAIN}" "${PLIST_PATH}"
 launchctl kickstart -k "${DOMAIN}/${LABEL}"

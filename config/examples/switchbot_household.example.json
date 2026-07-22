@@ -1,0 +1,16 @@
+{
+  "filename_device_ids": {
+    "リビング": "example-living-sensor"
+  },
+  "location_history": [
+    {
+      "device_id": "example-living-sensor",
+      "location": "リビング",
+      "purpose": "温湿度",
+      "valid_from": "2026-01-01",
+      "precision": "day",
+      "source": "local_household_config"
+    }
+  ],
+  "name_history": []
+}

@@ -3,17 +3,19 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hedp"
-version = "0.1.0"
-description = ""
+name = "sumicore"
+version = "0.2.0"
+description = "Long-lived household evidence, intelligence, and control platform"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "cryptography>=42",
     "requests>=2.31",
+    "urllib3>=2.2",
 ]
 
 [project.scripts]
+sumicore = "sumicore.main:cli"
 hedp = "hedp.main:cli"
 
 [dependency-groups]
@@ -28,4 +30,4 @@ testpaths = ["tests"]
 
 [tool.ruff]
 src = ["src", "tests"]
-target-version = "py39"
+target-version = "py311"

@@ -23,25 +23,15 @@ CSV_COLUMNS = (
     "DPT_Celsius(°C)",
     "VPD(kPa)",
 )
-DEVICE_BY_FILENAME = {
-    "2Fトイレ": "D508ED4BD39F",
-    "クローゼット": "E2042421588D",
-    "バスルーム": "F7F4263069C0",
-    "フリースペース": "F6AB0E1D5517",
-    "リビング": "E888C195493C",
-    "外気温": "D9CF767A857F",
-    "玄関": "EA56DAD63611",
-    "車内": "C1BD4CEC2D7B",
-    "書斎": "D064886F78EF",
-    "洗面": "E11EBC4B5382",
-    "寝室": "E4BD97F06AB2",
-}
 TOKYO = ZoneInfo("Asia/Tokyo")
 
 
 class SwitchBotImporter:
-    def __init__(self, storage: SwitchBotStorage) -> None:
+    def __init__(
+        self, storage: SwitchBotStorage, filename_device_ids: dict[str, str]
+    ) -> None:
         self.storage = storage
+        self.filename_device_ids = filename_device_ids
 
     def inspect(self, path: Path) -> dict[str, Any]:
         files = self._files(path)
@@ -316,10 +306,9 @@ class SwitchBotImporter:
             if item.suffix.casefold() in {".csv", ".xlsx"}
         )
 
-    @staticmethod
-    def _device_id(path: Path) -> str:
+    def _device_id(self, path: Path) -> str:
         filename = unicodedata.normalize("NFC", path.name)
-        for prefix, device_id in DEVICE_BY_FILENAME.items():
+        for prefix, device_id in self.filename_device_ids.items():
             if filename.startswith(prefix):
                 return device_id
         raise ValueError(f"Unknown SwitchBot history filename: {path.name}")

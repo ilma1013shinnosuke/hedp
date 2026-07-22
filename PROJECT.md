@@ -1,15 +1,14 @@
-# HEDP Project
+# SumiCore Project
 
 ## Purpose
 
-HEDP is a shared household energy data platform, not only a single HEMS
-application. It is intended for more than ten years of operation and must run
-without depending on an AI service. Its stored data will support future
-visualization, analysis, rule development, automation, and applications.
+SumiCore（旧HEDP）は、家庭の設備・環境・エネルギーに関する事実を共有する基盤であり、
+単一のHEMS applicationではない。10年以上の運用を想定し、AI serviceへ依存せずに
+稼働する。保存したデータを将来の可視化、分析、rule開発、自動化、applicationへ利用する。
 
 ## System role
 
-HEDP assists household equipment; it does not replace it. If HEDP stops, the
+SumiCore assists household equipment; it does not replace it. If SumiCore stops, the
 equipment must remain usable through its vendor-provided functions or manual
 operation. Automation must be removable and must never replace equipment
 safety functions.
@@ -36,7 +35,7 @@ safety functions.
 
 ## Data acquisition policy
 
-HEDP normally stores all obtainable external information as RawData, including
+SumiCore normally stores all obtainable external information as RawData, including
 historical and current values, states, equipment information, configuration,
 Signal definitions, alarms, and aggregates. Current-value APIs are collected
 periodically to form snapshot time series. Collection must not discard
