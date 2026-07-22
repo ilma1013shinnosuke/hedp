@@ -133,7 +133,11 @@ def test_run_daily_skips_when_lock_is_held(tmp_path) -> None:
 
     result = subprocess.run(
         [str(run_daily)],
-        env={**os.environ, "TMPDIR": str(tmp_path), "CALL_LOG": str(call_log)},
+        env={
+            **os.environ,
+            "HEDP_WRITER_LOCK_DIRECTORY": str(lock),
+            "CALL_LOG": str(call_log),
+        },
         check=False,
         capture_output=True,
         text=True,
