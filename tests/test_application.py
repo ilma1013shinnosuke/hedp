@@ -4,8 +4,8 @@ from unittest.mock import Mock, call
 import pytest
 
 from hedp.application import Application
-from hedp.raw_data import RawData
-from hedp.record import Record
+from hedp.storage import RawData
+from hedp.storage import Record
 
 
 def test_run_collects_then_saves_and_returns_same_raw_data() -> None:

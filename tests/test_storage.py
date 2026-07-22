@@ -3,8 +3,8 @@ import sqlite3
 
 import pytest
 
-from hedp.raw_data import RawData
-from hedp.record import Record
+from hedp.storage import RawData
+from hedp.storage import Record
 from hedp.storage import Storage
 
 

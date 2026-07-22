@@ -3,7 +3,7 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from hedp.adapters.fusionsolar.client import FusionSolarClient
-from hedp.raw_data import RawData
+from hedp.storage import RawData
 
 
 class FusionSolarEnergyBalanceCollector:

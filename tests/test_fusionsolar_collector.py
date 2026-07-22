@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from hedp.adapters.fusionsolar.station_collector import FusionSolarCollector
-from hedp.raw_data import RawData
+from hedp.storage import RawData
 
 
 def test_collect_for_date_uses_midnight_and_unmodified_response() -> None:

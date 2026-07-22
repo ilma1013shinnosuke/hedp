@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from hedp.raw_data import RawData
-from hedp.record import Record
+from .raw_data import RawData
+from .record import Record
 
 
 class Storage:

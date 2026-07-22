@@ -8,7 +8,7 @@ import pytest
 
 from hedp.configuration import Configuration
 from hedp.main import cli, main
-from hedp.raw_data import RawData
+from hedp.storage import RawData
 
 
 def test_main_builds_runs_and_closes_in_order() -> None:

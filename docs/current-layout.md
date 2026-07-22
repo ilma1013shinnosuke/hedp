@@ -9,9 +9,9 @@
 |---|---|---|
 | `application.py` | 収集、保存、品質確認の進行管理 | 責務を確認しながら各層へ分割 |
 | `configuration.py` | 実行環境から設定を取得 | 共通設定とメーカー設定を分離 |
-| `raw_data.py` | 取得した事実の不変形式 | `storage`の共通モデル |
-| `record.py` | 利用可能な正規化データ | `storage`の共通モデル |
-| `storage.py` | RawDataとRecordのSQLite保存 | `storage` |
+| `storage/raw_data.py` | 取得した事実の不変形式 | 移動済み |
+| `storage/record.py` | 利用可能な正規化データ | 移動済み |
+| `storage/database.py` | RawDataとRecordのSQLite保存 | 移動済み |
 | `daily_health.py` | 読み取り専用の運用点検 | 運用監視。新しい層は作らない |
 | `main.py` | CLIと部品の組み立て | 最後まで薄い入口として維持 |
 

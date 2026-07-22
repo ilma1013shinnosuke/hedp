@@ -21,7 +21,7 @@ from hedp.adapters.fusionsolar.energy_balance_record_builder import (
     FusionSolarEnergyBalanceRecordBuilder,
 )
 from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
-from hedp.raw_data import RawData
+from hedp.storage import RawData
 from hedp.storage import Storage
 
 

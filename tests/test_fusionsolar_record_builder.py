@@ -2,8 +2,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
-from hedp.raw_data import RawData
-from hedp.record import Record
+from hedp.storage import RawData
+from hedp.storage import Record
 
 
 def test_build_creates_reproducible_records_without_changing_payload() -> None:

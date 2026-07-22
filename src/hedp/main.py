@@ -26,7 +26,7 @@ from hedp.adapters.fusionsolar.energy_balance_record_builder import (
 )
 from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
 from hedp.adapters.fusionsolar.report_importer import FusionSolarReportImporter
-from hedp.raw_data import RawData
+from hedp.storage import RawData
 from hedp.storage import Storage
 from hedp.adapters.switchbot.cli import add_switchbot_parser, run_switchbot
 

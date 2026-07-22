@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
-from hedp.raw_data import RawData
-from hedp.record import Record
+from hedp.storage import RawData
+from hedp.storage import Record
 
 
 class FusionSolarEnergyBalanceRecordBuilder:

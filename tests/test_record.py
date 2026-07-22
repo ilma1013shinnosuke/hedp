@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from hedp.record import Record
+from hedp.storage import Record
 
 
 def test_json_round_trip() -> None:

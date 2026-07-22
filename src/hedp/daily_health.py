@@ -8,7 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from hedp.application import Application
-from hedp.raw_data import RawData
+from hedp.storage import RawData
 from hedp.storage import Storage
 
 
