@@ -47,7 +47,11 @@ def test_run_daily_collects_backs_up_and_retains_latest_compressed(tmp_path) -> 
 
     result = subprocess.run(
         [str(run_daily)],
-        env={**os.environ, "CALL_LOG": str(call_log)},
+        env={
+            **os.environ,
+            "HEDP_WRITER_LOCK_DIRECTORY": str(tmp_path / "writer.lock"),
+            "CALL_LOG": str(call_log),
+        },
         check=False,
         capture_output=True,
         text=True,
@@ -79,6 +83,7 @@ def test_run_daily_preserves_partial_data_and_backs_up_after_failure(tmp_path) -
         [str(run_daily)],
         env={
             **os.environ,
+            "HEDP_WRITER_LOCK_DIRECTORY": str(tmp_path / "writer.lock"),
             "CALL_LOG": str(call_log),
             "FAIL_COMMAND": "collect",
         },
@@ -106,6 +111,7 @@ def test_run_daily_fails_when_backup_fails(tmp_path) -> None:
         [str(run_daily)],
         env={
             **os.environ,
+            "HEDP_WRITER_LOCK_DIRECTORY": str(tmp_path / "writer.lock"),
             "CALL_LOG": str(call_log),
             "FAIL_COMMAND": "backup",
         },
