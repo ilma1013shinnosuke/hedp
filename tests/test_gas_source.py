@@ -1,7 +1,8 @@
 from pathlib import Path
 
 
-GAS_ROOT = Path("cloud/gas/fusionsolar")
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+GAS_ROOT = REPOSITORY_ROOT / "cloud/gas/fusionsolar"
 
 
 def test_gas_source_has_manifest_and_required_modules():
