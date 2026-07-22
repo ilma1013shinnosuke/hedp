@@ -1,7 +1,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
+from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
 from hedp.raw_data import RawData
 from hedp.record import Record
 

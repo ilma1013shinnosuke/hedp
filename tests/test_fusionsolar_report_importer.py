@@ -1,7 +1,7 @@
 from pathlib import Path
 import zipfile
 
-from hedp.fusionsolar_report_importer import (
+from hedp.adapters.fusionsolar.report_importer import (
     FusionSolarReportImporter,
     SOURCE,
 )

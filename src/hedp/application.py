@@ -6,21 +6,21 @@ import logging
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from hedp.fusionsolar_collector import FusionSolarCollector
-from hedp.fusionsolar_alarm_collector import FusionSolarAlarmCollector
-from hedp.fusionsolar_battery_dc_collector import (
+from hedp.adapters.fusionsolar.station_collector import FusionSolarCollector
+from hedp.adapters.fusionsolar.alarm_collector import FusionSolarAlarmCollector
+from hedp.adapters.fusionsolar.battery_dc_collector import (
     FusionSolarBatteryDcCollector,
 )
-from hedp.fusionsolar_energy_balance_collector import (
+from hedp.adapters.fusionsolar.energy_balance_collector import (
     FusionSolarEnergyBalanceCollector,
 )
-from hedp.fusionsolar_device_realtime_collector import (
+from hedp.adapters.fusionsolar.device_realtime_collector import (
     FusionSolarDeviceRealtimeCollector,
 )
-from hedp.fusionsolar_energy_balance_record_builder import (
+from hedp.adapters.fusionsolar.energy_balance_record_builder import (
     FusionSolarEnergyBalanceRecordBuilder,
 )
-from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
+from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
 from hedp.raw_data import RawData
 from hedp.storage import Storage
 

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from hedp.fusionsolar_energy_balance_collector import (
+from hedp.adapters.fusionsolar.energy_balance_collector import (
     FusionSolarEnergyBalanceCollector,
 )
 
@@ -61,7 +61,7 @@ def test_collect_for_date_gets_full_response_with_confirmed_query() -> None:
     collected_at = datetime(2026, 7, 20, 1, 2, 4, tzinfo=timezone.utc)
 
     with patch(
-        "hedp.fusionsolar_energy_balance_collector.datetime"
+        "hedp.adapters.fusionsolar.energy_balance_collector.datetime"
     ) as datetime_class:
         datetime_class.combine.side_effect = datetime.combine
         datetime_class.now.side_effect = [request_time, collected_at]

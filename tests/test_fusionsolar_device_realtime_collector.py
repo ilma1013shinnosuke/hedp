@@ -1,6 +1,6 @@
 from urllib.parse import parse_qs, urlsplit
 
-from hedp.fusionsolar_device_realtime_collector import FusionSolarDeviceRealtimeCollector
+from hedp.adapters.fusionsolar.device_realtime_collector import FusionSolarDeviceRealtimeCollector
 
 
 class Client:

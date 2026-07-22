@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from hedp.fusionsolar_collector import FusionSolarCollector
+from hedp.adapters.fusionsolar.station_collector import FusionSolarCollector
 from hedp.raw_data import RawData
 
 
@@ -74,7 +74,7 @@ def test_collect_uses_today_in_tokyo() -> None:
     raw_data = Mock(spec=RawData)
     collector.collect_for_date = Mock(return_value=raw_data)
 
-    with patch("hedp.fusionsolar_collector.datetime") as datetime_class:
+    with patch("hedp.adapters.fusionsolar.station_collector.datetime") as datetime_class:
         datetime_class.now.return_value = datetime(
             2026, 7, 20, 23, 30, tzinfo=ZoneInfo("Asia/Tokyo")
         )

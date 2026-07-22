@@ -3,7 +3,7 @@ from urllib.parse import quote
 
 import pytest
 
-from hedp.fusionsolar_client import FusionSolarClient
+from hedp.adapters.fusionsolar.client import FusionSolarClient
 
 
 def make_response(
@@ -25,7 +25,7 @@ def make_response(
 
 @pytest.fixture
 def client_and_session():
-    with patch("hedp.fusionsolar_client.requests.Session") as session_class:
+    with patch("hedp.adapters.fusionsolar.client.requests.Session") as session_class:
         session = session_class.return_value
         client = FusionSolarClient(
             "https://example.test", "station-dn", "user", "password"
@@ -127,7 +127,7 @@ def test_encrypt_password_url_encodes_chunks_and_appends_version(
     public_key.encrypt.side_effect = [b"first", b"second"]
 
     with patch(
-        "hedp.fusionsolar_client.serialization.load_pem_public_key",
+        "hedp.adapters.fusionsolar.client.serialization.load_pem_public_key",
         return_value=public_key,
     ):
         encrypted = client._encrypt_password("pem", "version-7")

@@ -54,7 +54,7 @@ contains `organizationName`, `username`, encrypted `password`, empty
 `verifycode`, and `multiRegionName`. The request also includes `decision=1`, a
 millisecond timestamp, and a nonce.
 
-Evidence: `src/hedp/fusionsolar_client.py` —
+Evidence: `src/hedp/adapters/fusionsolar/client.py` —
 `FusionSolarClient.login`, `_encrypt_password`, `_follow_redirects`,
 `_get_session_data`; `tests/test_fusionsolar_client.py` —
 `test_login_uses_verified_requests_and_follows_redirects` and
@@ -149,7 +149,7 @@ labelled `FusionSolar Web API`. The GAS source/function expected in
 `03_EnergyCollector.js` was not available, so its function name remains
 unverified. Python request construction is implemented by
 `FusionSolarEnergyBalanceCollector.collect_for_date` in
-`src/hedp/fusionsolar_energy_balance_collector.py`. Values in
+`src/hedp/adapters/fusionsolar/energy_balance_collector.py`. Values in
 `12_RAW_FusionSolar_5分` are parser output, not proof that identically named
 keys occur in the API JSON; `quality=measured_import_derived` also proves that
 at least some normalized values may be derived rather than direct keys.
@@ -187,9 +187,9 @@ keys are not yet confirmed.
 | Past dates | Yes. The local database contains collected data from 2022-12-15 through 2026-07-20; Python requests one day at a time. |
 | Recommended collector | Existing `FusionSolarCollector` (retain); a future rename is not required by this inventory. |
 
-Evidence: `src/hedp/fusionsolar_collector.py` —
+Evidence: `src/hedp/adapters/fusionsolar/station_collector.py` —
 `FusionSolarCollector.collect_for_date` and `collect_range`;
-`src/hedp/fusionsolar_record_builder.py` —
+`src/hedp/adapters/fusionsolar/record_builder.py` —
 `FusionSolarRecordBuilder.build`; tests with the same function names in
 `tests/test_fusionsolar_collector.py` and
 `tests/test_fusionsolar_record_builder.py`; local `hedp.db` contains 1,327

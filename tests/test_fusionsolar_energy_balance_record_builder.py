@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from hedp.fusionsolar_energy_balance_record_builder import FusionSolarEnergyBalanceRecordBuilder
+from hedp.adapters.fusionsolar.energy_balance_record_builder import FusionSolarEnergyBalanceRecordBuilder
 from hedp.raw_data import RawData
 
 

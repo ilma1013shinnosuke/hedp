@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from hedp.fusionsolar_alarm_collector import FusionSolarAlarmCollector
+from hedp.adapters.fusionsolar.alarm_collector import FusionSolarAlarmCollector
 
 
 class Client:

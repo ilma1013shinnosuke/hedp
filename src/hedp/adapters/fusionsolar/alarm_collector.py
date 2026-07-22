@@ -6,7 +6,7 @@ import logging
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
-from hedp.fusionsolar_client import FusionSolarClient
+from hedp.adapters.fusionsolar.client import FusionSolarClient
 from hedp.raw_data import RawData
 
 

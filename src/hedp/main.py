@@ -9,23 +9,23 @@ from zoneinfo import ZoneInfo
 from hedp.application import Application
 from hedp.configuration import Configuration
 from hedp.daily_health import DailyHealthService
-from hedp.fusionsolar_client import FusionSolarClient
-from hedp.fusionsolar_alarm_collector import FusionSolarAlarmCollector
-from hedp.fusionsolar_battery_dc_collector import (
+from hedp.adapters.fusionsolar.client import FusionSolarClient
+from hedp.adapters.fusionsolar.alarm_collector import FusionSolarAlarmCollector
+from hedp.adapters.fusionsolar.battery_dc_collector import (
     FusionSolarBatteryDcCollector,
 )
-from hedp.fusionsolar_collector import FusionSolarCollector
-from hedp.fusionsolar_energy_balance_collector import (
+from hedp.adapters.fusionsolar.station_collector import FusionSolarCollector
+from hedp.adapters.fusionsolar.energy_balance_collector import (
     FusionSolarEnergyBalanceCollector,
 )
-from hedp.fusionsolar_device_realtime_collector import (
+from hedp.adapters.fusionsolar.device_realtime_collector import (
     FusionSolarDeviceRealtimeCollector,
 )
-from hedp.fusionsolar_energy_balance_record_builder import (
+from hedp.adapters.fusionsolar.energy_balance_record_builder import (
     FusionSolarEnergyBalanceRecordBuilder,
 )
-from hedp.fusionsolar_record_builder import FusionSolarRecordBuilder
-from hedp.fusionsolar_report_importer import FusionSolarReportImporter
+from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
+from hedp.adapters.fusionsolar.report_importer import FusionSolarReportImporter
 from hedp.raw_data import RawData
 from hedp.storage import Storage
 from hedp.switchbot_cli import add_switchbot_parser, run_switchbot

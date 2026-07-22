@@ -15,19 +15,19 @@
 | `daily_health.py` | 読み取り専用の運用点検 | 運用監視。新しい層は作らない |
 | `main.py` | CLIと部品の組み立て | 最後まで薄い入口として維持 |
 
-## FusionSolar
+## FusionSolar（移動済み）
 
-| 現在のファイル | 主な役割 | 将来の場所 |
+| 現在のファイル | 主な役割 | 状態 |
 |---|---|---|
-| `fusionsolar_client.py` | 認証とHTTP通信 | `adapters/fusionsolar/` |
-| `fusionsolar_collector.py` | 発電所KPI取得 | `adapters/fusionsolar/` |
-| `fusionsolar_energy_balance_collector.py` | 5分電力収支取得 | `adapters/fusionsolar/` |
-| `fusionsolar_device_realtime_collector.py` | 機器現在値取得 | `adapters/fusionsolar/` |
-| `fusionsolar_battery_dc_collector.py` | 蓄電池DC情報取得 | `adapters/fusionsolar/` |
-| `fusionsolar_alarm_collector.py` | 現在・履歴アラーム取得 | `adapters/fusionsolar/` |
-| `fusionsolar_record_builder.py` | KPIをRecordへ変換 | 変換規則を確認して配置 |
-| `fusionsolar_energy_balance_record_builder.py` | 電力収支をRecordへ変換 | 変換規則を確認して配置 |
-| `fusionsolar_report_importer.py` | 旧レポートの監査付き取込 | `adapters/fusionsolar/`内の取込機能 |
+| `adapters/fusionsolar/client.py` | 認証とHTTP通信 | 移動済み |
+| `adapters/fusionsolar/station_collector.py` | 発電所KPI取得 | 移動済み |
+| `adapters/fusionsolar/energy_balance_collector.py` | 5分電力収支取得 | 移動済み |
+| `adapters/fusionsolar/device_realtime_collector.py` | 機器現在値取得 | 移動済み |
+| `adapters/fusionsolar/battery_dc_collector.py` | 蓄電池DC情報取得 | 移動済み |
+| `adapters/fusionsolar/alarm_collector.py` | 現在・履歴アラーム取得 | 移動済み |
+| `adapters/fusionsolar/record_builder.py` | KPIをRecordへ変換 | 移動済み |
+| `adapters/fusionsolar/energy_balance_record_builder.py` | 電力収支をRecordへ変換 | 移動済み |
+| `adapters/fusionsolar/report_importer.py` | 旧レポートの監査付き取込 | 移動済み |
 
 現役の検証済みAPI知識は `docs/integrations/fusionsolar/README.md` に置く。
 GAS版を実装するまでは `cloud/gas/fusionsolar/`を作らない。

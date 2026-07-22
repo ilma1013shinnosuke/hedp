@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from hedp.fusionsolar_client import FusionSolarClient
+from hedp.adapters.fusionsolar.client import FusionSolarClient
 from hedp.raw_data import RawData
 
 

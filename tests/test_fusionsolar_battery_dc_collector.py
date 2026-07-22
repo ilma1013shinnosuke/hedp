@@ -1,6 +1,6 @@
 from urllib.parse import parse_qs, urlsplit
 
-from hedp.fusionsolar_battery_dc_collector import (
+from hedp.adapters.fusionsolar.battery_dc_collector import (
     FusionSolarBatteryDcCollector,
 )
 
