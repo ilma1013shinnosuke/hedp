@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from hedp.switchbot_client import SwitchBotClient
-from hedp.switchbot_storage import SwitchBotStorage
+from hedp.adapters.switchbot.client import SwitchBotClient
+from hedp.adapters.switchbot.storage import SwitchBotStorage
 
 
 TOKYO = ZoneInfo("Asia/Tokyo")

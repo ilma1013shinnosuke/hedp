@@ -28,7 +28,7 @@ from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
 from hedp.adapters.fusionsolar.report_importer import FusionSolarReportImporter
 from hedp.raw_data import RawData
 from hedp.storage import Storage
-from hedp.switchbot_cli import add_switchbot_parser, run_switchbot
+from hedp.adapters.switchbot.cli import add_switchbot_parser, run_switchbot
 
 
 def _create_application() -> tuple[Application, sqlite3.Connection]:

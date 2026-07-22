@@ -3,9 +3,9 @@ from pathlib import Path
 from unittest.mock import Mock
 import zipfile
 
-from hedp.switchbot_importer import CSV_COLUMNS, SwitchBotImporter
-from hedp.switchbot_service import SwitchBotService
-from hedp.switchbot_storage import SwitchBotStorage
+from hedp.adapters.switchbot.importer import CSV_COLUMNS, SwitchBotImporter
+from hedp.adapters.switchbot.service import SwitchBotService
+from hedp.adapters.switchbot.storage import SwitchBotStorage
 
 
 def _storage(tmp_path):

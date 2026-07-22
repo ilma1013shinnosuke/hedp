@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 import xml.etree.ElementTree as ElementTree
 import zipfile
 
-from hedp.switchbot_storage import SwitchBotStorage
+from hedp.adapters.switchbot.storage import SwitchBotStorage
 
 
 CSV_COLUMNS = (

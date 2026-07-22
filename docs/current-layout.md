@@ -32,15 +32,15 @@
 現役の検証済みAPI知識は `docs/integrations/fusionsolar/README.md` に置く。
 GAS版を実装するまでは `cloud/gas/fusionsolar/`を作らない。
 
-## SwitchBot
+## SwitchBot（移動済み）
 
-| 現在のファイル | 主な役割 | 将来の場所 |
+| 現在のファイル | 主な役割 | 状態 |
 |---|---|---|
-| `switchbot_client.py` | Open API通信と署名 | `adapters/switchbot/` |
-| `switchbot_service.py` | 機器一覧と状態取得の進行管理 | 共通収集との境界を確認して移動 |
-| `switchbot_importer.py` | CSV・XLSX履歴取込 | `adapters/switchbot/`内の取込機能 |
-| `switchbot_storage.py` | SwitchBot専用テーブル | 共通Storageとの統合可否を先に判断 |
-| `switchbot_cli.py` | SwitchBot用CLI | 薄い入口を維持して移動 |
+| `adapters/switchbot/client.py` | Open API通信と署名 | 移動済み |
+| `adapters/switchbot/service.py` | 機器一覧と状態取得の進行管理 | 移動済み |
+| `adapters/switchbot/importer.py` | CSV・XLSX履歴取込 | 移動済み |
+| `adapters/switchbot/storage.py` | SwitchBot専用テーブル | 移動済み。統合は別途判断 |
+| `adapters/switchbot/cli.py` | SwitchBot用CLI | 移動済み |
 
 ## 運用スクリプト
 

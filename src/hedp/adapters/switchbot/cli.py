@@ -5,10 +5,10 @@ import json
 import os
 from pathlib import Path
 
-from hedp.switchbot_client import SwitchBotClient
-from hedp.switchbot_importer import SwitchBotImporter
-from hedp.switchbot_service import SwitchBotService
-from hedp.switchbot_storage import SwitchBotStorage
+from hedp.adapters.switchbot.client import SwitchBotClient
+from hedp.adapters.switchbot.importer import SwitchBotImporter
+from hedp.adapters.switchbot.service import SwitchBotService
+from hedp.adapters.switchbot.storage import SwitchBotStorage
 
 
 def add_switchbot_parser(subparsers: argparse._SubParsersAction) -> None:

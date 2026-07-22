@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hedp.switchbot_client import SwitchBotClient
+from hedp.adapters.switchbot.client import SwitchBotClient
 
 
 SENSITIVE_KEYS = {

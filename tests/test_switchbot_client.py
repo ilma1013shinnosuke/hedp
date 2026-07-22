@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from hedp.switchbot_client import SwitchBotClient
+from hedp.adapters.switchbot.client import SwitchBotClient
 
 
 def test_signature_uses_fixed_time_and_nonce():
@@ -27,7 +27,7 @@ def test_signature_uses_fixed_time_and_nonce():
 def test_devices_and_status_use_v11_get_without_logging_credentials():
     response = Mock()
     response.json.return_value = {"statusCode": 100, "body": {"future": 1}}
-    with patch("hedp.switchbot_client.requests.get", return_value=response) as get:
+    with patch("hedp.adapters.switchbot.client.requests.get", return_value=response) as get:
         client = SwitchBotClient("token", "secret")
         assert client.devices()["body"]["future"] == 1
         client.status("device")
@@ -38,7 +38,7 @@ def test_devices_and_status_use_v11_get_without_logging_credentials():
 
 def test_timeout_propagates_without_embedding_secret():
     with patch(
-        "hedp.switchbot_client.requests.get",
+        "hedp.adapters.switchbot.client.requests.get",
         side_effect=requests.Timeout("timeout"),
     ):
         with pytest.raises(requests.Timeout) as raised:

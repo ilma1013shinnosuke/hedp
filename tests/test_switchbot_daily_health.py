@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from hedp.daily_health import DailyHealthService
 from hedp.storage import Storage
-from hedp.switchbot_storage import SwitchBotStorage
+from hedp.adapters.switchbot.storage import SwitchBotStorage
 
 
 TOKYO = ZoneInfo("Asia/Tokyo")
