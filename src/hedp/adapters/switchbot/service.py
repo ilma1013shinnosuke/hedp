@@ -6,29 +6,23 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from hedp.adapters.switchbot.client import SwitchBotClient
+from hedp.adapters.switchbot.household import SwitchBotHouseholdConfiguration
 from hedp.adapters.switchbot.storage import SwitchBotStorage
 
 
 TOKYO = ZoneInfo("Asia/Tokyo")
-CONFIRMED_LOCATIONS = {
-    "D508ED4BD39F": ("2Fトイレ", "温湿度", "2023-03-12"),
-    "E2042421588D": ("クローゼット", "温湿度", "2023-03-12"),
-    "F7F4263069C0": ("バスルーム", "温湿度", "2023-06-30"),
-    "F6AB0E1D5517": ("フリースペース", "温湿度", "2023-03-12"),
-    "E888C195493C": ("リビング", "温湿度", "2021-06-24"),
-    "D9CF767A857F": ("外気温", "屋外温湿度", "2023-03-12"),
-    "EA56DAD63611": ("玄関", "温湿度", "2021-07-03"),
-    "D064886F78EF": ("書斎", "温湿度", "2023-03-12"),
-    "B0E9FE558B5A": ("リビング", "温湿度・CO2", "2026-07-21"),
-    "B0E9FE558B6C": ("寝室", "温湿度・CO2", "2026-07-21"),
-    "E4BD97F06AB2": ("寝室", "温湿度", "2026-07-21"),
-}
 
 
 class SwitchBotService:
-    def __init__(self, client: SwitchBotClient, storage: SwitchBotStorage) -> None:
+    def __init__(
+        self,
+        client: SwitchBotClient,
+        storage: SwitchBotStorage,
+        household: SwitchBotHouseholdConfiguration | None = None,
+    ) -> None:
         self.client = client
         self.storage = storage
+        self.household = household or SwitchBotHouseholdConfiguration()
 
     def refresh_devices(self, *, dry_run: bool = False) -> dict[str, Any]:
         response = self.client.devices()
@@ -49,7 +43,7 @@ class SwitchBotService:
                 for device in physical
                 if isinstance(device, dict) and device.get("deviceId")
             })
-            self._ensure_confirmed_location_history()
+            self._ensure_household_history()
         return {"physical": physical, "infrared": infrared}
 
     def collect(self, *, dry_run: bool = False) -> dict[str, Any]:
@@ -128,25 +122,23 @@ class SwitchBotService:
             "raw_payload_json": json.dumps(response, ensure_ascii=False),
         }
 
-    def _ensure_confirmed_location_history(self) -> None:
-        for device_id, (location, purpose, valid_from) in CONFIRMED_LOCATIONS.items():
+    def _ensure_household_history(self) -> None:
+        for item in self.household.location_history:
             self.storage.set_location(
-                device_id, location, purpose, valid_from, precision="day",
-                source="user_confirmed_inventory",
+                item["device_id"],
+                item["location"],
+                item["purpose"],
+                item["valid_from"],
+                valid_to=item.get("valid_to"),
+                precision=item.get("precision", "day"),
+                source=item.get("source", "local_household_config"),
+                notes=item.get("notes"),
             )
-        device_id = "C1BD4CEC2D7B"
-        self.storage.set_name_history(
-            device_id, "車内", "2023-10-23", valid_to="2026-07-21",
-            source="historical_export_and_user_report",
-        )
-        self.storage.set_location(
-            device_id, "車内", "車内温湿度", "2023-10-23",
-            valid_to="2026-07-21", precision="day",
-            source="historical_export_and_user_report",
-            notes="履歴CSVの期間は車内設置",
-        )
-        self.storage.set_location(
-            device_id, "外", "屋外温湿度", "2026-07-21",
-            precision="day", source="user_report",
-            notes="ユーザー申告による移設日",
-        )
+        for item in self.household.name_history:
+            self.storage.set_name_history(
+                item["device_id"],
+                item["name"],
+                item["valid_from"],
+                valid_to=item.get("valid_to"),
+                source=item.get("source", "local_household_config"),
+            )

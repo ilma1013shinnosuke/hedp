@@ -26,6 +26,9 @@ from hedp.adapters.fusionsolar.energy_balance_record_builder import (
 )
 from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
 from hedp.adapters.fusionsolar.report_importer import FusionSolarReportImporter
+from hedp.adapters.fusionsolar.gas_queue_importer import (
+    FusionSolarGasQueueImporter,
+)
 from hedp.storage import RawData
 from hedp.storage import Storage
 from hedp.adapters.switchbot.cli import add_switchbot_parser, run_switchbot
@@ -391,6 +394,11 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     report_import_parser.add_argument("path", type=Path)
     report_import_parser.add_argument("--inspect", action="store_true")
     report_import_parser.add_argument("--dry-run", action="store_true")
+    gas_import_parser = subparsers.add_parser("import-fusionsolar-gas-queue")
+    gas_import_parser.add_argument("path", type=Path)
+    gas_import_group = gas_import_parser.add_mutually_exclusive_group()
+    gas_import_group.add_argument("--inspect", action="store_true")
+    gas_import_group.add_argument("--dry-run", action="store_true")
     quality_parser = subparsers.add_parser("quality")
     quality_parser.add_argument("--start", type=_date_argument, required=True)
     quality_parser.add_argument("--end", type=_date_argument, required=True)
@@ -469,6 +477,23 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
             )
         finally:
             connection.close()
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1 if report["status"] == "blocked" else 0
+
+    if arguments.command == "import-fusionsolar-gas-queue":
+        if arguments.inspect:
+            report = FusionSolarGasQueueImporter().inspect(arguments.path)
+        else:
+            storage = Storage(Configuration.database_path_from_environment())
+            connection = (
+                storage.connect_readonly() if arguments.dry_run else storage.connect()
+            )
+            try:
+                report = FusionSolarGasQueueImporter(storage).run(
+                    arguments.path, dry_run=arguments.dry_run
+                )
+            finally:
+                connection.close()
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 1 if report["status"] == "blocked" else 0
 

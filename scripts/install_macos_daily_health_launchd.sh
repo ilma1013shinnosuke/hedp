@@ -8,10 +8,13 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/environment_compatibility.sh"
+sumicore_apply_legacy_environment FUSIONSOLAR_DEVICE_DNS
 RUN_SCRIPT="${SCRIPT_DIR}/run_daily_health.sh"
-PLIST_PATH="${HOME}/Library/LaunchAgents/com.hedp.daily-health.plist"
+PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.daily-health.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
-LABEL="com.hedp.daily-health"
+LABEL="com.sumicore.daily-health"
+LEGACY_LABEL="com.hedp.daily-health"
 DOMAIN="gui/$(id -u)"
 
 : "${HEDP_FUSIONSOLAR_DEVICE_DNS:?Set HEDP_FUSIONSOLAR_DEVICE_DNS before installing.}"
@@ -39,8 +42,6 @@ umask 077
     printf '%s\n' '</dict>' '</plist>'
 } > "${PLIST_PATH}"
 chmod 600 "${PLIST_PATH}"
-plutil -lint "${PLIST_PATH}"
-launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
-launchctl bootstrap "${DOMAIN}" "${PLIST_PATH}"
-launchctl kickstart -k "${DOMAIN}/${LABEL}"
+"${SCRIPT_DIR}/switch_macos_launchd_job.sh" \
+    "${LABEL}" "${PLIST_PATH}" "${LEGACY_LABEL}"
 echo "Installed ${LABEL}."
