@@ -40,9 +40,6 @@ umask 077
     printf '%s\n' '</dict>' '</plist>'
 } > "${PLIST_PATH}"
 chmod 600 "${PLIST_PATH}"
-plutil -lint "${PLIST_PATH}"
-launchctl bootout "${DOMAIN}/${LEGACY_LABEL}" 2>/dev/null || true
-launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
-launchctl bootstrap "${DOMAIN}" "${PLIST_PATH}"
-launchctl kickstart -k "${DOMAIN}/${LABEL}"
+"${SCRIPT_DIR}/switch_macos_launchd_job.sh" \
+    "${LABEL}" "${PLIST_PATH}" "${LEGACY_LABEL}"
 echo "Installed ${LABEL}."

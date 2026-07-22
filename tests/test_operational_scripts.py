@@ -33,7 +33,7 @@ def test_daily_health_job_runs_json_at_0410_without_credentials():
     assert "daily-health.out.log" in installer
     assert "daily-health.err.log" in installer
     assert "chmod 600" in installer
-    assert "plutil -lint" in installer
+    assert "switch_macos_launchd_job.sh" in installer
     assert "HEDP_FUSIONSOLAR_PASSWORD" not in installer
     assert "com.hedp.database.lock" in runner
 
@@ -51,7 +51,7 @@ def test_switchbot_job_runs_hourly_at_minute_five_without_plist_secrets():
     assert "SWITCHBOT_TOKEN" not in installer
     assert "SWITCHBOT_SECRET" not in installer
     assert "chmod 600" in installer
-    assert "plutil -lint" in installer
+    assert "switch_macos_launchd_job.sh" in installer
 
 
 def test_all_database_jobs_share_one_lock():
@@ -96,4 +96,12 @@ def test_installers_switch_from_legacy_to_sumicore_labels():
         script = (ROOT / "scripts" / name).read_text()
         assert 'LABEL="com.sumicore.' in script
         assert 'LEGACY_LABEL="com.hedp.' in script
-        assert 'bootout "${DOMAIN}/${LEGACY_LABEL}"' in script
+        assert "switch_macos_launchd_job.sh" in script
+
+
+def test_launchd_switcher_validates_and_restores_legacy_job():
+    script = (ROOT / "scripts" / "switch_macos_launchd_job.sh").read_text()
+    assert 'plutil -lint "${NEW_PLIST}"' in script
+    assert 'bootout "${DOMAIN}/${LEGACY_LABEL}"' in script
+    assert 'bootstrap "${DOMAIN}" "${LEGACY_PLIST}"' in script
+    assert 'print "${DOMAIN}/${NEW_LABEL}"' in script
