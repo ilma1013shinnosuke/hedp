@@ -3,12 +3,17 @@
 ## Architecture
 
 ```text
-API -> Collector -> RawData
-RawData -> RecordBuilder -> Record
+① Collection -> ② Storage -> ③ Intelligence -> ④ Execution
+       |              |
+       v              v
+    RawData         Record / current / history / event
 ```
 
-Application performs orchestration and Storage performs persistence. There is
-no Observation layer, and HEDP does not introduce UUIDs.
+The four responsibilities are the long-term architecture. Only directories
+with current implementations are created. Application currently orchestrates
+existing collection and quality workflows, and Storage performs persistence.
+No additional Observation layer or UUID mechanism is introduced merely for a
+possible future need.
 
 ## RawData
 
@@ -77,7 +82,8 @@ does not depend on AI, ChatGPT, or Codex.
 - Other equipment/configuration/Signal APIs: planned for 03:10; unconfirmed
 - Current alarms: every five minutes
 - Alarm history: explicit date-range collection
-- Daily health: read-only operational check daily at 03:20
+- Daily health: read-only operational check daily at 04:10, after the daily
+  collection and backup normally finish
 - SwitchBot status snapshots: hourly at minute 05 in an independent job
 
 ## Quality requirements
@@ -109,7 +115,7 @@ previous-day daily data, energy-balance shape and Records, alarm-history device
 coverage, backup age under 48 hours, and SQLite `integrity_check`. Thresholds
 are defined together in the daily-health service. Status is healthy, warning,
 or critical with exit codes 0, 1, and 2 respectively. It never repairs data.
-Results are logged by the macOS 03:20 launchd job and are not persisted in a
+Results are logged by the macOS 04:10 launchd job and are not persisted in a
 new table or RawData source; persistent health history can be added later if
 needed.
 

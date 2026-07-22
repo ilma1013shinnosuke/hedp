@@ -6,7 +6,10 @@ current technical contract, and
 [FusionSolar knowledge](docs/integrations/fusionsolar/README.md) for verified vendor API
 details and unknowns.
 
-ディレクトリと命名は [directory policy](docs/directory-policy.md)、現在の
+設計の4区分は [①情報収集](docs/01_collection.md)、
+[②情報蓄積](docs/02_storage.md)、[③情報利用・判断](docs/03_intelligence.md)、
+[④操作・実行](docs/04_execution.md) を参照してください。ディレクトリと命名は
+[directory policy](docs/directory-policy.md)、現在の
 ファイル対応は [current layout](docs/current-layout.md)、秘密情報と実データは
 [security policy](docs/security-policy.md) を参照してください。
 
@@ -95,7 +98,7 @@ job also collects battery DC daily at 03:10 as a daily recovery/health
 snapshot. Logs are stored with mode `0600` under
 `~/Library/Logs/hedp/`; macOS-specific behavior remains in `scripts/`.
 
-The read-only daily health check runs independently at 03:20. It checks recent
+The read-only daily health check runs independently at 04:10. It checks recent
 collection coverage and gaps, previous-day daily data and derived Records,
 backup freshness, and SQLite integrity. Exit status is 0 for healthy, 1 for
 warnings, and 2 when the check cannot run or the database is unhealthy. It

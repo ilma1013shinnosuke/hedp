@@ -22,14 +22,14 @@ def test_equipment_job_runs_battery_dc_at_0310():
     assert "chmod 600" in installer
 
 
-def test_daily_health_job_runs_json_at_0320_without_credentials():
+def test_daily_health_job_runs_json_at_0410_without_credentials():
     runner = (ROOT / "scripts" / "run_daily_health.sh").read_text()
     installer = (
         ROOT / "scripts" / "install_macos_daily_health_launchd.sh"
     ).read_text()
     assert "daily-health --json" in runner
-    assert "<integer>3</integer>" in installer
-    assert "<integer>20</integer>" in installer
+    assert "<key>Hour</key><integer>4</integer>" in installer
+    assert "<key>Minute</key><integer>10</integer>" in installer
     assert "daily-health.out.log" in installer
     assert "daily-health.err.log" in installer
     assert "chmod 600" in installer

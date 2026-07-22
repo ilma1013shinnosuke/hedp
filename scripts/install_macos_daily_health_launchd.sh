@@ -30,7 +30,7 @@ umask 077
     printf '  <key>Label</key><string>%s</string>\n' "${LABEL}"
     printf '  <key>ProgramArguments</key><array><string>%s</string></array>\n' "$(xml_escape "${RUN_SCRIPT}")"
     printf '  <key>WorkingDirectory</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}")"
-    printf '%s\n' '  <key>StartCalendarInterval</key><dict>' '    <key>Hour</key><integer>3</integer>' '    <key>Minute</key><integer>20</integer>' '  </dict>' '  <key>EnvironmentVariables</key><dict>'
+    printf '%s\n' '  <key>StartCalendarInterval</key><dict>' '    <key>Hour</key><integer>4</integer>' '    <key>Minute</key><integer>10</integer>' '  </dict>' '  <key>EnvironmentVariables</key><dict>'
     printf '    <key>HEDP_DATABASE_PATH</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}/hedp.db")"
     printf '    <key>HEDP_FUSIONSOLAR_DEVICE_DNS</key><string>%s</string>\n' "$(xml_escape "${HEDP_FUSIONSOLAR_DEVICE_DNS}")"
     printf '%s\n' '  </dict>'
