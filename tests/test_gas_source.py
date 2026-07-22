@@ -41,6 +41,8 @@ def test_gas_collection_has_concurrency_and_response_size_limits():
     assert "LockService.getScriptLock" in collectors
     assert "tryLock(1000)" in collectors
     assert "MAX_RESPONSE_BYTES = 10 * 1024 * 1024" in session
+    assert "fusionSolarResponseHeader_" in session
+    assert "reportFusionSolarAuthenticationHealthy_" in session
 
 
 def test_gas_trigger_creates_replacement_before_deleting_previous_trigger():

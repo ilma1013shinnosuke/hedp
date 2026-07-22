@@ -23,8 +23,13 @@ details and unknowns.
 python3.12 scripts/check_python_runtime.py
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install .
+python -m pip install pytest ruff
 ```
+
+Python 3.13.14では安全強化により先頭が`__`の`.pth`が読み飛ばされるため、setuptoolsが
+生成するeditable installに依存しない。開発時も通常wheel形式で入れ、ソース変更後は
+`python -m pip install --no-deps .`で更新する。
 
 macOS付属のPython 3.9（LibreSSL版）は使用しません。更新と安全な切替は
 [`docs/python-runtime.md`](docs/python-runtime.md)を参照してください。

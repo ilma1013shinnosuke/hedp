@@ -18,6 +18,10 @@ dependencies = [
 sumicore = "sumicore.main:cli"
 hedp = "hedp.main:cli"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["hedp*", "sumicore*"]
+
 [dependency-groups]
 dev = [
     "pytest>=8",

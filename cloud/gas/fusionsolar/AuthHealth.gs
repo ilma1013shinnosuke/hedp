@@ -77,6 +77,22 @@ function reportFusionSolarAuthenticationExpired_(reason, now) {
   }
 }
 
+function reportFusionSolarAuthenticationHealthy_(now) {
+  var properties = PropertiesService.getScriptProperties();
+  var previous = String(
+    properties.getProperty("SUMICORE_FUSIONSOLAR_AUTH_STATUS") || ""
+  );
+  var values = {
+    SUMICORE_FUSIONSOLAR_AUTH_STATUS: "healthy",
+    SUMICORE_FUSIONSOLAR_AUTH_LAST_SUCCESS_AT: (now || new Date()).toISOString()
+  };
+  if (previous === "expired") {
+    values.SUMICORE_FUSIONSOLAR_AUTH_NOTIFICATION_STATE = "recovered";
+  }
+  properties.setProperties(values, false);
+  return {status: "healthy", recovered: previous === "expired"};
+}
+
 function throwFusionSolarAuthenticationExpired_(reason, status) {
   reportFusionSolarAuthenticationExpired_(reason);
   throw new FusionSolarAuthenticationError_(reason, status);

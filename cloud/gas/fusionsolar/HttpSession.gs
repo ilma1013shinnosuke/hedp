@@ -4,6 +4,14 @@ function FusionSolarSession_(config) {
 
 var SUMICORE_FUSIONSOLAR_MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 
+function fusionSolarResponseHeader_(headers, name) {
+  var expected = String(name).toLowerCase();
+  var matched = Object.keys(headers || {}).filter(function (key) {
+    return String(key).toLowerCase() === expected;
+  });
+  return matched.length ? headers[matched[0]] : "";
+}
+
 FusionSolarSession_.prototype.getJson = function (path, query) {
   var pairs = Object.keys(query).map(function (key) {
     return encodeURIComponent(key) + "=" + encodeURIComponent(String(query[key]));
@@ -37,7 +45,9 @@ FusionSolarSession_.prototype.fetchJson_ = function (path, method, payload) {
   }
   var response = UrlFetchApp.fetch(this.config.baseUrl + path, options);
   var status = response.getResponseCode();
-  var contentType = String(response.getHeaders()["Content-Type"] || "").toLowerCase();
+  var contentType = String(
+    fusionSolarResponseHeader_(response.getHeaders(), "Content-Type")
+  ).toLowerCase();
   var authenticationReason = fusionSolarAuthenticationFailureReason_(status, contentType);
   if (authenticationReason) {
     throwFusionSolarAuthenticationExpired_(authenticationReason, status);
@@ -50,7 +60,9 @@ FusionSolarSession_.prototype.fetchJson_ = function (path, method, payload) {
     throw new Error("FusionSolar response exceeds the 10 MiB safety limit");
   }
   try {
-    return JSON.parse(response.getContentText("UTF-8"));
+    var result = JSON.parse(response.getContentText("UTF-8"));
+    reportFusionSolarAuthenticationHealthy_();
+    return result;
   } catch (error) {
     throw new Error("FusionSolar response is not valid JSON");
   }

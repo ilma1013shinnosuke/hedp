@@ -70,7 +70,8 @@ PYTHONPATH=src python scripts/check_release_readiness.py cutover . --env .env
 2. 旧jobが新たに起動しないことを確認する。
 3. 家庭固有設定を移し、権限、必須項目、Git管理外を再確認する。
 4. 移行ブランチを`main`へmerge commitとして統合する。
-5. `.venv-next`を現役へ同一ディスク内で切り替え、旧環境は一時退避する。
+5. 旧`.venv`を一時退避し、Python 3.13で最終名`.venv`を新規作成して、検証済みwheelを
+   通常installする。`.venv-next`の単純renameはCLI shebangに古い絶対パスを残すため行わない。
 6. SumiCore plistを構文検査して登録する。登録・起動失敗時は共通処理で旧jobを復旧する。
 7. 日次以外の各収集を1回だけ手動実行し、終了コードと秘密値不在のログを確認する。
 8. DB件数とRaw増分が実行回数と一致することを読み取り確認する。
@@ -81,11 +82,14 @@ PYTHONPATH=src python scripts/check_release_readiness.py cutover . --env .env
 ## 失敗時の復旧
 
 1. `com.sumicore.*`を停止する。
-2. merge commitを`git revert -m 1`で取り消し、旧ソースへ戻す。
-3. 退避した旧仮想環境を同一ディスク内で現役名へ戻す。
-4. `com.hedp.*` plistを再登録し、1回収集と次回自動収集を確認する。
-5. DBへ追加済みの正常Rawは削除しない。重複や不完全データは別の監査タスクで扱う。
-6. 復旧理由、失敗段階、終了コードを秘密値なしで記録する。
+2. 切替済みjobだけでなく全`com.sumicore.*`が停止したことを確認する。個別切替の途中失敗で
+   新旧jobを混在させない。
+3. merge commitを`git revert -m 1`で取り消し、旧ソースへ戻す。
+4. 新しい`.venv`を退避し、元の`.venv`を同一ディスク内で現役名へ戻す。
+5. 全`com.hedp.*` plistを再登録し、各labelが読み込まれたことを確認する。
+6. 1回収集と次回自動収集を確認する。DBへ追加済みの正常Rawは削除しない。
+7. 重複や不完全データは別の監査タスクで扱い、復旧理由、失敗段階、終了コードを
+   秘密値なしで記録する。
 
 ## 完了条件
 
