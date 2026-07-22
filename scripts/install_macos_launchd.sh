@@ -8,6 +8,10 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/environment_compatibility.sh"
+sumicore_apply_legacy_environment \
+    FUSIONSOLAR_BASE_URL FUSIONSOLAR_STATION_DN \
+    FUSIONSOLAR_USERNAME FUSIONSOLAR_PASSWORD
 HEDP_COMMAND="${REPOSITORY_ROOT}/.venv/bin/hedp"
 RUN_DAILY_SCRIPT="${SCRIPT_DIR}/run_daily.sh"
 PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.collect.plist"

@@ -4,7 +4,8 @@
 
 認証情報と単純な実行値はGit管理外の`.env`に置く。SwitchBotの機器ID、部屋、用途、
 有効期間のような繰り返し構造は、Git管理外の`config/local/`にJSONで置き、その絶対パスを
-`HEDP_SWITCHBOT_HOUSEHOLD_CONFIG_PATH`で渡す。両方とも権限0600にする。
+`SUMICORE_SWITCHBOT_HOUSEHOLD_CONFIG_PATH`で渡す。両方とも権限0600にする。
+移行期間中は従来の`HEDP_SWITCHBOT_HOUSEHOLD_CONFIG_PATH`も使用できる。
 
 共有できる構造だけを`config/examples/`へ架空IDで置く。実機ID、部屋の履歴、認証情報を
 見本、テスト、文書、ログ、Gitへ入れない。
@@ -13,10 +14,13 @@
 
 次の値にはソースコードの既定値を設けず、実行環境で必須にする。
 
-- `HEDP_FUSIONSOLAR_STATION_DN`
-- `HEDP_FUSIONSOLAR_DEVICE_DNS`
-- `HEDP_FUSIONSOLAR_BATTERY_DN`
-- `HEDP_FUSIONSOLAR_BATTERY_SIGIDS`
+- `SUMICORE_FUSIONSOLAR_STATION_DN`
+- `SUMICORE_FUSIONSOLAR_DEVICE_DNS`
+- `SUMICORE_FUSIONSOLAR_BATTERY_DN`
+- `SUMICORE_FUSIONSOLAR_BATTERY_SIGIDS`
+
+`SUMICORE_`を優先し、未設定の場合だけ従来の`HEDP_`を使用する。移行中に両方へ
+異なる値を設定しない。値を変更した場合は、切替前の項目名検査で競合がないことを確認する。
 
 5分収集と03:10の収集はlaunchd plistに必要値を保持するため、設定変更後は
 `install_macos_device_realtime_launchd.sh`と`install_macos_equipment_launchd.sh`を

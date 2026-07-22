@@ -1,5 +1,6 @@
-import os
 from dataclasses import dataclass
+
+from hedp.environment import require_compatible_environment
 
 
 @dataclass(frozen=True)
@@ -12,58 +13,33 @@ class Configuration:
 
     @classmethod
     def from_environment(cls) -> "Configuration":
-        environment_names = {
-            "base_url": "HEDP_FUSIONSOLAR_BASE_URL",
-            "station_dn": "HEDP_FUSIONSOLAR_STATION_DN",
-            "username": "HEDP_FUSIONSOLAR_USERNAME",
-            "password": "HEDP_FUSIONSOLAR_PASSWORD",
-            "database_path": "HEDP_DATABASE_PATH",
+        suffixes = {
+            "base_url": "FUSIONSOLAR_BASE_URL",
+            "station_dn": "FUSIONSOLAR_STATION_DN",
+            "username": "FUSIONSOLAR_USERNAME",
+            "password": "FUSIONSOLAR_PASSWORD",
+            "database_path": "DATABASE_PATH",
         }
         values = {
-            field: os.environ.get(environment_name)
-            for field, environment_name in environment_names.items()
+            field: require_compatible_environment(suffix)
+            for field, suffix in suffixes.items()
         }
-        missing = [
-            environment_names[field]
-            for field, value in values.items()
-            if value is None or value == ""
-        ]
-        if missing:
-            raise RuntimeError(
-                f"Missing required environment variables: {', '.join(missing)}"
-            )
         return cls(**values)
 
     @staticmethod
     def device_dns_from_environment() -> list[str]:
-        value = os.environ.get("HEDP_FUSIONSOLAR_DEVICE_DNS")
-        if value is None or not value.strip():
-            raise RuntimeError(
-                "Missing required environment variable: "
-                "HEDP_FUSIONSOLAR_DEVICE_DNS"
-            )
+        value = require_compatible_environment("FUSIONSOLAR_DEVICE_DNS")
         return list(dict.fromkeys(item.strip() for item in value.split(",") if item.strip()))
 
     @staticmethod
     def database_path_from_environment() -> str:
-        value = os.environ.get("HEDP_DATABASE_PATH", "").strip()
-        if not value:
-            raise RuntimeError(
-                "Missing required environment variable: HEDP_DATABASE_PATH"
-            )
-        return value
+        return require_compatible_environment("DATABASE_PATH").strip()
 
     @staticmethod
     def battery_dc_from_environment() -> tuple[str, str]:
-        names = (
-            "HEDP_FUSIONSOLAR_BATTERY_DN",
-            "HEDP_FUSIONSOLAR_BATTERY_SIGIDS",
+        values = (
+            require_compatible_environment("FUSIONSOLAR_BATTERY_DN").strip(),
+            require_compatible_environment("FUSIONSOLAR_BATTERY_SIGIDS").strip(),
         )
-        values = [os.environ.get(name, "").strip() for name in names]
-        missing = [name for name, value in zip(names, values) if not value]
-        if missing:
-            raise RuntimeError(
-                f"Missing required environment variables: {', '.join(missing)}"
-            )
         device_dn, sigids = values
         return device_dn, sigids

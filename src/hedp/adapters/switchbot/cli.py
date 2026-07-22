@@ -10,6 +10,7 @@ from hedp.adapters.switchbot.household import SwitchBotHouseholdConfiguration
 from hedp.adapters.switchbot.importer import SwitchBotImporter
 from hedp.adapters.switchbot.service import SwitchBotService
 from hedp.adapters.switchbot.storage import SwitchBotStorage
+from hedp.environment import require_compatible_environment
 
 
 def add_switchbot_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -52,9 +53,7 @@ def add_switchbot_parser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def run_switchbot(arguments: argparse.Namespace) -> int:
-    database_path = os.environ.get("HEDP_DATABASE_PATH", "").strip()
-    if not database_path:
-        raise RuntimeError("HEDP_DATABASE_PATH is required")
+    database_path = require_compatible_environment("DATABASE_PATH").strip()
     storage = SwitchBotStorage(database_path)
     storage.connect()
     try:

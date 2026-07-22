@@ -1,4 +1,6 @@
+import os
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).parents[1]
@@ -66,6 +68,7 @@ def test_all_database_jobs_share_one_lock():
         script = (ROOT / "scripts" / name).read_text()
         assert "com.hedp.database.lock" in script
         assert "HEDP_DATABASE_LOCK_DIRECTORY" in script
+        assert "SUMICORE_DATABASE_LOCK_DIRECTORY" in script
 
 
 def test_all_launchd_installers_make_logs_private():
@@ -105,3 +108,107 @@ def test_launchd_switcher_validates_and_restores_legacy_job():
     assert 'bootout "${DOMAIN}/${LEGACY_LABEL}"' in script
     assert 'bootstrap "${DOMAIN}" "${LEGACY_PLIST}"' in script
     assert 'print "${DOMAIN}/${NEW_LABEL}"' in script
+
+
+def _write_fake_command(directory: Path, name: str, body: str) -> None:
+    path = directory / name
+    path.write_text("#!/bin/bash\nset -eu\n" + body)
+    path.chmod(0o755)
+
+
+def _launchd_test_environment(tmp_path: Path, *, fail_new: bool) -> dict[str, str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_command(bin_dir, "uname", 'printf "Darwin\\n"\n')
+    _write_fake_command(bin_dir, "id", 'printf "501\\n"\n')
+    _write_fake_command(bin_dir, "plutil", 'printf "plutil %s\\n" "$*" >> "$CALL_LOG"\n')
+    _write_fake_command(
+        bin_dir,
+        "launchctl",
+        """printf "launchctl %s\\n" "$*" >> "$CALL_LOG"
+if [[ "$1" == "print" ]]; then
+    exit 0
+fi
+if [[ "$1" == "bootstrap" && "$3" == *"com.sumicore.test.plist" \
+      && "${FAIL_NEW_BOOTSTRAP}" == "1" ]]; then
+    exit 1
+fi
+exit 0
+""",
+    )
+    environment = os.environ.copy()
+    environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
+    environment["CALL_LOG"] = str(tmp_path / "calls.log")
+    environment["FAIL_NEW_BOOTSTRAP"] = "1" if fail_new else "0"
+    return environment
+
+
+def test_launchd_switcher_restores_legacy_job_after_bootstrap_failure(tmp_path):
+    new_plist = tmp_path / "com.sumicore.test.plist"
+    legacy_plist = tmp_path / "com.hedp.test.plist"
+    new_plist.write_text("new")
+    legacy_plist.write_text("legacy")
+    environment = _launchd_test_environment(tmp_path, fail_new=True)
+
+    result = subprocess.run(
+        [
+            str(ROOT / "scripts" / "switch_macos_launchd_job.sh"),
+            "com.sumicore.test",
+            str(new_plist),
+            "com.hedp.test",
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    calls = Path(environment["CALL_LOG"]).read_text()
+    assert result.returncode == 1
+    assert f"bootstrap gui/501 {legacy_plist}" in calls
+    assert "kickstart -k gui/501/com.hedp.test" in calls
+    assert "Restored com.hedp.test" in result.stderr
+
+
+def test_launchd_switcher_keeps_new_job_when_bootstrap_succeeds(tmp_path):
+    new_plist = tmp_path / "com.sumicore.test.plist"
+    (tmp_path / "com.hedp.test.plist").write_text("legacy")
+    new_plist.write_text("new")
+    environment = _launchd_test_environment(tmp_path, fail_new=False)
+
+    result = subprocess.run(
+        [
+            str(ROOT / "scripts" / "switch_macos_launchd_job.sh"),
+            "com.sumicore.test",
+            str(new_plist),
+            "com.hedp.test",
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    calls = Path(environment["CALL_LOG"]).read_text()
+    assert result.returncode == 0
+    assert f"bootstrap gui/501 {new_plist}" in calls
+    assert "kickstart -k gui/501/com.sumicore.test" in calls
+    assert "bootstrap gui/501 " + str(tmp_path / "com.hedp.test.plist") not in calls
+
+
+def test_shell_environment_compatibility_prefers_sumicore(tmp_path):
+    helper = ROOT / "scripts" / "environment_compatibility.sh"
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            'source "$1"; '
+            "SUMICORE_DATABASE_PATH=current HEDP_DATABASE_PATH=legacy; "
+            "sumicore_apply_legacy_environment DATABASE_PATH; "
+            'test "$HEDP_DATABASE_PATH" = current',
+            "test",
+            str(helper),
+        ],
+        check=False,
+    )
+    assert result.returncode == 0

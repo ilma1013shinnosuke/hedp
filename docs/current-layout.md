@@ -33,6 +33,7 @@
 GAS版FusionSolarの未配備コードは `cloud/gas/fusionsolar/` に置く。現在は前日分Rawを
 Drive受け渡しキューへ保存する実装までで、自動認証、ローカル取込、trigger配備は未完了。
 実サービスへ配備するまではローカルlaunchd収集が正本である。
+実環境への段階切替と復旧条件は`docs/cutover-runbook.md`を正本とする。
 
 ## SwitchBot（移動済み）
 

@@ -2,6 +2,8 @@ function FusionSolarSession_(config) {
   this.config = config;
 }
 
+var SUMICORE_FUSIONSOLAR_MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+
 FusionSolarSession_.prototype.getJson = function (path, query) {
   var pairs = Object.keys(query).map(function (key) {
     return encodeURIComponent(key) + "=" + encodeURIComponent(String(query[key]));
@@ -44,6 +46,10 @@ FusionSolarSession_.prototype.fetchJson_ = function (path, method, payload) {
   }
   if (contentType.indexOf("text/html") !== -1) {
     throw new Error("FusionSolar returned HTML instead of JSON");
+  }
+  var responseBytes = response.getBlob().getBytes().length;
+  if (responseBytes > SUMICORE_FUSIONSOLAR_MAX_RESPONSE_BYTES) {
+    throw new Error("FusionSolar response exceeds the 10 MiB safety limit");
   }
   try {
     return JSON.parse(response.getContentText("UTF-8"));

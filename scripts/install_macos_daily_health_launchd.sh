@@ -8,6 +8,8 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/environment_compatibility.sh"
+sumicore_apply_legacy_environment FUSIONSOLAR_DEVICE_DNS
 RUN_SCRIPT="${SCRIPT_DIR}/run_daily_health.sh"
 PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.daily-health.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"

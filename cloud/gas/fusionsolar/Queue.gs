@@ -1,5 +1,5 @@
-var HEDP_QUEUE_SCHEMA_VERSION = 1;
-var HEDP_MAX_ATTEMPTS_PER_SOURCE_DATE = 3;
+var SUMICORE_QUEUE_SCHEMA_VERSION = 1;
+var SUMICORE_MAX_ATTEMPTS_PER_SOURCE_DATE = 3;
 
 function queueRawData_(config, source, targetDate, request, payload) {
   var collectedAt = new Date().toISOString();
@@ -25,11 +25,11 @@ function queueRawData_(config, source, targetDate, request, payload) {
       }
     }
   }
-  if (attempts >= HEDP_MAX_ATTEMPTS_PER_SOURCE_DATE) {
+  if (attempts >= SUMICORE_MAX_ATTEMPTS_PER_SOURCE_DATE) {
     throw new Error("Raw queue attempt limit reached for " + source + " " + targetDate);
   }
   var envelope = {
-    schema_version: HEDP_QUEUE_SCHEMA_VERSION,
+    schema_version: SUMICORE_QUEUE_SCHEMA_VERSION,
     source: source,
     collected_at: collectedAt,
     target_date: targetDate,

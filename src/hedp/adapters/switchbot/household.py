@@ -7,6 +7,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from hedp.environment import get_compatible_environment
+
 
 @dataclass(frozen=True)
 class SwitchBotHouseholdConfiguration:
@@ -16,7 +18,7 @@ class SwitchBotHouseholdConfiguration:
 
     @classmethod
     def from_environment(cls) -> "SwitchBotHouseholdConfiguration":
-        value = os.environ.get("HEDP_SWITCHBOT_HOUSEHOLD_CONFIG_PATH", "").strip()
+        value = get_compatible_environment("SWITCHBOT_HOUSEHOLD_CONFIG_PATH").strip()
         return cls.from_file(Path(value)) if value else cls()
 
     @classmethod

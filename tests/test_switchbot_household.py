@@ -41,6 +41,21 @@ def test_household_configuration_is_optional(monkeypatch):
     )
 
 
+def test_sumicore_household_path_takes_priority(tmp_path, monkeypatch):
+    current = tmp_path / "current.json"
+    legacy = tmp_path / "legacy.json"
+    current.write_text('{"filename_device_ids":{"new":"device-new"}}')
+    legacy.write_text('{"filename_device_ids":{"old":"device-old"}}')
+    current.chmod(0o600)
+    legacy.chmod(0o600)
+    monkeypatch.setenv("SUMICORE_SWITCHBOT_HOUSEHOLD_CONFIG_PATH", str(current))
+    monkeypatch.setenv("HEDP_SWITCHBOT_HOUSEHOLD_CONFIG_PATH", str(legacy))
+
+    configuration = SwitchBotHouseholdConfiguration.from_environment()
+
+    assert configuration.filename_device_ids == {"new": "device-new"}
+
+
 @pytest.mark.parametrize(
     "payload, expected",
     [

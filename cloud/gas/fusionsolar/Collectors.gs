@@ -59,19 +59,27 @@ function collectStationKpi_(session, config, targetDate) {
 }
 
 function collectFusionSolarPreviousDay() {
-  var config = loadFusionSolarConfig_();
-  var session = new FusionSolarSession_(config);
-  var targetDate = previousTokyoDate_();
-  var results = [];
-  [collectEnergyBalance_, collectStationKpi_].forEach(function (collector) {
-    try {
-      results.push(collector(session, config, targetDate));
-    } catch (error) {
-      results.push({status: "failed", error_type: error.name || "Error"});
-    }
-  });
-  if (results.some(function (result) { return result.status === "failed"; })) {
-    throw new Error("One or more FusionSolar collections failed");
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) {
+    throw new Error("FusionSolar collection is already running");
   }
-  return results;
+  try {
+    var config = loadFusionSolarConfig_();
+    var session = new FusionSolarSession_(config);
+    var targetDate = previousTokyoDate_();
+    var results = [];
+    [collectEnergyBalance_, collectStationKpi_].forEach(function (collector) {
+      try {
+        results.push(collector(session, config, targetDate));
+      } catch (error) {
+        results.push({status: "failed", error_type: error.name || "Error"});
+      }
+    });
+    if (results.some(function (result) { return result.status === "failed"; })) {
+      throw new Error("One or more FusionSolar collections failed");
+    }
+    return results;
+  } finally {
+    lock.releaseLock();
+  }
 }
