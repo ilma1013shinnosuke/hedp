@@ -1,4 +1,4 @@
-var SUMICORE_QUEUE_SCHEMA_VERSION = 1;
+var SUMICORE_QUEUE_SCHEMA_VERSION = 2;
 var SUMICORE_MAX_ATTEMPTS_PER_SOURCE_DATE = 3;
 
 function queueRawData_(config, source, targetDate, request, payload) {
@@ -35,7 +35,7 @@ function queueRawData_(config, source, targetDate, request, payload) {
     target_date: targetDate,
     request: request,
     payload_sha256: hash,
-    payload: payload
+    payload_text: payloadText
   };
   var name = prefix + hash.slice(0, 16) + ".json";
   folder.createFile(name, JSON.stringify(envelope), MimeType.PLAIN_TEXT);

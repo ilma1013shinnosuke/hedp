@@ -38,14 +38,12 @@ FusionSolarSession_.prototype.fetchJson_ = function (path, method, payload) {
   var response = UrlFetchApp.fetch(this.config.baseUrl + path, options);
   var status = response.getResponseCode();
   var contentType = String(response.getHeaders()["Content-Type"] || "").toLowerCase();
-  if (status === 401 || status === 403 || (status >= 300 && status < 400)) {
-    throw new Error("FusionSolar session is not authenticated (HTTP " + status + ")");
+  var authenticationReason = fusionSolarAuthenticationFailureReason_(status, contentType);
+  if (authenticationReason) {
+    throwFusionSolarAuthenticationExpired_(authenticationReason, status);
   }
   if (status < 200 || status >= 300) {
     throw new Error("FusionSolar request failed (HTTP " + status + ")");
-  }
-  if (contentType.indexOf("text/html") !== -1) {
-    throw new Error("FusionSolar returned HTML instead of JSON");
   }
   var responseBytes = response.getBlob().getBytes().length;
   if (responseBytes > SUMICORE_FUSIONSOLAR_MAX_RESPONSE_BYTES) {
