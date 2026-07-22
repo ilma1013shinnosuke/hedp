@@ -61,8 +61,9 @@ hedp import-fusionsolar-reports runtime/import2 --dry-run
 
 Quality commands that report issue status exit with 0 when no issue is found
 and 1 when issues are found; diagnostic commands exit with 0 after completion.
-Backups are stored in `backups/` next to the database, with the latest 30 kept
-by the daily job. Copying the SQLite file to another device migrates the data.
+Backups are stored in `backups/` next to the database. The daily job compresses
+them and retains the latest generation by default. Copying the SQLite file to
+another device migrates the data.
 
 ## macOS automatic operation
 

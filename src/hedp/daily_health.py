@@ -422,7 +422,10 @@ class DailyHealthService:
         warnings: list[dict[str, object]],
     ) -> dict[str, object]:
         backup_directory = self.database_path.parent / "backups"
-        candidates = sorted(backup_directory.glob("hedp-????????-??????.db"))
+        candidates = [
+            *backup_directory.glob("hedp-????????-??????.db"),
+            *backup_directory.glob("hedp-????????-??????.db.gz"),
+        ]
         latest = max(candidates, key=lambda value: value.stat().st_mtime, default=None)
         latest_time = (
             datetime.fromtimestamp(latest.stat().st_mtime, self.tokyo)

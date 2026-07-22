@@ -126,6 +126,23 @@ def test_daily_health_all_sources_are_healthy(tmp_path):
     assert report["backup_summary"]["age_hours"] < 1
 
 
+def test_daily_health_accepts_recent_compressed_backup(tmp_path):
+    storage, connection, database = _healthy_storage(tmp_path)
+    backup = tmp_path / "backups" / "hedp-20260721-030000.db"
+    compressed_backup = backup.with_suffix(".db.gz")
+    backup.rename(compressed_backup)
+    try:
+        report = DailyHealthService(
+            storage, str(database), DEVICE_DNS
+        ).check(CHECKED_AT, 24)
+    finally:
+        connection.close()
+    assert not any(
+        item["source"] == "backup" for item in report["warnings"]
+    )
+    assert report["backup_summary"]["latest_path"] == str(compressed_backup)
+
+
 def test_daily_health_reports_missing_sources_devices_modules_and_records(
     tmp_path,
 ):
