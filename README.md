@@ -17,6 +17,8 @@ details and unknowns.
 [directory policy](docs/directory-policy.md)、現在の
 ファイル対応は [current layout](docs/current-layout.md)、秘密情報と実データは
 [security policy](docs/security-policy.md) を参照してください。
+新しい機器の調査、読み取り・操作の分離、段階導入、廃止は
+[Adapter lifecycle](docs/adapter-lifecycle.md)を参照してください。
 家庭固有値の置き場所は[local configuration](docs/local-configuration.md)、Python更新は
 [Python runtime](docs/python-runtime.md)、改名は
 [name and renaming](docs/name-and-renaming.md)を参照してください。
