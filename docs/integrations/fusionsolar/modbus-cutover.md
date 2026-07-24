@@ -9,6 +9,11 @@ SmartLogger経由のModbus TCPを、太陽光・蓄電池の現在値収集の�
 旧FusionSolarクラウド方式は直ちに削除しない。Modbusと並行運転し、下記の合格条件を
 満たしてから、定期実行、コード、秘密情報の順に段階廃止する。
 
+切替時は`SUMICORE_FUSIONSOLAR_REALTIME_MODE=modbus`を実行環境へ設定し、
+`install_macos_device_realtime_launchd.sh`を再実行する。`parallel`はModbus取得後に
+旧クラウドrealtimeも実行する監視期間専用である。未設定時は従来互換の`parallel`となり、
+24時間確認前に自動で経路を変えない。
+
 ## Modbus本番合格条件
 
 - 24時間以上の連続観測

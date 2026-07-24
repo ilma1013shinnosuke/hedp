@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import plistlib
 import subprocess
 
 
@@ -9,6 +10,8 @@ ROOT = Path(__file__).parents[1]
 def test_five_minute_script_collects_realtime_and_current_alarms():
     script = (ROOT / "scripts" / "run_device_realtime.sh").read_text()
     assert "collect-realtime" in script
+    assert "collect-modbus" in script
+    assert "FUSIONSOLAR_REALTIME_MODE" in script
     assert "com.hedp.database.lock" in script
 
 
@@ -156,6 +159,52 @@ def test_common_log_rotation_keeps_two_generations(tmp_path):
     assert current.read_text() == ""
     assert (logs / "fixture.err.log.1").read_text() == "current"
     assert (logs / "fixture.err.log.2").read_text() == "previous"
+
+
+def test_modbus_only_installer_omits_cloud_credentials(tmp_path):
+    home = tmp_path / "home"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    launchctl = fake_bin / "launchctl"
+    launchctl.write_text(
+        "#!/bin/bash\n"
+        "if [[ \"$1\" == \"print\" && \"$2\" == *com.hedp.* ]]; then "
+        "exit 1; fi\n"
+        "exit 0\n"
+    )
+    launchctl.chmod(0o755)
+    environment = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
+        "HEDP_FUSIONSOLAR_MODBUS_HOST": "192.0.2.1",
+        "HEDP_FUSIONSOLAR_MODBUS_PORT": "502",
+        "HEDP_FUSIONSOLAR_MODBUS_UNIT_ID": "1",
+        "HEDP_FUSIONSOLAR_MODBUS_EXPECTED_SERIAL": "fixture",
+        "HEDP_FUSIONSOLAR_REALTIME_MODE": "modbus",
+    }
+
+    subprocess.run(
+        [str(ROOT / "scripts" / "install_macos_device_realtime_launchd.sh")],
+        check=True,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+
+    plist = plistlib.loads(
+        (
+            home
+            / "Library"
+            / "LaunchAgents"
+            / "com.sumicore.device-realtime.plist"
+        ).read_bytes()
+    )
+    values = plist["EnvironmentVariables"]
+    assert values["HEDP_FUSIONSOLAR_REALTIME_MODE"] == "modbus"
+    assert "HEDP_FUSIONSOLAR_PASSWORD" not in values
+    assert "HEDP_FUSIONSOLAR_USERNAME" not in values
+    assert "HEDP_FUSIONSOLAR_DEVICE_DNS" not in values
 
 
 def test_launchd_switcher_validates_and_restores_legacy_job():
