@@ -99,8 +99,14 @@ database migration exists yet. Its normative design is
 [`docs/execution-contract.md`](docs/execution-contract.md).
 
 - Intelligence and users request a vendor-neutral immutable Intent.
-- Execution owns policy, authorization, expiry, target resolution, duplicate
-  suppression, bounded retry, fan-out, verification, and audit.
+- Intelligence exclusively owns value judgement: comparing economy, comfort,
+  health, safety, equipment protection, and current user direction, and
+  choosing information, proposal, or pre-authorized automation.
+- Execution does not repeat or modify that judgement. Its ExecutionGate checks
+  authorization, pre-approval, expiry, current-state freshness, target
+  capability, duplicate suppression, equipment limits, and consistency with
+  current user direction.
+- Execution then owns bounded retry, fan-out, dispatch, verification, and audit.
 - Adapters own vendor translation, transport, error mapping, and the read
   primitive used for verification.
 - Dispatch acknowledgement is not proof that equipment reached the desired
