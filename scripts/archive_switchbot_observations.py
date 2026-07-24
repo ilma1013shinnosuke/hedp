@@ -119,10 +119,15 @@ def create_month_archive(
             destination,
             source=source,
             schema_name="switchbot_observations",
-            schema_version=schema_version,
-            timestamp_field="observed_at_utc",
-            created_by="sumicore archive-switchbot-observations",
-        )
+        schema_version=schema_version,
+        timestamp_field="observed_at_utc",
+        created_by="sumicore archive-switchbot-observations",
+        selection={
+            "month": month,
+            "start": month_bounds(month)[0],
+            "end_exclusive": month_bounds(month)[1],
+        },
+    )
     finally:
         connection.close()
 

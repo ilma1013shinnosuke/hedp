@@ -5,6 +5,7 @@ from .jsonl_archive import (
     ArchiveValidationError,
     create_jsonl_gzip_archive,
     iter_jsonl_gzip_archive,
+    verify_archive_matches_records,
     verify_jsonl_gzip_archive,
 )
 from .raw_data import RawData
@@ -17,5 +18,6 @@ __all__ = [
     "Storage",
     "create_jsonl_gzip_archive",
     "iter_jsonl_gzip_archive",
+    "verify_archive_matches_records",
     "verify_jsonl_gzip_archive",
 ]

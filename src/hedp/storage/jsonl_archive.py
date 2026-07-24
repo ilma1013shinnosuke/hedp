@@ -64,6 +64,7 @@ def create_jsonl_gzip_archive(
     schema_version: str,
     timestamp_field: str,
     created_by: str,
+    selection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create an atomic, lossless JSON Lines gzip archive bundle."""
 
@@ -140,6 +141,7 @@ def create_jsonl_gzip_archive(
             "compressed_size_bytes": data_path.stat().st_size,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "created_by": created_by,
+            "selection": dict(selection) if selection is not None else None,
         }
         manifest_path.write_text(
             json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2)
@@ -243,4 +245,47 @@ def verify_jsonl_gzip_archive(directory: str | Path) -> dict[str, Any]:
     for field, actual in checks.items():
         if actual != manifest[field]:
             raise ArchiveValidationError(f"{field} mismatch")
+    return manifest
+
+
+def verify_archive_matches_records(
+    directory: str | Path,
+    records: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Prove that current source records exactly match an archive."""
+
+    manifest = verify_jsonl_gzip_archive(directory)
+    timestamp_field = manifest["timestamp_field"]
+    digest = hashlib.sha256()
+    count = 0
+    first_timestamp: str | None = None
+    last_timestamp: str | None = None
+    first_timestamp_key: datetime | None = None
+    last_timestamp_key: datetime | None = None
+    for record in records:
+        timestamp = record.get(timestamp_field)
+        if not isinstance(timestamp, str) or not timestamp:
+            raise ArchiveValidationError(
+                f"record requires string field {timestamp_field!r}"
+            )
+        timestamp_key = _timestamp_key(timestamp, timestamp_field)
+        digest.update(_json_line(record))
+        count += 1
+        if first_timestamp_key is None or timestamp_key < first_timestamp_key:
+            first_timestamp = timestamp
+            first_timestamp_key = timestamp_key
+        if last_timestamp_key is None or timestamp_key > last_timestamp_key:
+            last_timestamp = timestamp
+            last_timestamp_key = timestamp_key
+    actual = {
+        "record_count": count,
+        "first_timestamp": first_timestamp,
+        "last_timestamp": last_timestamp,
+        "uncompressed_sha256": digest.hexdigest(),
+    }
+    for field, value in actual.items():
+        if value != manifest[field]:
+            raise ArchiveValidationError(
+                f"source records do not match archive: {field}"
+            )
     return manifest

@@ -103,6 +103,11 @@ SwitchBot観測は`scripts/archive_switchbot_observations.py`で月単位にinsp
 archiveできる。処理はDBをread-onlyで開き、元行を削除しない。実データへ使用する前に
 対象月、件数、見込み容量、保存先を確認し、作成後に別障害領域へ複製する。
 
+現役DBの縮小は`scripts/build_compact_database.py`で別名DBを新規構築する。各archiveの
+全行checksumを現在の元DB行と再照合し、archive対象以外の全既知tableを複製する。
+未知table、Schema差、件数不一致、integrity不良が一つでもあれば成果物を残さない。
+元DBの行を直接削除せず、新DBと元DBの切替・旧DB削除は別承認にする。
+
 ## 削除ゲート
 
 元データを削除する前に、次をすべて満たす。

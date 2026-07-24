@@ -11,6 +11,7 @@ from hedp.storage.jsonl_archive import (
     create_jsonl_gzip_archive,
     iter_jsonl_gzip_archive,
     verify_jsonl_gzip_archive,
+    verify_archive_matches_records,
 )
 
 
@@ -152,3 +153,14 @@ def test_archive_rejects_timestamp_without_timezone(tmp_path: Path) -> None:
             timestamp_field="observed_at",
             created_by="test",
         )
+
+
+def test_archive_must_match_current_source_records(tmp_path: Path) -> None:
+    destination = tmp_path / "fixture.archive"
+    create(destination)
+
+    assert verify_archive_matches_records(destination, records())
+    changed = records()
+    changed[0]["value"] = 2
+    with pytest.raises(ArchiveValidationError, match="source records"):
+        verify_archive_matches_records(destination, changed)
