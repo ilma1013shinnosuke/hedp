@@ -66,7 +66,9 @@ GASを実際に使うメーカーだけ `cloud/gas/<vendor>/` に置く。GASは
 
 - Rawデータをディレクトリ整理のために複製しない。
 - 現在のRawはSQLite内にあるため、当面は `hedp.db` を移動しない。
-- `data/`は、SQLite外へ保存する現役データが生じるまで作らない。
+- `data/`は、SQLite外へ保存する現役データが生じるまで作らない。最初の検証済み
+  Rawアーカイブを作る時点で`data/archives/<vendor>/<dataset>/<YYYY>/<MM>.archive/`
+  を作り、directory全体をGit管理外とする。
 - 稼働中DBをクラウド同期フォルダへ直接置かない。
 - Raw、DB、バックアップ、ログ、画像はGitへ追加しない。
 - 実データを将来移動するときは、収集停止、同一ディスク内移動、件数・容量確認、

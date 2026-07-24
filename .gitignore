@@ -19,6 +19,7 @@ backups/
 *.log
 logs/
 runtime/
+data/
 *.plist
 HEDP_CODEX_CONTEXT.md
 config/local/
