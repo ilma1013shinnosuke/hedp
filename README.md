@@ -103,6 +103,8 @@ backup and does not replace the previous generation. Compressed backups also
 remain mode `0600`. If a hard process termination prevents normal cleanup,
 the next daily job removes generated partial files older than one hour; recent
 partial files are left alone to avoid interfering with active work.
+容量不足時の確認、再実行、削除判断は
+[`docs/backup-capacity-recovery.md`](docs/backup-capacity-recovery.md) に従います。
 
 ## macOS automatic operation
 
