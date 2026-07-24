@@ -17,6 +17,8 @@ details and unknowns.
 [directory policy](docs/directory-policy.md)、現在の
 ファイル対応は [current layout](docs/current-layout.md)、秘密情報と実データは
 [security policy](docs/security-policy.md) を参照してください。
+現状の確認結果と未解決riskは
+[security review](docs/security-review.md)にまとめています。
 システム全体の目的と非目標は [SumiCoreの思想](docs/system-philosophy.md)、
 保存期間・粒度・可逆圧縮・削除条件は
 [データ保存共通方針](docs/data-retention-policy.md)にあります。
