@@ -208,7 +208,8 @@ def test_daily_health_reports_incomplete_latest_modbus_records(tmp_path):
     )
     assert report["status"] == "warning"
     assert issue["source"] == "fusionsolar_modbus_tcp"
-    assert issue["actual"]["missing"] == ["storage_soc"]
+    assert issue["actual"]["incomplete_snapshots"] == 1
+    assert issue["actual"]["examples"][0]["missing"] == ["storage_soc"]
 
 
 def test_daily_health_treats_empty_battery_and_alarm_data_as_normal(tmp_path):

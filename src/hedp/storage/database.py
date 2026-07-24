@@ -218,6 +218,21 @@ class Storage:
         ).fetchall()
         return [Record.from_json(row[0]) for row in rows]
 
+    def load_records_for_source_window(
+        self, source: str, start: datetime, end: datetime
+    ) -> list[Record]:
+        connection = self._require_connection()
+        rows = connection.execute(
+            """
+            SELECT data FROM records
+            WHERE json_extract(data, '$.source') = ?
+              AND json_extract(data, '$.timestamp') BETWEEN ? AND ?
+            ORDER BY id
+            """,
+            (source, start.isoformat(), end.isoformat()),
+        ).fetchall()
+        return [Record.from_json(row[0]) for row in rows]
+
     def load_records_for_range(
         self,
         source: str,

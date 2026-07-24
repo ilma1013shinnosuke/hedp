@@ -119,9 +119,9 @@ snapshot. Logs are stored with mode `0600` under
 `~/Library/Logs/hedp/`; macOS-specific behavior remains in `scripts/`.
 
 The read-only daily health check runs independently at 04:10. It checks recent
-collection coverage and gaps, the latest FusionSolar Modbus snapshot and its
-ten derived Records, previous-day daily data and derived Records, backup
-freshness, and SQLite integrity. Exit status is 0 for healthy, 1 for warnings,
+collection coverage and gaps, ten derived Records for every checked
+FusionSolar Modbus snapshot, previous-day daily data and derived Records,
+backup freshness, and SQLite integrity. Exit status is 0 for healthy, 1 for warnings,
 and 2 when the check cannot run or the database is unhealthy. It does not
 repair data. Mac sleep gaps of 15 minutes or more are reported rather than
 hidden. JSON logs are written to

@@ -384,24 +384,38 @@ class DailyHealthService:
             metric
             for metric, _unit in FusionSolarModbusRecordBuilder.METRICS.values()
         }
-        matching_records = self.storage.load_records_for_source_timestamp(
-            source, latest.timestamp
+        records = self.storage.load_records_for_source_window(
+            source,
+            min(item.timestamp for item in items),
+            latest.timestamp,
         )
-        actual_metrics = {record.metric for record in matching_records}
-        missing = sorted(expected_metrics - actual_metrics)
-        unexpected = sorted(actual_metrics - expected_metrics)
-        if missing or unexpected or len(matching_records) != len(expected_metrics):
+        metrics_by_timestamp: dict[datetime, list[str]] = defaultdict(list)
+        for record in records:
+            metrics_by_timestamp[record.timestamp].append(record.metric)
+        incomplete = []
+        for item in sorted(items, key=lambda value: value.timestamp):
+            metrics = metrics_by_timestamp[item.timestamp]
+            actual_metrics = set(metrics)
+            missing = sorted(expected_metrics - actual_metrics)
+            unexpected = sorted(actual_metrics - expected_metrics)
+            if missing or unexpected or len(metrics) != len(expected_metrics):
+                incomplete.append({
+                    "timestamp": item.timestamp.isoformat(),
+                    "missing": missing,
+                    "unexpected": unexpected,
+                    "record_count": len(metrics),
+                })
+        if incomplete:
             warnings.append(
                 self._issue(
                     source,
-                    "latest snapshot",
+                    "checked window",
                     "derived Modbus Records are incomplete",
                     latest.timestamp.isoformat(),
-                    sorted(expected_metrics),
+                    f"{len(expected_metrics)} Records per RawData",
                     {
-                        "missing": missing,
-                        "unexpected": unexpected,
-                        "record_count": len(matching_records),
+                        "incomplete_snapshots": len(incomplete),
+                        "examples": incomplete[:5],
                     },
                 )
             )

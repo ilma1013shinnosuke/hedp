@@ -196,6 +196,11 @@ def test_load_records_for_exact_source_timestamp(tmp_path) -> None:
         assert storage.load_records_for_source_timestamp(
             "modbus", timestamp
         ) == records[:2]
+        assert storage.load_records_for_source_window(
+            "modbus",
+            timestamp,
+            datetime(2026, 7, 20, 0, 5, tzinfo=timezone.utc),
+        ) == [records[0], records[1], records[3]]
     finally:
         connection.close()
 
