@@ -12,4 +12,6 @@ fi
 trap 'rmdir "${LOCK_DIRECTORY}"' EXIT
 
 cd "${REPOSITORY_ROOT}"
-"${REPOSITORY_ROOT}/.venv/bin/hedp" collect-realtime
+"${REPOSITORY_ROOT}/.venv/bin/python" \
+    "${REPOSITORY_ROOT}/scripts/run_with_timeout.py" 240 \
+    "${REPOSITORY_ROOT}/.venv/bin/hedp" collect-realtime

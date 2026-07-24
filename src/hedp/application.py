@@ -21,6 +21,12 @@ from hedp.adapters.fusionsolar.energy_balance_record_builder import (
     FusionSolarEnergyBalanceRecordBuilder,
 )
 from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
+from hedp.adapters.fusionsolar.modbus_collector import (
+    FusionSolarModbusCollector,
+)
+from hedp.adapters.fusionsolar.modbus_record_builder import (
+    FusionSolarModbusRecordBuilder,
+)
 from hedp.storage import RawData
 from hedp.storage import Storage
 
@@ -40,6 +46,11 @@ class Application:
         "powerProfit",
     }
     EXPECTED_INTERVAL_MINUTES = 60
+    _AUTHENTICATION_FAILURE_MARKERS = {
+        "authentication_action_required",
+        "authentication_failed",
+        "CAPTCHA or a verification code",
+    }
 
     def __init__(
         self,
@@ -59,6 +70,10 @@ class Application:
             FusionSolarBatteryDcCollector
         ] = None,
         alarm_collector: Optional[FusionSolarAlarmCollector] = None,
+        modbus_collector: Optional[FusionSolarModbusCollector] = None,
+        modbus_record_builder: Optional[
+            FusionSolarModbusRecordBuilder
+        ] = None,
     ) -> None:
         self.collector = collector
         self.storage = storage
@@ -68,6 +83,8 @@ class Application:
         self.energy_balance_record_builder = energy_balance_record_builder
         self.battery_dc_collector = battery_dc_collector
         self.alarm_collector = alarm_collector
+        self.modbus_collector = modbus_collector
+        self.modbus_record_builder = modbus_record_builder
 
     def run(self) -> RawData:
         if self.collector is None or self.record_builder is None:
@@ -213,6 +230,18 @@ class Application:
             self.storage.save_rawdata(raw_data)
         return collected, failures
 
+    def run_modbus(self) -> RawData:
+        if self.modbus_collector is None:
+            raise RuntimeError("Modbus collector is not configured")
+        if self.modbus_record_builder is None:
+            raise RuntimeError("Modbus record builder is not configured")
+        raw_data = self.modbus_collector.collect()
+        self.storage.save_rawdata(raw_data)
+        self.storage.save_records(
+            self.modbus_record_builder.build(raw_data)
+        )
+        return raw_data
+
     def run_alarm_history(
         self, device_dns: list[str], start_date: date, end_date: date
     ) -> tuple[list[RawData], list[tuple[str, str]]]:
@@ -233,10 +262,21 @@ class Application:
     ) -> dict[str, object]:
         result: dict[str, object] = {}
         try:
+            result["modbus"] = self.run_modbus()
+        except Exception as error:
+            result["modbus_error"] = f"{type(error).__name__}: {error}"
+            logging.error(
+                "realtime Modbus collection failed: %s",
+                type(error).__name__,
+            )
+        try:
             result["device"] = self.run_device_realtime(device_dns)
         except Exception as error:
             result["device_error"] = f"{type(error).__name__}: {error}"
             logging.error("realtime device collection failed: %s", error)
+        if self._authentication_failed(result.get("device")):
+            result["authentication_required"] = True
+            return result
         try:
             result["battery"] = self.run_battery_dc(
                 battery_device_dn, battery_sigids, [1, 2, 3, 4]
@@ -250,6 +290,21 @@ class Application:
             result["alarm_error"] = f"{type(error).__name__}: {error}"
             logging.error("realtime alarm collection failed: %s", error)
         return result
+
+    @classmethod
+    def _authentication_failed(cls, value: object) -> bool:
+        if not isinstance(value, tuple) or len(value) != 2:
+            return False
+        failures = value[1]
+        return isinstance(failures, list) and any(
+            isinstance(item, tuple)
+            and len(item) == 2
+            and any(
+                marker in item[1]
+                for marker in cls._AUTHENTICATION_FAILURE_MARKERS
+            )
+            for item in failures
+        )
 
     def check_energy_balance_quality(
         self, start_date: date, end_date: date

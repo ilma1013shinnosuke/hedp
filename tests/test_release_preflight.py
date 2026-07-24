@@ -26,6 +26,9 @@ def test_cutover_preflight_reports_names_only(tmp_path, monkeypatch):
         "SUMICORE_FUSIONSOLAR_STATION_DN", "SUMICORE_FUSIONSOLAR_USERNAME",
         "SUMICORE_FUSIONSOLAR_PASSWORD", "SUMICORE_FUSIONSOLAR_DEVICE_DNS",
         "SUMICORE_FUSIONSOLAR_BATTERY_DN", "SUMICORE_FUSIONSOLAR_BATTERY_SIGIDS",
+        "SUMICORE_FUSIONSOLAR_MODBUS_HOST", "SUMICORE_FUSIONSOLAR_MODBUS_PORT",
+        "SUMICORE_FUSIONSOLAR_MODBUS_UNIT_ID",
+        "SUMICORE_FUSIONSOLAR_MODBUS_EXPECTED_SERIAL",
         "SUMICORE_SWITCHBOT_HOUSEHOLD_CONFIG_PATH", "SWITCHBOT_TOKEN",
         "SWITCHBOT_SECRET",
     ]
@@ -35,6 +38,10 @@ def test_cutover_preflight_reports_names_only(tmp_path, monkeypatch):
     environment.chmod(0o600)
     monkeypatch.setattr("hedp.operations.preflight.sys.version_info", (3, 13))
     monkeypatch.setattr("hedp.operations.preflight.ssl.OPENSSL_VERSION", "OpenSSL 3.0")
+    monkeypatch.setattr(
+        "hedp.operations.preflight.shutil.disk_usage",
+        lambda _: type("Usage", (), {"free": 10 * 1024**3})(),
+    )
 
     report = check_cutover_preflight(tmp_path, environment)
 

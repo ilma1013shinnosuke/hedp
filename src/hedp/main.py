@@ -29,6 +29,14 @@ from hedp.adapters.fusionsolar.report_importer import FusionSolarReportImporter
 from hedp.adapters.fusionsolar.gas_queue_importer import (
     FusionSolarGasQueueImporter,
 )
+from hedp.adapters.fusionsolar.modbus_collector import (
+    FusionSolarModbusCollector,
+)
+from hedp.adapters.fusionsolar.modbus_profiles import SUN2000_JPL1_RANGES
+from hedp.adapters.fusionsolar.modbus_record_builder import (
+    FusionSolarModbusRecordBuilder,
+)
+from hedp.adapters.fusionsolar.modbus_tcp import ReadOnlyModbusTcpClient
 from hedp.storage import RawData
 from hedp.storage import Storage
 from hedp.adapters.switchbot.cli import add_switchbot_parser, run_switchbot
@@ -144,6 +152,7 @@ def _create_alarm_application() -> tuple[Application, sqlite3.Connection]:
 
 def _create_realtime_application() -> tuple[Application, sqlite3.Connection]:
     configuration = Configuration.from_environment()
+    modbus = Configuration.modbus_from_environment()
     client = FusionSolarClient(
         base_url=configuration.base_url,
         station_dn=configuration.station_dn,
@@ -159,6 +168,42 @@ def _create_realtime_application() -> tuple[Application, sqlite3.Connection]:
         device_realtime_collector=FusionSolarDeviceRealtimeCollector(client),
         battery_dc_collector=FusionSolarBatteryDcCollector(client),
         alarm_collector=FusionSolarAlarmCollector(client),
+        modbus_collector=FusionSolarModbusCollector(
+            ReadOnlyModbusTcpClient(
+                modbus.host,
+                port=modbus.port,
+                unit_id=modbus.unit_id,
+                timeout_seconds=5,
+            ),
+            target_alias="solar-inverter",
+            register_ranges=SUN2000_JPL1_RANGES,
+        ),
+        modbus_record_builder=FusionSolarModbusRecordBuilder(),
+    )
+    return application, connection
+
+
+def _create_modbus_application() -> tuple[
+    Application, sqlite3.Connection
+]:
+    modbus = Configuration.modbus_from_environment()
+    storage = Storage(Configuration.database_path_from_environment())
+    connection = storage.connect()
+    application = Application(
+        None,
+        storage,
+        None,
+        modbus_collector=FusionSolarModbusCollector(
+            ReadOnlyModbusTcpClient(
+                modbus.host,
+                port=modbus.port,
+                unit_id=modbus.unit_id,
+                timeout_seconds=5,
+            ),
+            target_alias="solar-inverter",
+            register_ranges=SUN2000_JPL1_RANGES,
+        ),
+        modbus_record_builder=FusionSolarModbusRecordBuilder(),
     )
     return application, connection
 
@@ -351,6 +396,7 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     device_group.add_argument("--all", action="store_true")
     device_group.add_argument("--device-dn")
     subparsers.add_parser("collect-realtime")
+    subparsers.add_parser("collect-modbus")
     battery_parser = subparsers.add_parser("collect-battery-dc")
     battery_parser.add_argument("--device-dn")
     battery_parser.add_argument("--sigids")
@@ -559,6 +605,8 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         finally:
             connection.close()
         failed_parts = [key for key in report if key.endswith("_error")]
+        if "modbus" in report:
+            print("modbus: collected 1")
         for name in ("device", "battery", "alarm"):
             value = report.get(name)
             if isinstance(value, tuple):
@@ -570,6 +618,15 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
                 if failures and not collected:
                     failed_parts.append(name)
         return 1 if failed_parts else 0
+
+    if arguments.command == "collect-modbus":
+        application, connection = _create_modbus_application()
+        try:
+            application.run_modbus()
+        finally:
+            connection.close()
+        print("modbus: collected 1")
+        return 0
 
     if arguments.command == "collect-battery-dc":
         if arguments.device_dn and arguments.sigids:

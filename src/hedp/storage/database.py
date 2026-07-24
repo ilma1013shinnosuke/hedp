@@ -14,6 +14,7 @@ class Storage:
         "fusionsolar_device_realtime",
         "fusionsolar_battery_dc",
         "fusionsolar_alarm_current",
+        "fusionsolar_modbus_tcp",
     }
     def __init__(self, database_path: str) -> None:
         self.database_path = database_path
