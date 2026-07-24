@@ -80,7 +80,7 @@ class SwitchBotService:
                     error_type=error,
                     raw_payload_json=(
                         json.dumps(response, ensure_ascii=False)
-                        if response is not None else None
+                        if response is not None and not success else None
                     ),
                 )
             results.append(result)

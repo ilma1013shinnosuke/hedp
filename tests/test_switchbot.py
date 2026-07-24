@@ -106,6 +106,8 @@ def test_collect_normalizes_types_empty_body_unknown_and_zero_status(tmp_path):
     assert len(report["results"]) == 7
     assert len(observations) == 7
     assert len(events) == 7
+    assert all(row["raw_payload_json"] for row in observations)
+    assert all(row["raw_payload_json"] is None for row in events)
     zero = next(row for row in observations if row["device_id"] == "zero")
     assert zero["temperature_c"] is None
     assert zero["relative_humidity_percent"] is None
@@ -114,6 +116,40 @@ def test_collect_normalizes_types_empty_body_unknown_and_zero_status(tmp_path):
     assert next(item for item in report["results"] if item["device_id"] == "remote")[
         "status_body_empty"
     ] is True
+
+
+def test_failed_switchbot_response_is_kept_only_in_collection_event(tmp_path):
+    storage = _storage(tmp_path)
+    client = Mock()
+    client.devices.return_value = {
+        "statusCode": 100,
+        "body": {
+            "deviceList": [
+                {
+                    "deviceId": "failed",
+                    "deviceName": "Failed",
+                    "deviceType": "Future",
+                }
+            ],
+            "infraredRemoteList": [],
+        },
+    }
+    client.status.return_value = {
+        "statusCode": 190,
+        "body": {},
+        "message": "failed",
+    }
+    try:
+        SwitchBotService(client, storage).collect()
+        observations = storage.rows("SELECT * FROM switchbot_observations")
+        events = storage.rows("SELECT * FROM switchbot_collection_events")
+    finally:
+        storage.close()
+
+    assert observations == []
+    assert len(events) == 1
+    assert events[0]["success"] == 0
+    assert events[0]["raw_payload_json"]
 
 
 def _write_csv(path: Path, rows):
