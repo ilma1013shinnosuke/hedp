@@ -1,7 +1,7 @@
 # 現在のファイルと役割
 
-この文書は、整理前の現行コードを安全に移すための対応表である。移動が完了した
-項目は新しい場所へ更新し、古いパスを現役情報として残さない。
+この文書は、現行コードと運用ファイルの役割を確認するための対応表である。
+古いパスや終了した移行作業を現役情報として残さない。
 
 ## 共通部分
 
@@ -12,6 +12,7 @@
 | `storage/raw_data.py` | 取得した事実の不変形式 | 移動済み |
 | `storage/record.py` | 利用可能な正規化データ | 移動済み |
 | `storage/database.py` | RawDataとRecordのSQLite保存 | 移動済み |
+| `storage/jsonl_archive.py` | checksum付き可逆JSONL gzip archive | 実装済み・実データ未作成 |
 | `daily_health.py` | 読み取り専用の運用点検 | 運用監視。新しい層は作らない |
 | `main.py` | CLIと部品の組み立て | 最後まで薄い入口として維持 |
 
@@ -29,6 +30,10 @@
 | `adapters/fusionsolar/energy_balance_record_builder.py` | 電力収支をRecordへ変換 | 移動済み |
 | `adapters/fusionsolar/report_importer.py` | 旧レポートの監査付き取込 | 移動済み |
 | `adapters/fusionsolar/gas_queue_importer.py` | GAS受け渡しRaw JSONの検査・監査付き取込 | 実装済み・未配備 |
+| `adapters/fusionsolar/modbus_tcp.py` | 読み取り専用Modbus TCP通信 | 実装済み・監視中 |
+| `adapters/fusionsolar/modbus_collector.py` | Register範囲のRaw取得 | 実装済み・監視中 |
+| `adapters/fusionsolar/modbus_profiles.py` | 機種別Register定義とdecode | 実装済み・監視中 |
+| `adapters/fusionsolar/modbus_record_builder.py` | Modbus Rawを10指標へ変換 | 実装済み・監視中 |
 
 現役の検証済みAPI知識は `docs/integrations/fusionsolar/README.md` に置く。
 GAS版FusionSolarの未配備コードは `cloud/gas/fusionsolar/` に置く。前日分Rawを
@@ -58,6 +63,11 @@ Drive受け渡しキューへ保存し、ダウンロード後にMac側で検査
 | `run_switchbot_hourly.sh` | SwitchBotの1時間ごとの状態取得 |
 | `run_daily_health.sh` | DBを変更しない日次健全性確認 |
 | `check_post_cutover.py` | 保存済み状態JSONによる切替後24時間監視 |
+| `archive_switchbot_observations.py` | 月単位の読取専用inspectと可逆archive作成 |
+| `build_compact_database.py` | 検証済みarchiveを除いた別名小型DBの構築 |
+
+`run_device_realtime.sh`は監視期間中の`parallel`と、切替後の`modbus`を明示選択する。
+未設定時は従来互換の`parallel`であり、自動的には切り替わらない。
 
 DBを使用する5つの実行スクリプトは `com.hedp.database.lock`を共有する。これにより、
 別ジョブ同士が同じSQLiteを長時間読み書きすることを防ぐ。健全性確認は読み取り専用
