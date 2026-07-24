@@ -102,6 +102,21 @@ def test_installers_switch_from_legacy_to_sumicore_labels():
         assert "switch_macos_launchd_job.sh" in script
 
 
+def test_uninstaller_covers_every_current_and_legacy_job():
+    script = (ROOT / "scripts" / "uninstall_macos_launchd.sh").read_text()
+
+    for job in (
+        "collect",
+        "device-realtime",
+        "equipment",
+        "switchbot",
+        "daily-health",
+    ):
+        assert job in script
+    assert "com.sumicore" in script
+    assert "com.hedp" in script
+
+
 def test_launchd_switcher_validates_and_restores_legacy_job():
     script = (ROOT / "scripts" / "switch_macos_launchd_job.sh").read_text()
     assert 'plutil -lint "${NEW_PLIST}"' in script
