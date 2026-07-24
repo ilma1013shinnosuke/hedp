@@ -71,6 +71,11 @@ Cookie、トークンはこの分類に関係なく保存禁止とする。
 一時名へ書き、gzip整合性、全行JSON解析、件数、時刻範囲、checksum、復元試験が成功してから
 正式名へ原子的に切り替える。アーカイブ成功だけを理由に元DBを自動削除しない。
 
+共通実装は`src/hedp/storage/jsonl_archive.py`に置く。一つのbundle directoryへ
+`data.jsonl.gz`と`manifest.json`を格納し、bundle全体を一時directoryから原子的に
+切り替える。既存bundleは上書きしない。実DB用の抽出・切替処理は別実装とし、共通実装は
+入力行の可逆保存と検証だけを担当する。
+
 ## 削除ゲート
 
 元データを削除する前に、次をすべて満たす。
