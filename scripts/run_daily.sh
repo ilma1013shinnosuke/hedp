@@ -56,7 +56,9 @@ compress_backups() {
     shopt -s nullglob
     for backup_file in "${BACKUP_DIRECTORY}"/hedp-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].db; do
         [[ -f "${backup_file}" && ! -L "${backup_file}" ]] || continue
+        chmod 600 "${backup_file}" || return 1
         run_timed gzip -f -- "${backup_file}" || return 1
+        chmod 600 "${backup_file}.gz" || return 1
     done
 }
 

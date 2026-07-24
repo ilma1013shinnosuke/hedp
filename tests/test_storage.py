@@ -1,5 +1,10 @@
+import errno
+import stat
 from datetime import date, datetime, timezone
+from pathlib import Path
 import sqlite3
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -47,10 +52,60 @@ def test_backup_copies_data_creates_parent_overwrites_and_preserves_source(
             ).fetchone()[0]
 
         assert destination.is_file()
+        assert stat.S_IMODE(destination.stat().st_mode) == 0o600
         assert raw_data_count == 1
         assert record_count == 1
         assert storage.load_rawdata() == [raw_data]
         assert storage.load_records() == [record]
+    finally:
+        connection.close()
+
+
+def test_backup_failure_preserves_existing_backup_and_removes_partial_files(
+    tmp_path,
+) -> None:
+    storage = Storage(str(tmp_path / "test.db"))
+    connection = storage.connect()
+    destination = tmp_path / "backups" / "backup.db"
+    destination.parent.mkdir()
+    destination.write_bytes(b"previous valid backup")
+
+    def failing_connect(path):
+        Path(f"{path}-journal").write_bytes(b"unfinished")
+        return Mock()
+
+    try:
+        with patch(
+            "hedp.storage.database.sqlite3.connect",
+            side_effect=failing_connect,
+        ):
+            with pytest.raises(TypeError):
+                storage.backup(str(destination))
+
+        assert destination.read_bytes() == b"previous valid backup"
+        assert list(destination.parent.glob(".*.partial*")) == []
+    finally:
+        connection.close()
+
+
+def test_backup_rejects_insufficient_space_before_creating_partial_file(
+    tmp_path,
+) -> None:
+    storage = Storage(str(tmp_path / "test.db"))
+    connection = storage.connect()
+    destination = tmp_path / "backups" / "backup.db"
+
+    try:
+        with patch(
+            "hedp.storage.database.shutil.disk_usage",
+            return_value=SimpleNamespace(free=0),
+        ):
+            with pytest.raises(OSError) as error:
+                storage.backup(str(destination))
+
+        assert error.value.errno == errno.ENOSPC
+        assert not destination.exists()
+        assert list(destination.parent.glob(".*.partial*")) == []
     finally:
         connection.close()
 

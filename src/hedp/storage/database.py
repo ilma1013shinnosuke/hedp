@@ -1,5 +1,9 @@
+import errno
 import json
+import os
+import shutil
 import sqlite3
+import tempfile
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -264,11 +268,41 @@ class Storage:
         connection = self._require_connection()
         destination = Path(destination_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        backup_connection = sqlite3.connect(destination)
+        source_size = Path(self.database_path).resolve().stat().st_size
+        reserve_size = max(512 * 1024 * 1024, source_size // 5)
+        required_size = source_size + reserve_size
+        available_size = shutil.disk_usage(destination.parent).free
+        if available_size < required_size:
+            raise OSError(
+                errno.ENOSPC,
+                "insufficient free space for an atomic database backup "
+                f"(required={required_size}, available={available_size})",
+            )
+
+        file_descriptor, partial_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.",
+            suffix=".partial",
+            dir=destination.parent,
+        )
+        os.close(file_descriptor)
+        partial = Path(partial_name)
+        backup_connection: Optional[sqlite3.Connection] = None
         try:
+            backup_connection = sqlite3.connect(partial)
             connection.backup(backup_connection)
-        finally:
             backup_connection.close()
+            backup_connection = None
+            os.replace(partial, destination)
+        finally:
+            if backup_connection is not None:
+                backup_connection.close()
+            for unfinished_path in (
+                partial,
+                Path(f"{partial}-journal"),
+                Path(f"{partial}-wal"),
+                Path(f"{partial}-shm"),
+            ):
+                unfinished_path.unlink(missing_ok=True)
 
     def get_record_dates(
         self,

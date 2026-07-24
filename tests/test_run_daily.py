@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 
 
@@ -69,9 +70,11 @@ def test_run_daily_collects_backs_up_and_retains_latest_compressed(tmp_path) -> 
     assert sorted(path.name for path in backups.glob("hedp-*.db")) == [
         invalid_backup.name,
     ]
-    assert sorted(path.name for path in backups.glob("hedp-*.db.gz")) == [
+    compressed_backups = sorted(backups.glob("hedp-*.db.gz"))
+    assert [path.name for path in compressed_backups] == [
         backup_names[-1] + ".gz",
     ]
+    assert stat.S_IMODE(compressed_backups[0].stat().st_mode) == 0o600
     assert database.is_file()
 
 

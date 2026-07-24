@@ -94,6 +94,14 @@ Backups are stored in `backups/` next to the database. The daily job compresses
 them and retains the latest generation by default. Copying the SQLite file to
 another device migrates the data.
 
+Database backups are created atomically. Before copying, SumiCore requires
+free space for the current database plus a safety reserve. It writes to a
+mode-0600 hidden `.partial` file, promotes that file to the dated `.db` name
+only after SQLite finishes successfully, and removes partial files when an
+ordinary error occurs. A failed copy is therefore not presented as a valid
+backup and does not replace the previous generation. Compressed backups also
+remain mode `0600`.
+
 ## macOS automatic operation
 
 ```bash
