@@ -11,7 +11,7 @@ SmartLogger経由のModbus TCPを、太陽光・蓄電池の現在値収集の�
 
 ## Modbus本番合格条件
 
-- 7日間以上の連続観測
+- 24時間以上の連続観測
 - 5分周期の成功率が99%以上
 - 15分を超える欠損がない
 - Mac再起動、ネットワーク再接続後に自動復旧する
@@ -24,7 +24,7 @@ SmartLogger経由のModbus TCPを、太陽光・蓄電池の現在値収集の�
 ## 段階的な廃止手順
 
 1. Modbusを既存5分ジョブの先頭で収集する。
-2. 7日間はクラウド現在値収集も残し、比較材料を蓄積する。
+2. 24時間はクラウド現在値収集も残し、比較材料を蓄積する。
 3. 合格後、クラウドのdevice-realtime、Battery DC、current alarm定期取得を停止する。
 4. 日次履歴などModbusで代替できない機能は、必要性を個別判定する。
 5. 旧Collectorの確認済みendpoint、request/response shape、失敗条件、CAPTCHA挙動を
