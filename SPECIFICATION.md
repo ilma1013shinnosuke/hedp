@@ -72,6 +72,11 @@ does not depend on AI, ChatGPT, or Codex.
 
 ## Equipment autonomy contract
 
+Equipment autonomy is the default design policy, not a blanket prohibition on
+SumiCore-controlled or SumiCore-dependent functions. SumiCore may be the
+control owner when the equipment has no equivalent function or cross-equipment
+coordination has a clear benefit, provided the exception is documented.
+
 - Collection, storage, intelligence, and execution failures must not disable
   vendor safety functions, physical controls, or the equipment's standard
   schedules.
@@ -81,7 +86,8 @@ does not depend on AI, ChatGPT, or Codex.
 - Every production automation must declare its control owner, expiry,
   confirmation method, and behavior when SumiCore is unavailable.
 - A function that exists only in SumiCore must be labelled as SumiCore-dependent
-  and have a safe fallback or explicit stopped state.
+  and document its reason, benefit, manual override, expiry, confirmation
+  method, and safe fallback or explicit stopped state.
 - Duplicate schedules or continuously competing rules across SumiCore and the
   equipment are not allowed.
 - Safety-critical household behavior must not have SumiCore as its only path.
