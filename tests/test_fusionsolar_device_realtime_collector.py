@@ -28,7 +28,7 @@ def test_collect_device_preserves_payload_and_identity():
     assert raw.timestamp.utcoffset().total_seconds() == 0
 
 
-def test_collect_devices_continues_after_failure():
+def test_collect_devices_continues_after_failure(caplog):
     client = Client()
     collector = FusionSolarDeviceRealtimeCollector(client)
     original = collector.collect_device
@@ -42,3 +42,5 @@ def test_collect_devices_continues_after_failure():
     collected, failures = collector.collect_devices(["bad", "good"])
     assert len(collected) == 1
     assert failures[0][0] == "bad"
+    assert "target_index=1" in caplog.text
+    assert "bad" not in caplog.text

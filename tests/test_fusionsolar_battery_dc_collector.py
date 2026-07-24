@@ -37,14 +37,14 @@ def test_collect_module_uses_confirmed_request_and_preserves_payload():
     assert raw_data.timestamp.utcoffset().total_seconds() == 0
 
 
-def test_collect_modules_continues_after_failure():
+def test_collect_modules_continues_after_failure(caplog):
     client = Client()
     collector = FusionSolarBatteryDcCollector(client)
     original = collector.collect_module
 
     def collect(device_dn, sigids, module_id):
         if module_id == 2:
-            raise RuntimeError("failed")
+            raise RuntimeError("sensitive-detail")
         return original(device_dn, sigids, module_id)
 
     collector.collect_module = collect
@@ -52,3 +52,5 @@ def test_collect_modules_continues_after_failure():
 
     assert [item.metadata["module_id"] for item in collected] == [1, 3]
     assert failures[0][0] == 2
+    assert "RuntimeError" in caplog.text
+    assert "sensitive-detail" not in caplog.text

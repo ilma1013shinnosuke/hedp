@@ -30,11 +30,15 @@ class FusionSolarDeviceRealtimeCollector:
     ) -> tuple[list[RawData], list[tuple[str, str]]]:
         collected = []
         failures = []
-        for device_dn in device_dns:
+        for target_index, device_dn in enumerate(device_dns, start=1):
             try:
                 collected.append(self.collect_device(device_dn))
             except Exception as error:
                 summary = f"{type(error).__name__}: {error}"
-                logging.error("device-realtime failed for %s: %s", device_dn, summary)
+                logging.error(
+                    "device-realtime failed for target_index=%s: %s",
+                    target_index,
+                    type(error).__name__,
+                )
                 failures.append((device_dn, summary))
         return collected, failures

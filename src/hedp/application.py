@@ -273,7 +273,10 @@ class Application:
             result["device"] = self.run_device_realtime(device_dns)
         except Exception as error:
             result["device_error"] = f"{type(error).__name__}: {error}"
-            logging.error("realtime device collection failed: %s", error)
+            logging.error(
+                "realtime device collection failed: %s",
+                type(error).__name__,
+            )
         if self._authentication_failed(result.get("device")):
             result["authentication_required"] = True
             return result
@@ -283,12 +286,18 @@ class Application:
             )
         except Exception as error:
             result["battery_error"] = f"{type(error).__name__}: {error}"
-            logging.error("realtime battery collection failed: %s", error)
+            logging.error(
+                "realtime battery collection failed: %s",
+                type(error).__name__,
+            )
         try:
             result["alarm"] = self.run_current_alarms(device_dns)
         except Exception as error:
             result["alarm_error"] = f"{type(error).__name__}: {error}"
-            logging.error("realtime alarm collection failed: %s", error)
+            logging.error(
+                "realtime alarm collection failed: %s",
+                type(error).__name__,
+            )
         return result
 
     @classmethod

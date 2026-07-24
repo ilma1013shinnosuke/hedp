@@ -47,9 +47,9 @@ class FusionSolarBatteryDcCollector:
             except Exception as error:
                 summary = f"{type(error).__name__}: {error}"
                 logging.error(
-                    "battery-dc failed for moduleId=%s: %s",
+                    "battery-dc failed for module_index=%s: %s",
                     module_id,
-                    summary,
+                    type(error).__name__,
                 )
                 failures.append((module_id, summary))
         return collected, failures

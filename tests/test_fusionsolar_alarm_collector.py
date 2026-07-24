@@ -108,7 +108,7 @@ def test_pagination_has_maximum_page_limit():
         collector.collect_current_device("NE=1")
 
 
-def test_collect_devices_continues_after_failure():
+def test_collect_devices_continues_after_failure(caplog):
     collector = FusionSolarAlarmCollector(Client())
     original = collector.collect_current_device
 
@@ -122,6 +122,8 @@ def test_collect_devices_continues_after_failure():
 
     assert len(collected) == 1
     assert failures[0][0] == "bad"
+    assert "target_index=1" in caplog.text
+    assert "bad" not in caplog.text
 
 
 def test_history_rejects_reverse_range():

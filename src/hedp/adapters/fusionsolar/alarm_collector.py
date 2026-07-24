@@ -69,7 +69,7 @@ class FusionSolarAlarmCollector:
     ) -> tuple[list[RawData], list[tuple[str, str]]]:
         collected = []
         failures = []
-        for device_dn in device_dns:
+        for target_index, device_dn in enumerate(device_dns, start=1):
             try:
                 if data_type == "CURRENT":
                     collected.extend(self.collect_current_device(device_dn))
@@ -83,10 +83,10 @@ class FusionSolarAlarmCollector:
             except Exception as error:
                 summary = f"{type(error).__name__}: {error}"
                 logging.error(
-                    "alarm %s failed for %s: %s",
+                    "alarm %s failed for target_index=%s: %s",
                     data_type.lower(),
-                    device_dn,
-                    summary,
+                    target_index,
+                    type(error).__name__,
                 )
                 failures.append((device_dn, summary))
         return collected, failures
