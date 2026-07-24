@@ -141,11 +141,34 @@ class Storage:
     def load_rawdata_in_window(
         self, start: datetime, end: datetime
     ) -> list[RawData]:
-        return [
-            item
-            for item in self.load_rawdata()
-            if start <= item.timestamp <= end
-        ]
+        connection = self._require_connection()
+        rows = connection.execute(
+            """
+            SELECT data FROM raw_data
+            WHERE json_extract(data, '$.timestamp') BETWEEN ? AND ?
+            ORDER BY id
+            """,
+            (start.isoformat(), end.isoformat()),
+        ).fetchall()
+        return [RawData.from_json(row[0]) for row in rows]
+
+    def load_rawdata_for_sources(
+        self, sources: tuple[str, ...] | list[str] | set[str]
+    ) -> list[RawData]:
+        connection = self._require_connection()
+        ordered = tuple(sorted(set(sources)))
+        if not ordered:
+            return []
+        placeholders = ",".join("?" for _ in ordered)
+        rows = connection.execute(
+            f"""
+            SELECT data FROM raw_data
+            WHERE json_extract(data, '$.source') IN ({placeholders})
+            ORDER BY id
+            """,
+            ordered,
+        ).fetchall()
+        return [RawData.from_json(row[0]) for row in rows]
 
     def count_rawdata(self) -> int:
         connection = self._require_connection()
@@ -177,6 +200,21 @@ class Storage:
         connection = self._require_connection()
         rows = connection.execute(
             "SELECT data FROM records ORDER BY id"
+        ).fetchall()
+        return [Record.from_json(row[0]) for row in rows]
+
+    def load_records_for_source_timestamp(
+        self, source: str, timestamp: datetime
+    ) -> list[Record]:
+        connection = self._require_connection()
+        rows = connection.execute(
+            """
+            SELECT data FROM records
+            WHERE json_extract(data, '$.source') = ?
+              AND json_extract(data, '$.timestamp') = ?
+            ORDER BY id
+            """,
+            (source, timestamp.isoformat()),
         ).fetchall()
         return [Record.from_json(row[0]) for row in rows]
 

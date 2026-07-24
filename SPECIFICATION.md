@@ -131,12 +131,13 @@ The corresponding diagnose commands always return their aggregate details
 without changing data.
 
 Daily health reuses the existing quality and diagnostic results. In one
-read-only run it checks the six current RawData sources, configured device and
+read-only run it checks the current RawData sources, configured device and
 battery-module coverage, 15-minute-or-greater gaps in five-minute collection,
-previous-day daily data, energy-balance shape and Records, alarm-history device
-coverage, backup age under 48 hours, and SQLite `integrity_check`. Thresholds
-are defined together in the daily-health service. Status is healthy, warning,
-or critical with exit codes 0, 1, and 2 respectively. It never repairs data.
+the latest Modbus snapshot's ten derived Records, previous-day daily data,
+energy-balance shape and Records, alarm-history device coverage, backup age
+under 48 hours, and SQLite `integrity_check`. Thresholds are defined together
+in the daily-health service. Status is healthy, warning, or critical with exit
+codes 0, 1, and 2 respectively. It never repairs data.
 Results are logged by the macOS 04:10 launchd job and are not persisted in a
 new table or RawData source; persistent health history can be added later if
 needed.

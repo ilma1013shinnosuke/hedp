@@ -397,11 +397,9 @@ class Application:
         }
 
     def diagnose_battery_dc(self) -> dict[str, object]:
-        items = [
-            item
-            for item in self.storage.load_rawdata()
-            if item.source == "fusionsolar_battery_dc"
-        ]
+        items = self.storage.load_rawdata_for_sources(
+            ("fusionsolar_battery_dc",)
+        )
         by_module = Counter()
         latest_by_module = {}
         empty_responses = Counter()
@@ -472,12 +470,9 @@ class Application:
         }
 
     def diagnose_alarms(self) -> dict[str, object]:
-        items = [
-            item
-            for item in self.storage.load_rawdata()
-            if item.source
-            in {"fusionsolar_alarm_current", "fusionsolar_alarm_history"}
-        ]
+        items = self.storage.load_rawdata_for_sources(
+            ("fusionsolar_alarm_current", "fusionsolar_alarm_history")
+        )
         by_source = Counter()
         by_device = Counter()
         latest_current_by_device = {}

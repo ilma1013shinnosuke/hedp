@@ -2,6 +2,9 @@ from datetime import datetime, timedelta, timezone
 import os
 from zoneinfo import ZoneInfo
 
+from hedp.adapters.fusionsolar.modbus_record_builder import (
+    FusionSolarModbusRecordBuilder,
+)
 from hedp.daily_health import DailyHealthService
 from hedp.storage import RawData
 from hedp.storage import Record
@@ -34,6 +37,25 @@ def _healthy_storage(tmp_path, *, records=True):
     storage = Storage(str(database))
     connection = storage.connect()
     recent = CHECKED_AT - timedelta(minutes=5)
+    modbus_raw = _raw(
+        "fusionsolar_modbus_tcp",
+        recent,
+        {"ranges": [{"name": "approved", "registers": [1]}]},
+        metadata={"target_alias": "home_solar_logger"},
+    )
+    storage.save_rawdata(modbus_raw)
+    storage.save_records([
+        Record(
+            "fusionsolar_modbus_tcp",
+            modbus_raw.timestamp,
+            metric,
+            index,
+            unit,
+        )
+        for index, (metric, unit) in enumerate(
+            FusionSolarModbusRecordBuilder.METRICS.values()
+        )
+    ])
     for device_dn in DEVICE_DNS:
         storage.save_rawdata(
             _raw(
@@ -150,7 +172,8 @@ def test_daily_health_reports_missing_sources_devices_modules_and_records(
     try:
         connection.execute(
             "DELETE FROM raw_data WHERE "
-            "json_extract(data, '$.source') = 'fusionsolar_device_realtime' "
+            "json_extract(data, '$.source') IN "
+            "('fusionsolar_device_realtime', 'fusionsolar_modbus_tcp') "
             "OR json_extract(data, '$.metadata.module_id') = 4"
         )
         connection.commit()
@@ -163,6 +186,29 @@ def test_daily_health_reports_missing_sources_devices_modules_and_records(
     assert report["status"] == "warning"
     assert "missing in checked window" in problems
     assert "derived Records are missing" in problems
+
+
+def test_daily_health_reports_incomplete_latest_modbus_records(tmp_path):
+    storage, connection, database = _healthy_storage(tmp_path)
+    try:
+        connection.execute(
+            "DELETE FROM records WHERE json_extract(data, '$.source') = "
+            "'fusionsolar_modbus_tcp' AND json_extract(data, '$.metric') = "
+            "'storage_soc'"
+        )
+        connection.commit()
+        report = DailyHealthService(
+            storage, str(database), DEVICE_DNS
+        ).check(CHECKED_AT, 24)
+    finally:
+        connection.close()
+    issue = next(
+        item for item in report["warnings"]
+        if item["problem"] == "derived Modbus Records are incomplete"
+    )
+    assert report["status"] == "warning"
+    assert issue["source"] == "fusionsolar_modbus_tcp"
+    assert issue["actual"]["missing"] == ["storage_soc"]
 
 
 def test_daily_health_treats_empty_battery_and_alarm_data_as_normal(tmp_path):

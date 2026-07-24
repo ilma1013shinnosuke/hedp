@@ -122,6 +122,38 @@ def test_save_and_load_rawdata(tmp_path) -> None:
         connection.close()
 
 
+def test_load_rawdata_filters_window_and_sources_in_sql(tmp_path) -> None:
+    storage = Storage(str(tmp_path / "test.db"))
+    connection = storage.connect()
+    items = [
+        RawData(
+            source,
+            datetime(2026, 7, 20, minute=minute, tzinfo=timezone.utc),
+            {"minute": minute},
+        )
+        for source, minute in (
+            ("modbus", 0),
+            ("cloud", 5),
+            ("modbus", 10),
+        )
+    ]
+    try:
+        for item in items:
+            storage.save_rawdata(item)
+
+        assert storage.load_rawdata_in_window(
+            datetime(2026, 7, 20, 0, 5, tzinfo=timezone.utc),
+            datetime(2026, 7, 20, 0, 10, tzinfo=timezone.utc),
+        ) == items[1:]
+        assert storage.load_rawdata_for_sources(("modbus",)) == [
+            items[0],
+            items[2],
+        ]
+        assert storage.load_rawdata_for_sources(()) == []
+    finally:
+        connection.close()
+
+
 def test_save_and_load_records(tmp_path) -> None:
     storage = Storage(str(tmp_path / "test.db"))
     connection = storage.connect()
@@ -139,6 +171,31 @@ def test_save_and_load_records(tmp_path) -> None:
         storage.save_records(records)
 
         assert storage.load_records() == records
+    finally:
+        connection.close()
+
+
+def test_load_records_for_exact_source_timestamp(tmp_path) -> None:
+    storage = Storage(str(tmp_path / "test.db"))
+    connection = storage.connect()
+    timestamp = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    records = [
+        Record("modbus", timestamp, "power", 1, "kW"),
+        Record("modbus", timestamp, "soc", 2, "%"),
+        Record("cloud", timestamp, "power", 3, "kW"),
+        Record(
+            "modbus",
+            datetime(2026, 7, 20, 0, 5, tzinfo=timezone.utc),
+            "power",
+            4,
+            "kW",
+        ),
+    ]
+    try:
+        storage.save_records(records)
+        assert storage.load_records_for_source_timestamp(
+            "modbus", timestamp
+        ) == records[:2]
     finally:
         connection.close()
 

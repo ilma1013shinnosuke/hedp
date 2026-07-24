@@ -90,7 +90,7 @@ def test_run_current_alarms_saves_all_pages():
 
 def test_battery_dc_quality_reports_missing_modules_and_invalid_response():
     storage = Mock()
-    storage.load_rawdata.return_value = [
+    storage.load_rawdata_for_sources.return_value = [
         RawData(
             "fusionsolar_battery_dc",
             datetime(2026, 7, 20, tzinfo=timezone.utc),
@@ -113,7 +113,7 @@ def test_battery_dc_quality_reports_missing_modules_and_invalid_response():
 
 def test_alarm_quality_reports_hits_and_missing_current_device():
     storage = Mock()
-    storage.load_rawdata.return_value = [
+    storage.load_rawdata_for_sources.return_value = [
         RawData(
             "fusionsolar_alarm_current",
             datetime(2026, 7, 20, tzinfo=timezone.utc),
@@ -156,7 +156,7 @@ def test_realtime_snapshot_continues_independent_collectors():
 
 def test_battery_diagnose_detects_signal_id_set_changes():
     storage = Mock()
-    storage.load_rawdata.return_value = [
+    storage.load_rawdata_for_sources.return_value = [
         RawData(
             "fusionsolar_battery_dc",
             datetime(2026, 7, 20, hour, tzinfo=timezone.utc),
@@ -186,7 +186,7 @@ def test_alarm_diagnose_reports_daily_history_gaps_and_pagination_issue():
         "page_size": 10,
         "target_date": "2026-07-19",
     }
-    storage.load_rawdata.return_value = [
+    storage.load_rawdata_for_sources.return_value = [
         RawData(
             "fusionsolar_alarm_current",
             datetime(2026, 7, 20, 0, minute, tzinfo=timezone.utc),

@@ -7,6 +7,9 @@ import sqlite3
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from hedp.adapters.fusionsolar.modbus_record_builder import (
+    FusionSolarModbusRecordBuilder,
+)
 from hedp.application import Application
 from hedp.storage import RawData
 from hedp.storage import Storage
@@ -23,6 +26,7 @@ class DailyHealthCriteria:
     SWITCHBOT_LOW_BATTERY_PERCENT = 20
     BATTERY_MODULES = (1, 2, 3, 4)
     FIVE_MINUTE_SOURCES = (
+        "fusionsolar_modbus_tcp",
         "fusionsolar_device_realtime",
         "fusionsolar_battery_dc",
         "fusionsolar_alarm_current",
@@ -66,10 +70,7 @@ class DailyHealthService:
                     "ok", integrity,
                 )
             )
-        all_raw = self.storage.load_rawdata()
-        window_raw = [
-            item for item in all_raw if start_utc <= item.timestamp <= end_utc
-        ]
+        window_raw = self.storage.load_rawdata_in_window(start_utc, end_utc)
         by_source: dict[str, list[RawData]] = defaultdict(list)
         for item in window_raw:
             by_source[item.source].append(item)
@@ -82,8 +83,12 @@ class DailyHealthService:
             )
         }
         self._check_five_minute_sources(by_source, checked_at, warnings)
+        self._check_modbus_records(by_source, warnings)
         previous_date = (checked_at - timedelta(days=1)).date()
-        self._check_daily_sources(all_raw, previous_date, warnings)
+        daily_raw = self.storage.load_rawdata_for_sources(
+            DailyHealthCriteria.DAILY_SOURCES
+        )
+        self._check_daily_sources(daily_raw, previous_date, warnings)
 
         application = Application(None, self.storage, None)
         battery = application.diagnose_battery_dc()
@@ -297,7 +302,10 @@ class DailyHealthService:
         checked_at: datetime,
         warnings: list[dict[str, object]],
     ) -> None:
-        expected_subjects: dict[str, list[tuple[str, str]]] = {
+        expected_subjects: dict[
+            str, list[tuple[str | None, str | None]]
+        ] = {
+            "fusionsolar_modbus_tcp": [(None, None)],
             "fusionsolar_device_realtime": [
                 ("device_dn", value) for value in self.device_dns
             ],
@@ -315,10 +323,15 @@ class DailyHealthService:
                 subject_items = [
                     item
                     for item in items
-                    if str((item.metadata or {}).get(metadata_key))
+                    if metadata_key is None
+                    or str((item.metadata or {}).get(metadata_key))
                     == expected_value
                 ]
-                subject = f"{metadata_key}={expected_value}"
+                subject = (
+                    "configured target"
+                    if metadata_key is None
+                    else f"{metadata_key}={expected_value}"
+                )
                 if not subject_items:
                     warnings.append(
                         self._issue(
@@ -356,6 +369,42 @@ class DailyHealthService:
                             max(gaps),
                         )
                     )
+
+    def _check_modbus_records(
+        self,
+        by_source: dict[str, list[RawData]],
+        warnings: list[dict[str, object]],
+    ) -> None:
+        source = "fusionsolar_modbus_tcp"
+        items = by_source.get(source, [])
+        if not items:
+            return
+        latest = max(items, key=lambda item: item.timestamp)
+        expected_metrics = {
+            metric
+            for metric, _unit in FusionSolarModbusRecordBuilder.METRICS.values()
+        }
+        matching_records = self.storage.load_records_for_source_timestamp(
+            source, latest.timestamp
+        )
+        actual_metrics = {record.metric for record in matching_records}
+        missing = sorted(expected_metrics - actual_metrics)
+        unexpected = sorted(actual_metrics - expected_metrics)
+        if missing or unexpected or len(matching_records) != len(expected_metrics):
+            warnings.append(
+                self._issue(
+                    source,
+                    "latest snapshot",
+                    "derived Modbus Records are incomplete",
+                    latest.timestamp.isoformat(),
+                    sorted(expected_metrics),
+                    {
+                        "missing": missing,
+                        "unexpected": unexpected,
+                        "record_count": len(matching_records),
+                    },
+                )
+            )
 
     def _check_daily_sources(
         self,
