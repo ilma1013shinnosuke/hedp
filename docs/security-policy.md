@@ -9,6 +9,7 @@
 ## 保存場所
 
 - SwitchBotの実行用認証情報は、Git管理外・権限0600の `.env` に置く。
+- `.env`は設定データとして安全なparserで読み、shell commandとして`source`しない。
 - 家庭固有の機器対応表は、Git管理外・権限0600の `config/local/` に置き、
   `.env`にはそのパスだけを設定する。
 - FusionSolarの現行launchd実行値は、リポジトリ外・権限0600のplistにある。

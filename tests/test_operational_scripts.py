@@ -49,7 +49,8 @@ def test_switchbot_job_runs_hourly_at_minute_five_without_plist_secrets():
         ROOT / "scripts" / "install_macos_switchbot_launchd.sh"
     ).read_text()
     assert "switchbot collect" in runner
-    assert "source .env" in runner
+    assert "run_with_env.py" in runner
+    assert "source .env" not in runner
     assert "set -x" not in runner
     assert "com.hedp.database.lock" in runner
     assert "<key>Minute</key><integer>5</integer>" in installer

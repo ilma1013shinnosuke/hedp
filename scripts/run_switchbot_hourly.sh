@@ -11,9 +11,6 @@ if [[ ! -f .env ]]; then
     echo "Git-ignored .env is required" >&2
     exit 2
 fi
-set -a
-source .env
-set +a
 
 LOCK_DIRECTORY="${SUMICORE_DATABASE_LOCK_DIRECTORY:-${HEDP_DATABASE_LOCK_DIRECTORY:-/tmp/com.hedp.database.lock}}"
 
@@ -23,4 +20,7 @@ if ! mkdir "${LOCK_DIRECTORY}" 2>/dev/null; then
 fi
 trap 'rmdir "${LOCK_DIRECTORY}"' EXIT
 
-"${REPOSITORY_ROOT}/.venv/bin/hedp" switchbot collect
+"${REPOSITORY_ROOT}/.venv/bin/python" \
+    "${REPOSITORY_ROOT}/scripts/run_with_env.py" \
+    "${REPOSITORY_ROOT}/.env" -- \
+    "${REPOSITORY_ROOT}/.venv/bin/hedp" switchbot collect
