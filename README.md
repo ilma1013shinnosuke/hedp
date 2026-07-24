@@ -1,6 +1,8 @@
 # SumiCore
 
 SumiCore（旧HEDP）は、家庭の事実を長期保存し、分析・判断・安全な操作へつなぐ基盤です。
+機器を置き換える必須制御装置ではなく、停止しても機器自身の基本機能と物理操作が
+継続する非必須の拡張層とします。
 See [PROJECT.md](PROJECT.md)
 for its purpose and principles, [SPECIFICATION.md](SPECIFICATION.md) for the
 current technical contract, and

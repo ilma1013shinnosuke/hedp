@@ -70,6 +70,22 @@ The core supports macOS and Windows. launchd integration is confined to
 `scripts/`; no OS-specific behavior is placed in the core. Runtime operation
 does not depend on AI, ChatGPT, or Codex.
 
+## Equipment autonomy contract
+
+- Collection, storage, intelligence, and execution failures must not disable
+  vendor safety functions, physical controls, or the equipment's standard
+  schedules.
+- Production execution must not replay a saved state or unfinished command
+  after startup. It must first read the current equipment state and validate
+  its freshness and quality.
+- Every production automation must declare its control owner, expiry,
+  confirmation method, and behavior when SumiCore is unavailable.
+- A function that exists only in SumiCore must be labelled as SumiCore-dependent
+  and have a safe fallback or explicit stopped state.
+- Duplicate schedules or continuously competing rules across SumiCore and the
+  equipment are not allowed.
+- Safety-critical household behavior must not have SumiCore as its only path.
+
 ## Current scheduled collection
 
 - `device-realtime`, Battery DC, and current alarms: every five minutes with a
