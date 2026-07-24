@@ -20,6 +20,8 @@ details and unknowns.
 システム全体の目的と非目標は [SumiCoreの思想](docs/system-philosophy.md)、
 保存期間・粒度・可逆圧縮・削除条件は
 [データ保存共通方針](docs/data-retention-policy.md)にあります。
+実運用から見つかった改善点と実施順は
+[SumiCore全体レビュー](docs/system-review.md)にまとめています。
 新しい機器の調査、読み取り・操作の分離、段階導入、廃止は
 [Adapter lifecycle](docs/adapter-lifecycle.md)を参照してください。
 家庭固有値の置き場所は[local configuration](docs/local-configuration.md)、Python更新は
