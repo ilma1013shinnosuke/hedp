@@ -17,6 +17,9 @@ details and unknowns.
 [directory policy](docs/directory-policy.md)、現在の
 ファイル対応は [current layout](docs/current-layout.md)、秘密情報と実データは
 [security policy](docs/security-policy.md) を参照してください。
+システム全体の目的と非目標は [SumiCoreの思想](docs/system-philosophy.md)、
+保存期間・粒度・可逆圧縮・削除条件は
+[データ保存共通方針](docs/data-retention-policy.md)にあります。
 新しい機器の調査、読み取り・操作の分離、段階導入、廃止は
 [Adapter lifecycle](docs/adapter-lifecycle.md)を参照してください。
 家庭固有値の置き場所は[local configuration](docs/local-configuration.md)、Python更新は

@@ -17,7 +17,7 @@ possible future need.
 
 ## RawData
 
-- RawData is the immutable Source of Truth.
+- RawData is the immutable Source of Truth while it is retained.
 - `payload` stores the complete API response without conversion.
 - `timestamp` is the acquisition time.
 - `target_date` is used only by APIs that address a date.
@@ -45,9 +45,11 @@ possible future need.
 ## Storage rules
 
 - SQLite is the persistence store and existing databases remain compatible.
-- RawData is not normally deleted, overwritten, or mutated.
-- Realtime snapshots with equal payloads are retained when their acquisition
-  timestamps differ.
+- RawData is not overwritten or mutated. Archiving and deletion require the
+  retention policy, successful lossless restore verification, and an explicit
+  deletion gate.
+- Realtime snapshots with equal payloads may be retained as short-term evidence;
+  long-term retention depends on change density and analysis value.
 - Record regeneration prevents exact duplicates.
 - SwitchBot uses independent normalized tables for device identity, API-name
   history, location history, observations, import audits, conflicts, gaps, and
@@ -55,6 +57,8 @@ possible future need.
 - SwitchBot historical exports retain second-resolution source values. Exact
   duplicates are removed idempotently; conflicting values at one timestamp
   are retained and audited. Missing data is not interpolated.
+- Retention class, granularity, compression, and deletion rules follow
+  `docs/data-retention-policy.md`.
 
 ## Time rules
 

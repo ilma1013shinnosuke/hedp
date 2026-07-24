@@ -69,12 +69,13 @@ SumiCoreは保存済みの古い状態や未完了の命令を、再起動後に
 
 ## Data acquisition policy
 
-SumiCore normally stores all obtainable external information as RawData, including
-historical and current values, states, equipment information, configuration,
-Signal definitions, alarms, and aggregates. Current-value APIs are collected
-periodically to form snapshot time series. Collection must not discard
-information or infer an unconfirmed specification. Normalization and selection
-belong after RawData has been stored.
+SumiCore preserves the external information required to reproduce, verify, and
+explain the system as RawData. Collection must not infer an unconfirmed
+specification. RawData is immutable while retained, but not every obtainable
+response is kept at full resolution forever. Retention, aggregation, lossless
+cold archiving, and eventual deletion follow the documented value criteria and
+an explicit deletion gate. Normalization and initial retention classification
+belong after RawData has been captured.
 
 ## Scope
 
@@ -83,8 +84,9 @@ electric vehicles, air conditioning, ventilation, hot water, weather, indoor
 conditions, and household equipment added in the future.
 
 Vendor adapters, including SwitchBot, remain isolated from existing energy
-collectors. High-resolution source history is retained without interpolation;
-derived summaries must remain reproducible from source observations.
+collectors. High-resolution source history is retained without interpolation
+for the period in which it is needed; derived summaries identify the source
+evidence and retention class from which they were produced.
 
 ## Non-goals
 
