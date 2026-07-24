@@ -45,6 +45,11 @@
 オープンソース実装、障害時の代替経路を調査する。状態、イベント、予約、操作、危険な
 設定変更を区別する。
 
+調査で入手・生成するプロジェクト固有ファイルは
+`runtime/research/<vendor>/<YYYYMMDD>-<topic>/`だけへ置き、原本、作業生成物、成果を
+分離する。調査領域の構成、秘密区分、容量上限、終了時の削除条件は
+[ディレクトリと命名の方針](directory-policy.md)を正本とする。
+
 根拠は次に分ける。
 
 - 公式に確認済み
@@ -226,7 +231,7 @@ docs/integrations/<vendor>/
 tests/fixtures/<vendor>/          匿名化した小さな応答例
 config/examples/<vendor>.*       値のない共有例
 config/local/<vendor>.*          家庭固有設定、Git管理外
-runtime/captures/<vendor>/<date>/ 実Raw、Git管理外
+runtime/research/<vendor>/<date-topic>/ 解析原本・作業生成物・引き継ぎ成果、Git管理外
 ```
 
 秘密情報は`.env`、家庭固有設定は`config/local/`、現役の長期データはDB、運用ログは

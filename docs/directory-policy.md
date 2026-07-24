@@ -21,6 +21,7 @@ hedp/
 ├── config/               Gitで共有できる設定
 ├── cloud/gas/            現在使用中のGASコードだけ
 ├── data/                 ファイルとして保持する実データが必要な場合だけ
+├── runtime/research/     解析中だけ使うGit管理外の隔離領域
 ├── tests/                自動テストと匿名化した模擬データ
 ├── scripts/              起動・点検・移行用スクリプト
 └── docs/                 日本語の設計・運用・連携知識
@@ -54,6 +55,36 @@ tests/fixtures/<vendor>/
 メーカー知識は、認証の流れ、取得項目、変換規則、既知のエラー、移行方法に分ける。
 新しいメーカーの調査、読み取り・操作の分離、段階導入、更新、廃止は
 [Adapterの調査・実装・運用手順](adapter-lifecycle.md)に従う。
+
+## 解析専用領域
+
+機器・アプリ・通信の解析中に作るプロジェクト固有ファイルは、すべて次へ隔離する。
+
+```text
+runtime/research/<vendor>/<YYYYMMDD>-<topic>/
+├── 00_inbox/       入手した原本。内容を変更せず、一つだけ置く
+├── 10_work/        展開、逆コンパイル、変換、通信解析などの作業生成物
+├── 20_results/     引き継ぎ書、成果物台帳、匿名fixture候補
+└── MANIFEST.md     ファイルの由来、秘密区分、容量、採否、処分予定
+```
+
+`runtime/`全体はGit管理外である。英小文字の`vendor`と、日付を含む調査単位を使い、
+複数チャットや複数機器の作業ファイルを同じフォルダへ混ぜない。
+
+解析領域では次を守る。
+
+- 原本を複製せず、作業生成物は`10_work/`へ置く。
+- `.env`、Keychain内容、password、token、cookie、暗号鍵を置かない。
+- 家庭固有ID、IP、SSID、MAC、認証済み画面、未匿名RawをGitへ追加しない。
+- 秘密を含む可能性がある原本はmode 0600、directoryは0700とする。
+- 共有SDKや共通toolを複製しない。専用AVDや専用cacheを作る場合は台帳へ記録する。
+- 一調査あたり1 GiBで警告し、2 GiBを超える前に継続理由と削減方法を確認する。
+- 正式文書、実装、匿名fixtureへ採用した後も、元ファイルを自動削除しない。
+
+調査終了時は、必要な知識を`docs/integrations/<vendor>/`、実装を
+`src/hedp/adapters/<vendor>/`、小さな匿名fixtureを`tests/fixtures/<vendor>/`へ移す。
+テスト、Git差分、成果物台帳、秘密非混入を確認し、削除対象と容量を提示して明示承認を
+得てから、調査directoryをまとめて削除する。
 
 ## GASの利用と廃止
 
