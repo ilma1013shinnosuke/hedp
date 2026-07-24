@@ -11,7 +11,9 @@ details and unknowns.
 
 設計の4区分は [①情報収集](docs/01_collection.md)、
 [②情報蓄積](docs/02_storage.md)、[③情報利用・判断](docs/03_intelligence.md)、
-[④操作・実行](docs/04_execution.md) を参照してください。ディレクトリと命名は
+[④操作・実行](docs/04_execution.md) を参照してください。④の正式な共通契約は
+[共通Execution層 基本設計](docs/execution-contract.md)、採用理由は
+[決定記録002](docs/decisions/002_common_execution_layer.md)にあります。ディレクトリと命名は
 [directory policy](docs/directory-policy.md)、現在の
 ファイル対応は [current layout](docs/current-layout.md)、秘密情報と実データは
 [security policy](docs/security-policy.md) を参照してください。

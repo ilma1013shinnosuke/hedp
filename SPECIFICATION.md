@@ -92,6 +92,31 @@ coordination has a clear benefit, provided the exception is documented.
   equipment are not allowed.
 - Safety-critical household behavior must not have SumiCore as its only path.
 
+## Execution contract
+
+The common Execution design is adopted, but no production Execution package or
+database migration exists yet. Its normative design is
+[`docs/execution-contract.md`](docs/execution-contract.md).
+
+- Intelligence and users request a vendor-neutral immutable Intent.
+- Execution owns policy, authorization, expiry, target resolution, duplicate
+  suppression, bounded retry, fan-out, verification, and audit.
+- Adapters own vendor translation, transport, error mapping, and the read
+  primitive used for verification.
+- Dispatch acknowledgement is not proof that equipment reached the desired
+  state.
+- Processing Phase and terminal Outcome are separate. `unknown` and `partial`
+  are valid outcomes and must not be converted to success.
+- Retry policy depends on command semantics. Trigger and configuration
+  operations are not blindly retried.
+- Multi-target work uses parent and child operations; cross-vendor atomicity
+  and automatic rollback are not assumed.
+- Startup and reconnect enter a syncing state. Saved state and unfinished
+  commands are not replayed.
+- Shadow Mode never dispatches and never reports a completed real operation.
+- Production writes are introduced in stages, beginning with one low-risk,
+  single-target, absolute-state capability.
+
 ## Current scheduled collection
 
 - `device-realtime`, Battery DC, and current alarms: every five minutes with a
