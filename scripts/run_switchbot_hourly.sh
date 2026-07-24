@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/log_maintenance.sh"
+sumicore_rotate_job_logs switchbot
 
 cd "${REPOSITORY_ROOT}"
 if [[ ! -f .env ]]; then
@@ -21,10 +23,4 @@ if ! mkdir "${LOCK_DIRECTORY}" 2>/dev/null; then
 fi
 trap 'rmdir "${LOCK_DIRECTORY}"' EXIT
 
-for log in "${HOME}/Library/Logs/hedp/switchbot.out.log" \
-           "${HOME}/Library/Logs/hedp/switchbot.err.log"; do
-    if [[ -f "${log}" ]] && [[ "$(stat -f %z "${log}")" -gt 5242880 ]]; then
-        mv -f "${log}" "${log}.1"
-    fi
-done
 "${REPOSITORY_ROOT}/.venv/bin/hedp" switchbot collect

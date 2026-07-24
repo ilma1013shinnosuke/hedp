@@ -117,6 +117,47 @@ def test_uninstaller_covers_every_current_and_legacy_job():
     assert "com.hedp" in script
 
 
+def test_every_runner_uses_common_log_rotation():
+    runners = {
+        "run_daily.sh": "collect",
+        "run_device_realtime.sh": "device-realtime",
+        "run_equipment_daily.sh": "equipment",
+        "run_switchbot_hourly.sh": "switchbot",
+        "run_daily_health.sh": "daily-health",
+    }
+    for name, job in runners.items():
+        script = (ROOT / "scripts" / name).read_text()
+        assert 'source "${SCRIPT_DIR}/log_maintenance.sh"' in script
+        assert f"sumicore_rotate_job_logs {job}" in script
+
+
+def test_common_log_rotation_keeps_two_generations(tmp_path):
+    home = tmp_path / "home"
+    logs = home / "Library" / "Logs" / "hedp"
+    logs.mkdir(parents=True)
+    current = logs / "fixture.err.log"
+    current.write_text("current")
+    (logs / "fixture.err.log.1").write_text("previous")
+
+    environment = {**os.environ, "HOME": str(home)}
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                f"source {ROOT / 'scripts' / 'log_maintenance.sh'}; "
+                "sumicore_rotate_job_logs fixture 1 2"
+            ),
+        ],
+        check=True,
+        env=environment,
+    )
+
+    assert current.read_text() == ""
+    assert (logs / "fixture.err.log.1").read_text() == "current"
+    assert (logs / "fixture.err.log.2").read_text() == "previous"
+
+
 def test_launchd_switcher_validates_and_restores_legacy_job():
     script = (ROOT / "scripts" / "switch_macos_launchd_job.sh").read_text()
     assert 'plutil -lint "${NEW_PLIST}"' in script
