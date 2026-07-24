@@ -62,7 +62,21 @@ compress_backups() {
     done
 }
 
+cleanup_stale_partial_backups() {
+    [[ -d "${BACKUP_DIRECTORY}" ]] || return 0
+    find "${BACKUP_DIRECTORY}" \
+        -maxdepth 1 \
+        -type f \
+        -name '.hedp-????????-??????.db.*.partial*' \
+        -mmin +60 \
+        -print0 |
+        while IFS= read -r -d '' partial_file; do
+            rm -- "${partial_file}"
+        done
+}
+
 cd "${REPOSITORY_ROOT}"
+cleanup_stale_partial_backups
 status=0
 run_timed "${HEDP_COMMAND}" collect || status=1
 previous_date="$(TZ=Asia/Tokyo date -v-1d +%F)"

@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import stat
 import subprocess
+import time
 
 
 def _daily_script_repository(tmp_path: Path) -> tuple[Path, Path]:
@@ -42,6 +43,12 @@ def test_run_daily_collects_backs_up_and_retains_latest_compressed(tmp_path) -> 
         (backups / name).touch()
     invalid_backup = backups / "hedp-old.db"
     invalid_backup.touch()
+    stale_partial = backups / ".hedp-20260131-030000.db.old.partial"
+    stale_partial.touch()
+    old_time = time.time() - 2 * 60 * 60
+    os.utime(stale_partial, (old_time, old_time))
+    recent_partial = backups / ".hedp-20260131-040000.db.new.partial"
+    recent_partial.touch()
     database = repository / "hedp.db"
     database.touch()
     call_log = tmp_path / "calls.log"
@@ -75,6 +82,8 @@ def test_run_daily_collects_backs_up_and_retains_latest_compressed(tmp_path) -> 
         backup_names[-1] + ".gz",
     ]
     assert stat.S_IMODE(compressed_backups[0].stat().st_mode) == 0o600
+    assert not stale_partial.exists()
+    assert recent_partial.exists()
     assert database.is_file()
 
 

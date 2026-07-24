@@ -100,7 +100,9 @@ mode-0600 hidden `.partial` file, promotes that file to the dated `.db` name
 only after SQLite finishes successfully, and removes partial files when an
 ordinary error occurs. A failed copy is therefore not presented as a valid
 backup and does not replace the previous generation. Compressed backups also
-remain mode `0600`.
+remain mode `0600`. If a hard process termination prevents normal cleanup,
+the next daily job removes generated partial files older than one hour; recent
+partial files are left alone to avoid interfering with active work.
 
 ## macOS automatic operation
 
