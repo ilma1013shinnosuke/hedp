@@ -272,7 +272,9 @@ Adapterは次を満たした段階を完成とする。
 - FusionSolar Modbus TCPは読み取り機能だけを公開し、レジスタ書き込みを持たない。
 - SwitchBotは現在、機器一覧と状態取得だけを実装し、実機操作APIを持たない。
 - SwitchBotは収集と専用保存の結合、同じ応答の重複保存可能性を全体レビュー対象とする。
-- Smart LEDZ、Qrio、BRAVIA、エコキュートなどは現役リポジトリに本番Adapterがない。
+- Smart LEDZ、BRAVIA、エコキュート、Miele、WAREMAは、オフラインで検証できる
+  protocol解析・normalizer等だけを追加済みであり、本番transportや操作経路は持たない。
+- Qrio、日産サクラ、MTRL-RK-901SIは知識文書を正式化したが、本番Adapterはない。
 
 既存コードを文書へ合わせるためだけに一括移動しない。次に実際の機能追加または改修を
 行うAdapterから本手順を適用し、必要性が確認できた変更だけを行う。
