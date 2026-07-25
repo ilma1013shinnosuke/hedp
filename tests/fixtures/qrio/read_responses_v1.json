@@ -1,0 +1,38 @@
+{
+  "status": {
+    "main_lock": 2
+  },
+  "health": {
+    "data": [
+      {
+        "lock": {
+          "id": "fixture-lock-001",
+          "fw_version": "fixture-1.0",
+          "battery_a": 0,
+          "battery_b": 2,
+          "enable_sound": true,
+          "enable_autolock": true,
+          "enable_autolock_sound": false,
+          "beacon_interval": 8,
+          "lock_setting": {
+            "lock_name": "anonymous",
+            "hub": {
+              "id": "fixture-hub-001",
+              "fw_version": "fixture-2.0"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "history": {
+    "display_logs": [
+      {
+        "id": "fixture-event-001",
+        "logged_at": "2026-07-25T00:00:00.000Z",
+        "integrated_behavior": "close",
+        "message": "omitted"
+      }
+    ]
+  }
+}

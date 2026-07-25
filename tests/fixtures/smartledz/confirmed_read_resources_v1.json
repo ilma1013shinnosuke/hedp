@@ -1,0 +1,41 @@
+{
+  "group_list": {
+    "ErrorCode": 0,
+    "data": [
+      [101, "anonymous", 1, 0, 3, 0, 1, 64]
+    ]
+  },
+  "group_detail": {
+    "ErrorCode": 0,
+    "data": {
+      "scenes": [
+        [201, "anonymous", 2, 0, 50, 30, 255, "{}"]
+      ],
+      "schedules": [
+        [301, "anonymous", 3, 1, "1111100", 0]
+      ],
+      "devices": [
+        [401, "anonymous"]
+      ]
+    }
+  },
+  "sensor_list": {
+    "ErrorCode": 0,
+    "data": [
+      [501, "anonymous", "redacted", 0, 60, 2, 0, 4, "redacted", 101, "", 0, 0, 1]
+    ]
+  },
+  "illuminance": {
+    "ErrorCode": 0,
+    "val": 420
+  },
+  "schedule_detail": {
+    "ErrorCode": 0,
+    "data": {
+      "info": [1, "anonymous", 3, 0, "1111100"],
+      "details": [
+        [1, 0, 25200, 201, 2]
+      ]
+    }
+  }
+}

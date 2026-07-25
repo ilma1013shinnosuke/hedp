@@ -21,18 +21,24 @@ transportはframingとJSON相関だけを担当する。executorはreader完成�
 Collectionからimportできないようにする。
 
 現時点のオフラインreader部品は、すでにJSONへ復号・相関済みのGroup、Scene、Schedule、
-Device、Sensor応答だけを受け取る。実機で確認済みの`ErrorCode=0`は受付済みとして表し、
-未確認のネストschemaや値は解釈しない。未知fieldは値を複製せず最上位field名だけで検出し、
-名称、ID、認証、ネットワーク、設定に関わるfield名はreader境界でredactする。
+Device、Sensor応答だけを受け取る。実機で確認済みの`ErrorCode=0`は受付済みとして表す。
+確認済みのGroupList、GroupGet、DeviceList、GroupScheduleGet、照度応答は、家庭固有IDを
+実行時設定の安全なaliasへ解決してから正規化する。名称、MAC、設定blob、未解決IDは
+正規化境界を越えない。未知schemaは値を複製せず最上位field名だけで検出する。
 
-JSON command名とrequest-object schemaは匿名化して確認できる形で保存されていない。そのため
-`messages`部品はJSON requestを生成しない。別transportがframeのrequest IDと復号済みJSON
-objectを渡した場合だけ、Group/Scene/Schedule/Device/Sensorとして宣言済みのread requestへ
-一対一で相関し、通知、重複、未宣言ID、欠落応答を拒否する。fixtureの`request_id`はこの
-transport入力を表すテスト用の関連情報であり、Smart LEDZ JSON fieldを主張するものではない。
+引き継いだ2.0.4解析で確認済みのread-only command shapeだけを`read_commands`へ正式化した。
+書込みcommandは同moduleへ入れない。別transportがframeのrequest IDと復号済みJSON objectを
+渡した場合だけ、宣言済みread requestへ一対一で相関し、通知、重複、未宣言ID、欠落応答を
+拒否する。fixtureの`request_id`はtransport入力を表すテスト用関連情報である。
+
+Adapter本体はPython 3.11以上でOS非依存とし、Keychain、launchd、GUI、固定パスへ依存しない。
+定期実行は外側へ分離し、macOSではlaunchd、Linuxではsystemd等へ差し替える。すべての
+正規化結果はtimezone付き`observed_at`と`received_at`を持つ。イベントは秒精度を保ち、
+機器横断の1分系列や長期集計は蓄積層で生成する。
 
 Scene/Scheduleの定義、active、現在選択、実行中状態は同じ意味にしない。完全なpush event、
-fragmented frame実機値、MQTT、認証token lifecycle、Sensor luxは未確認である。
+fragmented frame実機値、MQTT、認証token lifecycle、Sensor lux実値、個別照明の状態rowは
+未確認である。未確認項目を推測で正規化しない。
 
 ## 公開しない能力
 

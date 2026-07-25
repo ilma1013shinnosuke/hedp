@@ -16,14 +16,23 @@ property mapをread-onlyで取得し、実装項目を確定する。規格上�
 
 ## オフラインproperty map解析
 
-`src/hedp/adapters/ecocute/echonet.py` は通信を行わない純粋なframe/property map
-decoderである。`0x9D`（INF）、`0x9E`（Set）、`0x9F`（Get）のlist形式とbitmap形式を
+`src/hedp/adapters/ecocute/echonet.py` は通信を行わない純粋なread-only Get
+builderとframe/property map decoderである。`0x9D`（INF）、`0x9E`（Set）、
+`0x9F`（Get）のlist形式とbitmap形式を
 検証してEPC集合へ復号する。匿名fixtureには2026-07-24に観測したSet map 14件とGet map
 41件だけを保持し、家庭内アドレス、機器ID、通常値EDTは含めない。
 
 read-only capabilityは同一観測のGet mapに存在し、Set mapに存在しないEPCだけを返す。
 Set可能性や未知EPCの意味は推測しない。未知EPCは数値のままproperty mapとcapability結果に
-残り、名称は付与しない。この解析だけではGet要求、UDP、Set、保存、設定を実行しない。
+残り、名称は付与しない。Get requestはbytesまで生成するが、この部品自身はUDP送信、Set、
+保存、設定を実行しない。
+
+Get responseは定期照合、INFは秒精度のevent更新として共通Observationへ正規化する。INFに
+含まれないpropertyをmissingとは扱わず、後続の定期Getで現在値を回復する。値のないproperty、
+未知値、未知EPCはそれぞれ`missing`または`unknown`とし、0や前回値で埋めない。
+
+AdapterはPython 3.11以上のOS非依存コードとし、macOS固有機能へ依存しない。UDP transportと
+定期実行は外側へ分離し、将来Linux/systemdへ移してもReaderを変更しない。
 
 ## 読み取り候補
 

@@ -5,14 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-
-class Quality(str, Enum):
-    """Whether a response is safe to use as an observed fact."""
-
-    GOOD = "good"
-    MISSING = "missing"
-    INVALID = "invalid"
-    UNKNOWN = "unknown"
+from hedp.observations import Quality
 
 
 class ResourceKind(str, Enum):

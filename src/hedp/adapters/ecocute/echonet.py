@@ -4,9 +4,11 @@ from dataclasses import dataclass
 
 
 FORMAT_1 = bytes((0x10, 0x81))
+GET_REQUEST = 0x62
 GET_RESPONSE = 0x72
 INFORMATION = 0x73
 WATER_HEATER_CLASS = bytes((0x02, 0x6B))
+CONTROLLER_OBJECT = bytes((0x05, 0xFF, 0x01))
 PROPERTY_MAP_EPCS = frozenset((0x9D, 0x9E, 0x9F))
 
 # Names are labels for values whose semantics were confirmed during the
@@ -20,6 +22,7 @@ _CONFIRMED_PROPERTY_NAMES = {
     0x9D: "inf_property_map",
     0x9E: "set_property_map",
     0x9F: "get_property_map",
+    0xB0: "heating_mode",
     0xB2: "heating_active",
     0xC3: "hot_water_in_use",
     0xD1: "supply_temperature_setpoint_c",
@@ -78,6 +81,56 @@ class ReadOnlyCapability:
 
     epc: int
     name: str | None
+
+
+def confirmed_property_name(epc: int) -> str | None:
+    """Return only names supported by observed/specification evidence."""
+
+    return _CONFIRMED_PROPERTY_NAMES.get(epc)
+
+
+def build_get_request(
+    *,
+    transaction_id: int,
+    epcs: tuple[int, ...],
+    instance_code: int = 1,
+) -> bytes:
+    """Build one side-effect-free ECHONET Lite Get request.
+
+    Network discovery, destination addresses, retries, and scheduling stay
+    outside this pure function so the same Adapter can run on macOS or Linux.
+    """
+
+    if isinstance(transaction_id, bool) or not isinstance(transaction_id, int):
+        raise TypeError("transaction_id must be an integer")
+    if not 0 <= transaction_id <= 0xFFFF:
+        raise ValueError("transaction_id must be between 0 and 65535")
+    if isinstance(instance_code, bool) or not isinstance(instance_code, int):
+        raise TypeError("instance_code must be an integer")
+    if not 1 <= instance_code <= 0xFF:
+        raise ValueError("instance_code must be between 1 and 255")
+    if not epcs:
+        raise ValueError("epcs must not be empty")
+    if len(epcs) > 0xFF:
+        raise ValueError("at most 255 EPCs may be requested")
+    if len(set(epcs)) != len(epcs):
+        raise ValueError("epcs must not contain duplicates")
+    for epc in epcs:
+        if isinstance(epc, bool) or not isinstance(epc, int):
+            raise TypeError("each EPC must be an integer")
+        if not 0 <= epc <= 0xFF:
+            raise ValueError("each EPC must be between 0 and 255")
+
+    destination = WATER_HEATER_CLASS + bytes((instance_code,))
+    properties = b"".join(bytes((epc, 0)) for epc in epcs)
+    return (
+        FORMAT_1
+        + transaction_id.to_bytes(2, "big")
+        + CONTROLLER_OBJECT
+        + destination
+        + bytes((GET_REQUEST, len(epcs)))
+        + properties
+    )
 
 
 def parse_frame(raw: bytes) -> EchonetFrame:

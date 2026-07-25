@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from hedp.observations import ObservationTime, ObservedValue, Quality
+
+from .models import CollectionSource, MieleObservation
+from .sse import SseEvent
+
 
 MISSING_SENTINEL = -32_768
 
@@ -71,3 +76,122 @@ def normalize_washer_dryer(device: object) -> MieleReading:
         spin_speed_rpm=_number(state.get("spinningSpeed")),
         drying_step_code=_integer(state.get("dryingStep")),
     )
+
+
+def normalize_observation(
+    device: object,
+    *,
+    target_ref: str,
+    source: CollectionSource,
+    time: ObservationTime,
+) -> MieleObservation:
+    """Normalize a REST snapshot or one SSE state without private text."""
+
+    if not isinstance(device, dict):
+        raise ValueError("washer-dryer response must be an object")
+    state = device.get("state")
+    if not isinstance(state, dict):
+        raise ValueError("washer-dryer state is missing")
+    fields = {
+        "status_code": _observed_integer(state, "status"),
+        "program_id": _observed_integer(state, "ProgramID"),
+        "program_type_code": _observed_integer(state, "programType"),
+        "program_phase_code": _observed_integer(state, "programPhase"),
+        "remaining_minutes": _observed_minutes(state, "remainingTime"),
+        "elapsed_minutes": _observed_minutes(state, "elapsedTime"),
+        "scheduled_start_minutes_of_day": _observed_minutes(state, "startTime"),
+        "temperature_c": _observed_number(state, "temperature"),
+        "spin_speed_rpm": _observed_number(state, "spinningSpeed"),
+        "drying_step_code": _observed_integer(state, "dryingStep"),
+    }
+    quality = (
+        Quality.INVALID
+        if any(value.quality == Quality.INVALID for value in fields.values())
+        else (
+            Quality.MISSING
+            if fields["status_code"].quality == Quality.MISSING
+            else Quality.GOOD
+        )
+    )
+    return MieleObservation(
+        target_ref=target_ref,
+        source=source,
+        time=time,
+        quality=quality,
+        **fields,
+    )
+
+
+def state_from_event(event: SseEvent) -> dict[str, object] | None:
+    """Extract only a type-24 state and discard IDs and other event fields."""
+
+    if event.name.upper() == "PING":
+        return None
+    direct = event.payload.get("state")
+    if isinstance(direct, dict):
+        return {"state": direct}
+    for candidate in event.payload.values():
+        if not isinstance(candidate, dict):
+            continue
+        state = candidate.get("state")
+        if not isinstance(state, dict):
+            continue
+        ident = candidate.get("ident")
+        if not isinstance(ident, dict):
+            continue
+        device_type = _number(ident.get("type"))
+        if device_type == 24:
+            return {"state": state}
+    return None
+
+
+def _raw_value(value: object) -> object:
+    return value.get("value_raw") if isinstance(value, dict) else value
+
+
+def _observed_number(
+    state: dict[str, object],
+    key: str,
+) -> ObservedValue[int | float]:
+    if key not in state or state[key] is None:
+        return ObservedValue(None, Quality.MISSING, f"{key}_missing")
+    value = _raw_value(state[key])
+    if value == MISSING_SENTINEL:
+        return ObservedValue(None, Quality.MISSING, f"{key}_sentinel")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return ObservedValue(None, Quality.INVALID, f"{key}_invalid")
+    return ObservedValue(value, Quality.GOOD)
+
+
+def _observed_integer(
+    state: dict[str, object],
+    key: str,
+) -> ObservedValue[int]:
+    value = _observed_number(state, key)
+    if value.value is None:
+        return ObservedValue(None, value.quality, value.reason)
+    if not isinstance(value.value, int):
+        return ObservedValue(None, Quality.INVALID, f"{key}_invalid")
+    return ObservedValue(value.value, Quality.GOOD)
+
+
+def _observed_minutes(
+    state: dict[str, object],
+    key: str,
+) -> ObservedValue[int]:
+    if key not in state or state[key] is None:
+        return ObservedValue(None, Quality.MISSING, f"{key}_missing")
+    value = state[key]
+    if not isinstance(value, list) or len(value) != 2:
+        return ObservedValue(None, Quality.INVALID, f"{key}_invalid")
+    hours, minutes = value
+    if (
+        isinstance(hours, bool)
+        or isinstance(minutes, bool)
+        or not isinstance(hours, int)
+        or not isinstance(minutes, int)
+        or hours < 0
+        or not 0 <= minutes < 60
+    ):
+        return ObservedValue(None, Quality.INVALID, f"{key}_invalid")
+    return ObservedValue(hours * 60 + minutes, Quality.GOOD)

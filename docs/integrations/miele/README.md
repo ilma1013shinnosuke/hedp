@@ -22,6 +22,19 @@ OAuth、REST、SSE接続をtransportに隔離し、readerだけを公開する�
 低頻度poll fallbackは、API負荷とrate limitを確認してから採用する。家電操作executorは
 作らない。
 
+正式なオフラインReader契約は`src/hedp/adapters/miele/`へ置く。REST snapshotとSSE stateを
+同じ状態modelへ正規化し、status、program、phase、残時間、経過時間、予約時刻、温度、
+回転数、乾燥段階へ個別の品質を付ける。欠損や`-32768`を0へ変換しない。target aliasを
+除く実機ID、localized text、未知fieldは正規化結果へ出さない。
+
+SSE parserはPING、IDENT、ACTIONを含む有限transcriptを扱い、event byte数とdata行数へ
+上限を持つ。payloadはreprへ出さない。Reader自身は再接続loopを持たず、外側の運用部品が
+総時間・回数・backoff上限を管理する。再接続後はREST snapshotで現在値を回復する。
+
+ReaderはPython 3.11以上のOS非依存コードであり、Keychain、launchd、固定パスへ依存しない。
+実OAuth transport、単一SSE接続、poll fallbackは、秘密情報の再発行と実機read-only検証後に
+追加する。
+
 ## 秘密
 
 Client Secretは過去のチャットで露出した可能性があるため、本番前に再発行する。旧`.env`は

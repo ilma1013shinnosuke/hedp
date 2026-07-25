@@ -1,0 +1,8 @@
+: heartbeat
+
+event: PING
+data: {}
+
+event: IDENT
+data: {"state":{"status":{"value_raw":5},
+data: "ProgramID":{"value_raw":7},"remainingTime":[0,30]}}

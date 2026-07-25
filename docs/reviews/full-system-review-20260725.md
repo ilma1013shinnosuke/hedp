@@ -173,6 +173,35 @@ reader-onlyのままにする。Adapterを直接呼ぶ本番自動化経路を�
 SumiCoreを新規の正名とし、`hedp`、`HEDP_`、旧CLI、旧launchd labelは互換理由、
 観測方法、終了条件を一覧管理する。安定運用とrollback条件を満たすまで互換を消さない。
 
+### P3: 庭カメラのローカルAI検知をHomeCoreへ連携する
+
+**状態: 将来タスク・未着手。** カメラ映像をローカルPC又はカメラ内AIで解析し、人、動物、
+車、その他の検知結果だけをMQTTでHomeCoreへ渡す。顔認識や人物同定は初期範囲に含めない。
+HomeCoreが停止してもカメラ自身の基本録画や標準機能は継続できる構成を前提とする。
+
+```text
+庭カメラ → ローカルAI → MQTT detection event → HomeCore
+```
+
+映像・画像はMQTT payloadへ入れず、通常eventは安全なカメラalias、event種別、confidence、
+`observed_at`、`received_at`、model/profile version、quality、dedupe keyだけを持つ。eventは
+秒精度で保存し、機器横断分析は共通Observation契約に従って1分bucketへ整列する。
+
+実装前に次を順番に確認する。
+
+1. カメラの映像取得方式、標準録画、HomeCore停止時動作をread-onlyで確認する。
+2. AIをカメラ内、常時起動Linux機、別processのどこへ置くか、CPU/GPU負荷と遅延で決める。
+3. MQTT brokerの配置、TLS、client認証、topic権限、QoS、再送・重複・offline時上限を決める。
+4. 家庭固有ID、顔、音声、位置、画像を含まない匿名event fixtureと誤検知testを作る。
+5. 第1層のMQTT consumerをreader-onlyで実装し、切断後の再接続と重複排除を検証する。
+6. 人・動物・車のprecision/recall、夜間、雨、影、逆光について有限期間で実測する。
+7. event、snapshot、動画ごとに保存目的、保持期間、容量上限、閲覧権限、削除方法を決める。
+8. 通知は第3層の提案・判断、照明や録画指示は第4層のExecutionGate経由に限定する。
+
+`homecore/garden/camera/detection`は初期topic候補であり、brokerや実機へはまだ作成しない。
+画像保存を採用する場合だけ`docs/directory-policy.md`の将来規則に従い、実データをGitへ
+追加しない。MQTT認証情報はOS非依存の秘密管理対象とし、payload、log、fixtureへ出さない。
+
 ## 新規Adapterの標準経路
 
 新しい機器は、`docs/adapter-onboarding-checklist.md`のGate 0〜8を順に通す。

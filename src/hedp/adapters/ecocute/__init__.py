@@ -7,10 +7,18 @@ from .echonet import (
     EchonetPropertyMaps,
     FrameError,
     ReadOnlyCapability,
+    build_get_request,
     classify_read_only_capabilities,
+    confirmed_property_name,
     decode_property_map,
     decode_property_maps,
     parse_frame,
+)
+from .state import (
+    EcoCuteObservation,
+    ObservationSource,
+    PropertyObservation,
+    normalize_observation,
 )
 
 __all__ = [
@@ -19,9 +27,15 @@ __all__ = [
     "EchonetPropertyMap",
     "EchonetPropertyMaps",
     "FrameError",
+    "EcoCuteObservation",
+    "ObservationSource",
+    "PropertyObservation",
     "ReadOnlyCapability",
+    "build_get_request",
     "classify_read_only_capabilities",
+    "confirmed_property_name",
     "decode_property_map",
     "decode_property_maps",
     "parse_frame",
+    "normalize_observation",
 ]
