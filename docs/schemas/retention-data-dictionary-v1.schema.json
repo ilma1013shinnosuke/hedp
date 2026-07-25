@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sumicore.local/schemas/retention-data-dictionary-v1.schema.json",
+  "title": "SumiCore retention data dictionary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "status",
+    "retention_class",
+    "data_kind",
+    "contains_household_identifiers",
+    "contains_sensitive_behavior",
+    "max_payload_bytes",
+    "max_events_per_day",
+    "estimated_daily_bytes",
+    "active_detail_days",
+    "long_term_granularity",
+    "long_term_retention_days",
+    "archive_unit",
+    "compression",
+    "restore_procedure",
+    "deletion_conditions"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "source": {"type": "string", "minLength": 1},
+    "status": {"enum": ["draft", "approved"]},
+    "retention_class": {"enum": ["A", "B", "C", "D"]},
+    "data_kind": {
+      "enum": ["raw", "continuous", "event", "audit", "current"]
+    },
+    "contains_household_identifiers": {"type": "boolean"},
+    "contains_sensitive_behavior": {"type": "boolean"},
+    "max_payload_bytes": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "max_events_per_day": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "estimated_daily_bytes": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "active_detail_days": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "long_term_granularity": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "long_term_retention_days": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "archive_unit": {
+      "enum": ["day", "month", "source_schema_month", "none", null]
+    },
+    "compression": {"enum": ["gzip", "none", null]},
+    "restore_procedure": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "deletion_conditions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "archive_verified",
+          "offsite_copy_verified",
+          "source_not_in_active_use",
+          "explicit_approval"
+        ]
+      }
+    }
+  }
+}

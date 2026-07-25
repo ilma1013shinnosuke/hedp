@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "source": "example_environment_snapshot",
+  "status": "draft",
+  "retention_class": "C",
+  "data_kind": "continuous",
+  "contains_household_identifiers": false,
+  "contains_sensitive_behavior": false,
+  "max_payload_bytes": null,
+  "max_events_per_day": null,
+  "estimated_daily_bytes": null,
+  "active_detail_days": null,
+  "long_term_granularity": null,
+  "long_term_retention_days": null,
+  "archive_unit": null,
+  "compression": null,
+  "restore_procedure": null,
+  "deletion_conditions": [
+    "archive_verified",
+    "offsite_copy_verified",
+    "source_not_in_active_use",
+    "explicit_approval"
+  ]
+}

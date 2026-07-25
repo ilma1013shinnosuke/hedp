@@ -130,6 +130,13 @@ archiveできる。処理はDBをread-onlyで開き、元行を削除しない�
 長期粒度、圧縮単位、復元方法、削除条件を追加する。値が未確定なら、上限付きの隔離保存で
 観測し、無制限の本番保存を開始しない。
 
+共通形式は`docs/schemas/retention-data-dictionary-v1.schema.json`、匿名の未確定例は
+`docs/templates/retention-data-dictionary.example.json`を使う。`draft`では未確定値を
+`null`にできるが、`approved`では上限、保持日数、長期粒度、圧縮、復元手順をすべて
+具体化する。家庭固有のroom名、機器ID、実測値はGit管理外のlocal設定に分離する。
+`scripts/validate_retention_dictionary.py`は形式と未解決項目だけをオフライン検査し、
+保存、archive、削除を実行しない。
+
 ## 現時点の適用判断
 
 - SQLite内部のRaw JSONは未圧縮であり、DB全体バックアップだけがgzip圧縮されている。
