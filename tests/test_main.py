@@ -752,6 +752,62 @@ def test_cli_daily_health_database_failure_returns_critical(capsys) -> None:
     assert "secret detail" not in output
 
 
+def test_cli_daily_health_safe_json_omits_household_values(capsys) -> None:
+    private = "private-device-or-path"
+    service = Mock()
+    report = _daily_health_report("warning")
+    report["source_summaries"] = {
+        "fusionsolar_device_realtime": {
+            "count": 3,
+            "latest_timestamp": "2026-07-21T03:19:59+09:00",
+            "seconds_since_latest": 1,
+            "metadata_counts": {private: 3},
+        }
+    }
+    report["warnings"][0]["subject"] = f"device_dn={private}"
+    report["warnings"][0]["latest_timestamp"] = (
+        "2026-07-21T03:19:59+09:00"
+    )
+    report["warnings"][0]["actual"] = {"path": f"/private/{private}"}
+    report["database_summary"] = {
+        "path": f"/private/{private}.db",
+        "integrity": ["ok"],
+    }
+    report["backup_summary"] = {
+        "latest_path": f"/private/{private}.db.gz",
+        "latest_timestamp": "2026-07-21T03:00:00+09:00",
+        "age_hours": 1,
+    }
+    with (
+        patch(
+            "hedp.main.Configuration.database_path_from_environment",
+            return_value="hedp.db",
+        ),
+        patch(
+            "hedp.main.Configuration.device_dns_from_environment",
+            return_value=[private],
+        ),
+        patch("hedp.main.Storage"),
+        patch("hedp.main.DailyHealthService", return_value=service),
+    ):
+        service.check.return_value = report
+        result = cli(["daily-health", "--safe-json"])
+
+    output = capsys.readouterr().out
+    safe = json.loads(output)
+    assert result == 1
+    assert safe["schema"] == "sumicore.daily-health.safe.v1"
+    assert safe["database_integrity_ok"] is True
+    assert safe["backup_freshness"] == "current"
+    assert safe["source_summaries"]["fusionsolar_device_realtime"] == {
+        "count": 3,
+        "freshness": "current",
+    }
+    assert private not in output
+    assert "/private/" not in output
+    assert "2026-07-21T" not in output
+
+
 def test_cli_daily_health_rejects_naive_at() -> None:
     with pytest.raises(SystemExit) as raised:
         cli(["daily-health", "--at", "2026-07-21T03:20:00"])

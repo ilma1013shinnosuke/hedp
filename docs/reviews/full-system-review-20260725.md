@@ -12,7 +12,8 @@ SumiCoreを長期間運用しても、利用者、機器、Mac、家庭内ネッ
 外部エラーの固定語彙化、FusionSolarのconnect/read timeoutと操作全体予算、
 `daily-health`を含む定期jobのwall-clock timeout、Modbus継続性の匿名判定、
 第3層の最小判断とread-only表示、Execution Shadow Mode、検証付き原子的gzip・隔離復元部品、
-SwitchBotの匿名archive inspectとAPI取得時刻の明示まで実装・test済みである。
+SwitchBotの匿名archive inspectとAPI取得時刻の明示、定期health logとSwitchBot通常CLIの
+安全な集約表示、BRAVIA視聴情報の非保持境界まで実装・test済みである。
 
 原子的gzip部品は現役日次jobへ未接続であり、別障害領域backup、秘密の暗号化正本、
 Modbus-only切替は未実施である。archiveと別名compact DBの作成・照合toolは実装・test済み
@@ -225,6 +226,11 @@ read-only調査、文書、匿名fixture、test、dry-run、設計は継続す�
   現役jobの実行結果は次回運用確認の対象とする。
 - 外部例外を固定分類へ変換し、外部本文、URL、家庭固有IDを結果とlogへ渡さない
   回帰testを追加した。
+- `daily-health`の定期jobをID、path、正確な時刻を含まない`--safe-json`へ切り替えた。
+  SwitchBotの通常一覧、観測、gap、import reportも既定を集約表示とし、個別値は明示的な
+  `--details`だけに限定した。
+- BRAVIAの安全なcontent状態を入力種別だけに縮小し、title、URI、channel、ID、未知fieldを
+  保持しない。Miele SSE再接続は実transport契約がないため、推測実装を見送った。
 - SwitchBotとequipmentのrunnerに設定可能なwall-clock上限を追加し、複数jobの匿名メトリクス
   記録とrotationを短時間lockで保護した。
 - Keychainを将来の正本候補から外し、`docs/secret-management.md`へOS非依存方針を定義した。

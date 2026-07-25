@@ -83,6 +83,7 @@ hedp diagnose-device-realtime
 hedp backup
 hedp daily-health --verbose
 hedp daily-health --json
+hedp daily-health --safe-json
 hedp switchbot devices refresh
 hedp switchbot collect --dry-run
 hedp switchbot collect
@@ -96,6 +97,11 @@ hedp import-fusionsolar-reports runtime/import2 --dry-run
 hedp import-fusionsolar-gas-queue runtime/import/fusionsolar-gas --inspect
 hedp import-fusionsolar-gas-queue runtime/import/fusionsolar-gas --dry-run
 ```
+
+`daily-health --safe-json`は定期ログ向けで、家庭固有ID、path、正確な時刻を
+出さず、状態、件数、鮮度区分だけを返します。SwitchBotの一覧・観測・gap・
+import reportも既定では集約結果だけを表示します。個別行が本当に必要な対話的診断に限り、
+対象commandへ`--details`を追加してください。詳細表示をログへ常時保存しないでください。
 
 Quality commands that report issue status exit with 0 when no issue is found
 and 1 when issues are found; diagnostic commands exit with 0 after completion.
@@ -157,10 +163,12 @@ FusionSolar Modbus snapshot, previous-day daily data and derived Records,
 backup freshness, and SQLite integrity. Exit status is 0 for healthy, 1 for warnings,
 and 2 when the check cannot run or the database is unhealthy. It does not
 repair data. Mac sleep gaps of 15 minutes or more are reported rather than
-hidden. JSON logs are written to
+hidden. Privacy-safe aggregate JSON logs are written to
 `~/Library/Logs/hedp/daily-health.out.log`, with execution errors in
 `daily-health.err.log`. When an issue is reported, rerun
 `hedp daily-health --verbose` and the existing quality/diagnose commands.
+Exact subjects, paths, and timestamps are reserved for intentional,
+interactive diagnosis and are not emitted by the scheduled job.
 
 SwitchBot uses an independent Open API v1.1 adapter. Credentials remain in
 the Git-ignored, mode-0600 `.env`; they are not copied into launchd plists or

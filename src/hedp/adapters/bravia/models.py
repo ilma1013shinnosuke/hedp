@@ -55,11 +55,9 @@ class AudioReading:
 
 @dataclass(frozen=True)
 class ContentState:
-    """視聴内容を特定するtitle類を含まない、最小の現在状態。"""
+    """視聴内容・識別子を含まず、安全な入力種別だけを持つ現在状態。"""
 
     source: str | None = None
-    uri: str | None = None
-    channel: str | None = None
     quality: Quality = Quality.UNKNOWN
     reason: str | None = None
     omitted_private_fields: tuple[str, ...] = ()

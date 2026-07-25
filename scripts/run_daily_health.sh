@@ -34,7 +34,7 @@ trap 'rmdir "${LOCK_DIRECTORY}" 2>/dev/null || true' EXIT
 cd "${REPOSITORY_ROOT}"
 if "${REPOSITORY_ROOT}/.venv/bin/python" "${TIMEOUT_RUNNER}" \
     "${DAILY_HEALTH_TIMEOUT_SECONDS}" \
-    "${REPOSITORY_ROOT}/.venv/bin/hedp" daily-health --json; then
+    "${REPOSITORY_ROOT}/.venv/bin/hedp" daily-health --safe-json; then
     sumicore_record_operational_metric daily_health completed "${SECONDS}" none
     exit 0
 else

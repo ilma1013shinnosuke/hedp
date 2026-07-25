@@ -11,8 +11,10 @@
 実Rawがある。候補実装はSumiCoreの正式Adapterではなく、実SSEの長時間確認、offline test、
 lintの最終証明が不足している。
 
-既存候補には無制限の再接続loopがあり、そのまま移植しない。再接続回数、wall clock、
-backoff、queue、circuit breakerへ上限を設ける。
+既存候補には無制限の再接続loopがあり、そのまま移植しない。現時点では正式なtransport、
+SSE framing、resume、認証失効、429/5xxの契約がないため、推測で再接続policyを実装しない。
+匿名化した有限transcriptで契約を確認した後に、再接続回数、wall clock、backoffへ上限を
+設ける。queueやcircuit breakerはreaderの所有境界が決まるまで別課題とする。
 
 ## 初期Adapter
 

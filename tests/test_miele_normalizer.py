@@ -30,6 +30,43 @@ def test_missing_sentinel_is_not_changed_to_zero() -> None:
     assert reading.status_code is None
 
 
+def test_unknown_fields_and_text_are_not_exposed_by_safe_payload() -> None:
+    private = "private-appliance-or-account-value"
+    payload = {
+        "state": {
+            "status": {"value_raw": 4, "value_localized": private},
+            "ProgramID": {"value_raw": 7},
+            "unknown_future_field": {"identifier": private},
+        },
+        "deviceName": private,
+    }
+
+    reading = normalize_washer_dryer(payload)
+
+    assert reading.status_code == 4
+    assert reading.program_id == 7
+    assert private not in repr(reading)
+    assert private not in json.dumps(reading.safe_payload())
+
+
+def test_boolean_and_non_integer_codes_are_not_coerced() -> None:
+    reading = normalize_washer_dryer(
+        {
+            "state": {
+                "status": True,
+                "ProgramID": 1.5,
+                "programType": {"value_raw": -32_768},
+                "spinningSpeed": {"value_raw": 0},
+            }
+        }
+    )
+
+    assert reading.status_code is None
+    assert reading.program_id is None
+    assert reading.program_type_code is None
+    assert reading.spin_speed_rpm == 0
+
+
 @pytest.mark.parametrize(
     "value",
     [

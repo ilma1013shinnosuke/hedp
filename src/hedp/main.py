@@ -396,6 +396,81 @@ def _print_daily_health(report: dict[str, object], verbose: bool) -> None:
             )
 
 
+def _freshness_bucket(seconds: object) -> str:
+    if not isinstance(seconds, (int, float)):
+        return "unavailable"
+    if seconds < 15 * 60:
+        return "current"
+    if seconds < 24 * 60 * 60:
+        return "aging"
+    return "stale"
+
+
+def _backup_freshness_bucket(hours: object) -> str:
+    if not isinstance(hours, (int, float)):
+        return "unavailable"
+    if hours < 24:
+        return "current"
+    if hours < 48:
+        return "aging"
+    return "stale"
+
+
+def _safe_daily_health_report(report: dict[str, object]) -> dict[str, object]:
+    """定期ログ用。家庭固有値、path、正確な時刻を持たない集約結果を返す。"""
+
+    summaries = report.get("source_summaries", {})
+    safe_summaries = {}
+    if isinstance(summaries, dict):
+        for source, summary in summaries.items():
+            if not isinstance(summary, dict):
+                continue
+            safe_summaries[str(source)] = {
+                "count": summary.get("count", 0),
+                "freshness": _freshness_bucket(
+                    summary.get("seconds_since_latest")
+                ),
+            }
+
+    def safe_issues(name: str) -> list[dict[str, object]]:
+        issues = report.get(name, [])
+        if not isinstance(issues, list):
+            return []
+        source_indexes: dict[str, int] = {}
+        result = []
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            source = str(issue.get("source", "unknown"))
+            source_indexes[source] = source_indexes.get(source, 0) + 1
+            result.append(
+                {
+                    "source": source,
+                    "target_index": source_indexes[source],
+                    "problem": str(issue.get("problem", "health check failed")),
+                }
+            )
+        return result
+
+    backup = report.get("backup_summary", {})
+    backup_age_hours = (
+        backup.get("age_hours") if isinstance(backup, dict) else None
+    )
+    database = report.get("database_summary", {})
+    integrity = database.get("integrity") if isinstance(database, dict) else None
+    return {
+        "schema": "sumicore.daily-health.safe.v1",
+        "status": str(report.get("status", "critical")),
+        "warning_count": len(report.get("warnings", [])),
+        "critical_count": len(report.get("critical", [])),
+        "warnings": safe_issues("warnings"),
+        "critical": safe_issues("critical"),
+        "source_summaries": safe_summaries,
+        "database_integrity_ok": integrity == ["ok"],
+        "backup_freshness": _backup_freshness_bucket(backup_age_hours),
+    }
+
+
 def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     parser = argparse.ArgumentParser(prog="hedp")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -469,7 +544,9 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     health_parser = subparsers.add_parser("daily-health")
     health_parser.add_argument("--at", type=_datetime_argument)
     health_parser.add_argument("--hours", type=int, default=24)
-    health_parser.add_argument("--json", action="store_true")
+    health_output_group = health_parser.add_mutually_exclusive_group()
+    health_output_group.add_argument("--json", action="store_true")
+    health_output_group.add_argument("--safe-json", action="store_true")
     health_parser.add_argument("--verbose", action="store_true")
     solar_explanation_parser = subparsers.add_parser(
         "explain-solar-self-consumption"
@@ -517,7 +594,15 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         finally:
             if connection is not None:
                 connection.close()
-        if arguments.json:
+        if arguments.safe_json:
+            print(
+                json.dumps(
+                    _safe_daily_health_report(report),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+        elif arguments.json:
             print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         else:
             _print_daily_health(report, arguments.verbose)

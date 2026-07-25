@@ -48,10 +48,8 @@ def test_active_snapshot_normalizes_zero_safe_values_and_unknown_fields() -> Non
     assert state.audio.outputs[0].minimum == 0
     assert state.audio.outputs[0].unknown == {"futureAudioField": "example"}
     assert state.content.source == "extInput"
-    assert state.content.uri == "extInput:hdmi?port=1"
-    assert state.content.unknown == {
-        "result_fields": {"futureContentField": "example"}
-    }
+    assert state.content.unknown == {}
+    assert state.content.omitted_private_fields == ("uri",)
 
 
 def test_standby_snapshot_does_not_invent_unavailable_active_state() -> None:
@@ -76,9 +74,7 @@ def test_unknown_and_invalid_values_are_not_coerced() -> None:
     assert state.audio.outputs[0].muted is None
     assert state.audio.outputs[0].quality == Quality.INVALID
     assert state.content.quality == Quality.MISSING
-    assert state.content.unknown == {
-        "result_fields": {"futureContentField": {"revision": 2}}
-    }
+    assert state.content.unknown == {}
 
 
 def test_viewing_titles_are_omitted_from_normalized_content() -> None:
@@ -91,7 +87,7 @@ def test_viewing_titles_are_omitted_from_normalized_content() -> None:
                     "title": "sensitive-program-name",
                     "programTitle": "sensitive-program-name",
                     "durationSec": 120,
-                    "futureField": "kept",
+                    "futureField": "not-retained",
                 }
             ],
         }
@@ -99,7 +95,7 @@ def test_viewing_titles_are_omitted_from_normalized_content() -> None:
 
     assert content.source == "tv"
     assert content.omitted_private_fields == ("durationSec", "programTitle", "title")
-    assert content.unknown == {"result_fields": {"futureField": "kept"}}
+    assert content.unknown == {}
     assert not hasattr(content, "title")
     assert "sensitive-program-name" not in repr(content)
 
@@ -130,6 +126,82 @@ def test_malformed_envelopes_are_invalid_not_zero_or_empty_success() -> None:
     assert volume.quality == Quality.INVALID
     assert volume.outputs == ()
     assert content.quality == Quality.INVALID
+
+
+def test_content_safe_output_never_retains_viewing_text_or_identifiers() -> None:
+    private_text = "do-not-retain-viewing-data"
+    private_identifier = "private-content-id"
+    content = normalize_content(
+        {
+            "title": private_text,
+            "result": [
+                {
+                    "source": "tv",
+                    "uri": f"content://{private_identifier}",
+                    "dispNum": "123",
+                    "title": private_text,
+                    "programTitle": private_text,
+                    "description": private_text,
+                    "contentId": private_identifier,
+                    "future": {
+                        "title": private_text,
+                        "id": private_identifier,
+                    },
+                }
+            ],
+        }
+    )
+
+    assert content.source == "tv"
+    assert content.unknown == {}
+    assert content.omitted_private_fields == (
+        "contentId",
+        "description",
+        "dispNum",
+        "programTitle",
+        "title",
+        "uri",
+    )
+    assert private_text not in repr(content)
+    assert private_identifier not in repr(content)
+
+
+def test_malformed_batch_member_does_not_discard_successful_siblings() -> None:
+    state = normalize_read_batch(
+        ReadBatch(
+            power_response={"result": [{"status": "active"}]},
+            volume_response=None,  # type: ignore[arg-type]
+            content_response={"result": [{"source": "tv"}]},
+            observed_at="2026-07-25T00:00:00Z",
+            received_at="2026-07-25T00:00:01Z",
+        )
+    )
+
+    assert state.power.value == PowerState.ACTIVE
+    assert state.power.quality == Quality.GOOD
+    assert state.audio.quality == Quality.INVALID
+    assert state.audio.reason == "payload_not_object"
+    assert state.content.source == "tv"
+    assert state.content.quality == Quality.GOOD
+
+
+def test_volume_non_object_row_is_invalid_not_silent_success() -> None:
+    audio = normalize_volume(
+        {
+            "result": [
+                [
+                    {"target": "speaker", "volume": 0, "mute": False},
+                    "malformed",
+                ]
+            ]
+        }
+    )
+
+    assert audio.outputs[0].volume == 0
+    assert audio.quality == Quality.INVALID
+    assert audio.reason == "result_row_not_object"
+    assert audio.error is not None
+    assert audio.error.category == ErrorCategory.MALFORMED_RESPONSE
 
 
 def test_bravia_fixtures_do_not_contain_secrets_or_viewing_titles() -> None:

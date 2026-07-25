@@ -168,7 +168,7 @@ def test_daily_health_job_runs_json_at_0410_without_credentials():
     installer = (
         ROOT / "scripts" / "install_macos_daily_health_launchd.sh"
     ).read_text()
-    assert "daily-health --json" in runner
+    assert "daily-health --safe-json" in runner
     assert "run_with_timeout.py" in runner
     assert "SUMICORE_DAILY_HEALTH_TIMEOUT_SECONDS" in runner
     assert "HEDP_DAILY_HEALTH_TIMEOUT_SECONDS" in runner

@@ -15,8 +15,19 @@ from .models import (
 
 _ENVELOPE_FIELDS = frozenset({"id", "result", "error"})
 _PRIVATE_CONTENT_FIELDS = frozenset(
-    {"title", "programTitle", "programMediaType", "startDateTime", "durationSec"}
+    {
+        "contentId",
+        "description",
+        "dispNum",
+        "durationSec",
+        "programMediaType",
+        "programTitle",
+        "startDateTime",
+        "title",
+        "uri",
+    }
 )
+_SAFE_CONTENT_SOURCES = frozenset({"tv", "extInput"})
 
 
 def _envelope_unknown(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -48,6 +59,12 @@ def _text(value: Any) -> str | None:
 
 
 def normalize_power(payload: Mapping[str, Any]) -> PowerReading:
+    if not isinstance(payload, Mapping):
+        return PowerReading(
+            quality=Quality.INVALID,
+            reason="payload_not_object",
+            error=ApiError(ErrorCategory.MALFORMED_RESPONSE),
+        )
     row, error, reason = _first_result_object(payload)
     envelope_unknown = _envelope_unknown(payload)
     if error is not None:
@@ -86,6 +103,12 @@ def normalize_power(payload: Mapping[str, Any]) -> PowerReading:
 
 
 def normalize_volume(payload: Mapping[str, Any]) -> AudioReading:
+    if not isinstance(payload, Mapping):
+        return AudioReading(
+            quality=Quality.INVALID,
+            reason="payload_not_object",
+            error=ApiError(ErrorCategory.MALFORMED_RESPONSE),
+        )
     error = classify_error(payload)
     envelope_unknown = _envelope_unknown(payload)
     if error is not None:
@@ -120,8 +143,10 @@ def normalize_volume(payload: Mapping[str, Any]) -> AudioReading:
         )
 
     outputs: list[AudioOutput] = []
+    malformed_row = False
     for row in rows:
         if not isinstance(row, dict):
+            malformed_row = True
             continue
         reasons: list[str] = []
         target = _text(row.get("target"))
@@ -155,13 +180,28 @@ def normalize_volume(payload: Mapping[str, Any]) -> AudioReading:
             reason="no_object_outputs",
             unknown=envelope_unknown,
         )
-    quality = Quality.GOOD if all(item.quality == Quality.GOOD for item in outputs) else Quality.INVALID
-    return AudioReading(tuple(outputs), quality, unknown=envelope_unknown)
+    quality = (
+        Quality.GOOD
+        if not malformed_row and all(item.quality == Quality.GOOD for item in outputs)
+        else Quality.INVALID
+    )
+    return AudioReading(
+        tuple(outputs),
+        quality,
+        reason="result_row_not_object" if malformed_row else None,
+        unknown=envelope_unknown,
+        error=ApiError(ErrorCategory.MALFORMED_RESPONSE) if malformed_row else None,
+    )
 
 
 def normalize_content(payload: Mapping[str, Any]) -> ContentState:
+    if not isinstance(payload, Mapping):
+        return ContentState(
+            quality=Quality.INVALID,
+            reason="payload_not_object",
+            error=ApiError(ErrorCategory.MALFORMED_RESPONSE),
+        )
     row, error, reason = _first_result_object(payload)
-    envelope_unknown = _envelope_unknown(payload)
     if error is not None:
         quality = (
             Quality.INVALID
@@ -171,36 +211,26 @@ def normalize_content(payload: Mapping[str, Any]) -> ContentState:
         return ContentState(
             quality=quality,
             reason=reason,
-            unknown=envelope_unknown,
             error=error,
         )
     if row is None:
         return ContentState(
             quality=Quality.MISSING,
             reason=reason,
-            unknown=envelope_unknown,
         )
 
-    source = _text(row.get("source"))
-    uri = _text(row.get("uri"))
-    channel = _text(row.get("dispNum"))
-    known = {"source", "uri", "dispNum"} | _PRIVATE_CONTENT_FIELDS
-    row_unknown = {key: value for key, value in row.items() if key not in known}
-    unknown = {**envelope_unknown, "result_fields": row_unknown} if row_unknown else envelope_unknown
+    raw_source = _text(row.get("source"))
+    source = raw_source if raw_source in _SAFE_CONTENT_SOURCES else None
     omitted = tuple(sorted(key for key in _PRIVATE_CONTENT_FIELDS if key in row))
 
-    if source is None and uri is None and channel is None:
+    if source is None:
         return ContentState(
             quality=Quality.MISSING,
             reason="content_fields_missing",
             omitted_private_fields=omitted,
-            unknown=unknown,
         )
     return ContentState(
         source=source,
-        uri=uri,
-        channel=channel,
         quality=Quality.GOOD,
         omitted_private_fields=omitted,
-        unknown=unknown,
     )
