@@ -211,6 +211,11 @@ CapabilityDescriptorに明記する。
 Shadow Modeでは実機へ送信せず、`would_dispatch`、`would_block`、
 `indeterminate`を評価結果として残す。Shadowを`completed`とは記録しない。
 
+最初のfixture専用実装は`src/hedp/operations/shadow_execution.py`に置く。
+`src/hedp/execution/`、DB表、CLI、Adapter接続を作らず、注入した匿名Intentと状態だけを
+評価する。process-local registryは同一試験内の重複を止めるためのものであり、
+再起動後の冪等性や未完了操作の再開を保証しない。
+
 ## 7. タイムアウトと再試行
 
 共通化するのは秒数ではなく、必ず上限を持つという原則である。秒数、回数、待機間隔、

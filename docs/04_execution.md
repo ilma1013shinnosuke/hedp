@@ -58,3 +58,13 @@ SumiCoreだけで実現する機能は、SumiCore依存であることと、停�
 設計は採用済みだが、本番コードと専用DB表はまだ実装していない。そのため現時点では
 `src/hedp/execution/`を作らない。最初の実装対象を低リスク・単一対象・絶対指定から
 選び、匿名fixtureとShadow Modeを先に作る。
+
+2026-07-25に、`src/hedp/operations/shadow_execution.py`へfixture専用の純粋な
+Shadow評価器を追加した。これは登録済み能力、期限、状態品質・鮮度、手動介入、
+operation ID重複をメモリ内で検査し、`would_dispatch`、`would_block`、
+`indeterminate`だけを返す。Adapter、network、DB、queue、再試行、read-back、
+永続監査には接続せず、`dispatch_attempted`は常にfalseである。
+
+この実装は本番Execution層の完成ではない。processをまたぐ重複抑止、永続監査、
+target registry、vendor command変換、実状態確認は、具体的な低リスク能力と保存設計を
+承認した後に追加する。

@@ -201,6 +201,11 @@ Rawを判断記録へ複製しない。秘密情報や家庭固有の生の識�
 第3層の基本設計を2026-07-25に採用した。採用判断は
 [決定記録003](decisions/003_intelligence_layer.md)に残している。
 
-設計は採用済みだが、独立した③の本番実装と専用DB表はまだない。そのため
-`src/hedp/intelligence/`はまだ作らない。最初の具体的な予測・判断機能を実装するときに、
-一つの価値判断、匿名fixture、Shadow Modeから必要な範囲だけ作る。
+設計は採用済みであり、専用DB表はまだない。最初の具体的な③実装として、
+`src/hedp/intelligence/solar_self_consumption_opportunity.py` は匿名fixtureで前日の
+FusionSolar energy-balanceを読むだけの説明を行う。前日のJST日付、288個の厳密な5分点、
+有限の必須series/total、36時間以内の鮮度を満たさなければ判断しない。値の補完、保存、
+Intent作成、Adapter呼出し、通知、機器操作は行わず、出力は識別子・Raw・配列を含まない
+4 KiB以下の説明に限定する。vendor報告値の単位と一部keyの正確な意味は未確認のままとし、
+5分値6点未満の短い変化では提案扱いにしない。料金と移動可能負荷の根拠がないため、
+通貨節約や実行効果を主張しない。

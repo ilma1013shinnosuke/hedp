@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "data": {
+    "xAxis": ["placeholder"],
+    "productPower": ["placeholder"],
+    "selfUsePower": ["placeholder"],
+    "onGridPower": ["placeholder"],
+    "totalProductPower": "10.0",
+    "totalSelfUsePower": "6.0",
+    "totalOnGridPower": "4.0"
+  }
+}
