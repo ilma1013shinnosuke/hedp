@@ -26,9 +26,18 @@ SmartLogger経由のModbus TCPを、太陽光・蓄電池の現在値収集の�
 - CAPTCHAやインターネット停止中もModbusだけは継続する
 - DBロック、タイムアウト、ログ容量に異常がない
 
+「連続観測」は、収集を実行するMacがsleep、再起動、明示停止していない24時間を指す。
+Mac停止中の空白はModbus障害へ数えないが、その観測窓は合格判定に使わず、復帰後から
+24時間を取り直す。開発Macでの合格は通信経路の検証であり、将来の常時起動機へ移した後も
+同じ検査を再実施する。
+
 `daily-health`はModbusを独立した5分ソースとして監視し、最新取得の遅延、15分以上の
 取得間隔、確認期間内の各RawDataに対応する10個のRecord不足を警告する。クラウド認証が停止して
 いても、Modbusの警告は独立して確認できる。
+
+`parallel`ではModbus取得後にクラウド取得を行い、どちらかの失敗でrunner全体が失敗となる。
+従って`device_realtime`の成功・失敗件数だけでModbus品質を判定しない。Modbus RawDataの
+5分間隔、対応する10 Record、欠損値、15分超gapを独立集計し、クラウド側の失敗と分ける。
 
 ## 段階的な廃止手順
 
@@ -57,3 +66,47 @@ SmartLogger経由のModbus TCPを、太陽光・蓄電池の現在値収集の�
   蓄電池状態・電力・SOC
 - 保存: `fusionsolar_modbus_tcp` RawDataと10個のRecord
 - シリアル番号: 期待機器の照合用として`.env`だけに保存し、通常RawDataへ複製しない
+
+## 2026-07-25 read-only判定
+
+現役DBの`fusionsolar_modbus_tcp`だけをread-onlyで集計した。値、Raw本文、機器ID、
+家庭固有時刻、秘密値は表示・保存していない。DB、実API、実機、launchd、`.env`は
+変更していない。
+
+| 項目 | 結果 | 判定 |
+|---|---:|---|
+| 観測範囲 | 31時間以上 | 24時間分の材料はある |
+| 保存済みRawData | 293件 | 収集・保存経路は動作 |
+| 正規化snapshot | 292回 | RawData 1件にRecordがなく、原因は別確認 |
+| 10指標が揃ったsnapshot | 292/292 | 合格 |
+| `null`のRecord | 0件 | 合格 |
+| 通常間隔の中央値 | 約5.1分 | 合格 |
+| 直近24時間の5分枠充足 | 約75% | 不合格 |
+| 直近24時間の15分超gap | あり | 不合格 |
+| 最長の連続区間 | 約7.4時間 | 24時間連続条件を未達 |
+| 最長区間の概算充足率 | 約98.9% | 99%条件をわずかに未達 |
+
+この期間にはmacOS更新後の再起動と、開発Macの停止・sleepが含まれる。従って空白の全てを
+Modbus通信障害とは断定しない。一方、停止時間を推測で除外して合格扱いにもしない。
+判定は**継続観測**とし、Mac復帰後の新しい24時間窓で再集計する。
+
+また、匿名運用メトリクスは観測開始直後で、`device_realtime`の成功と失敗が混在している。
+`parallel`全体の失敗にはクラウド認証・通信側だけの失敗も含まれ得るため、Modbus RawDataが
+保存された回をModbus成功の根拠とし、runner全体の結果は補助証拠として扱う。
+
+## 合格後に行う変更とrollback
+
+合格しても自動切替はしない。次を利用者へ提示し、launchd変更の承認を得る。
+
+1. `SUMICORE_FUSIONSOLAR_REALTIME_MODE=modbus`を実行環境へ設定する。
+2. `install_macos_device_realtime_launchd.sh`を再実行し、5分jobからクラウド認証情報を外す。
+3. plist構文、登録状態、一回のModbus収集、RawDataと10 Recordの増加を確認する。
+4. 日次・equipmentに残るクラウド取得は、Modbusで代替できない項目のため当面維持する。
+5. 24時間を再監視し、問題がなければ旧5分クラウド経路を廃止候補とする。
+
+影響は5分ごとのdevice realtime、Battery DC、current alarmクラウドsnapshotが停止すること
+である。既存データ、日次履歴、backupは変更しない。
+
+rollbackは、旧plistの安全な退避物又はinstallerへ`parallel`を指定して再登録し、一回実行と
+保存を確認する。Modbus-only登録に失敗した場合は新jobを停止し、旧設定を復元する。
+rollback確認前に旧コード、旧plist、クラウド秘密を削除しない。
