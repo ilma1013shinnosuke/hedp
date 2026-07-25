@@ -8,7 +8,7 @@ boundary into a CLI result or an application log.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final
+from typing import ClassVar, Final
 
 import requests
 
@@ -17,10 +17,44 @@ import requests
 class ExternalErrorReport:
     """The only error shape adapters may return or log for remote failures."""
 
+    _ALLOWED: ClassVar[
+        set[tuple[str, str, str, bool]]
+    ] = {
+        (
+            "authentication_required",
+            "authentication",
+            "authentication_action_required",
+            False,
+        ),
+        (
+            "authentication_failed",
+            "authentication",
+            "authentication_failed",
+            False,
+        ),
+        ("invalid_response", "response", "invalid_response", True),
+        ("timeout", "network", "request_timeout", True),
+        ("connection_failed", "network", "connection_failed", True),
+        (
+            "service_unavailable",
+            "service",
+            "service_unavailable",
+            True,
+        ),
+        ("request_rejected", "service", "request_rejected", False),
+        ("request_failed", "network", "request_failed", True),
+        ("unexpected_error", "internal", "unexpected_error", False),
+    }
+
     error_type: str
     category: str
     code: str
     retryable: bool
+
+    def __post_init__(self) -> None:
+        values = (self.error_type, self.category, self.code, self.retryable)
+        if values not in self._ALLOWED:
+            raise ValueError("external error report must use the fixed vocabulary")
 
     def as_dict(self) -> dict[str, object]:
         return {

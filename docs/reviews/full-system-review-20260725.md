@@ -6,6 +6,17 @@ SumiCoreを長期間運用しても、利用者、機器、Mac、家庭内ネッ
 かけず、安全に機能を増やせる状態へ整える。本書は設計、データ量、運用、
 セキュリティ、新規Adapter追加手順の監査結果を一つの実行順序へまとめた正本である。
 
+## 進捗更新
+
+この文書の課題は、設計時の所見だけでなく実装状況も併記する。2026-07-25時点で、
+外部エラーの固定語彙化、FusionSolarのconnect/read timeoutと操作全体予算、
+`daily-health`を含む定期jobのwall-clock timeout、Modbus継続性の匿名判定、
+第3層の最小判断、Execution Shadow Mode、検証付き原子的gzip部品まで実装・test済みである。
+
+原子的gzip部品は現役日次jobへ未接続であり、別障害領域backup、秘密の暗号化正本、
+Modbus-only切替、過去DBのarchive・compact・削除は未実施である。コード完成と本番配備を
+混同せず、現役設定、DB、backup、秘密、外部保存先を変える作業は個別承認を維持する。
+
 ## 今回の確認範囲
 
 - Git管理中の設計文書、コード、テスト、運用scriptを確認した。
@@ -109,11 +120,19 @@ FusionSolarの各HTTP requestにはconnect/read timeoutと処理全体の予算�
 `daily-health`にもwall-clock timeoutを設ける。実測で上限超過が確認された場合だけ、
 外部取得と短いDB反映の分離、又はsource別queue/lockを導入する。
 
+**実装状況:** HTTP単位と操作全体のtimeout、`daily-health`を含むjobのwall-clock timeout、
+Modbus continuity IDとread-only qualificationは実装・回帰test済みである。共有lockの
+分割は、30日メトリクスで実害を確認してから判断するため未実施である。
+
 ### P1: 外部エラーを安全な共通形式へ変換する
 
 外部サービスの例外本文を結果JSONやlogへ渡さず、`error_type`、分類、匿名コード、
 retry可否だけに正規化する。CAPTCHA、認証失効、timeout、通信断、解析不能を成功扱いせず、
 秘密、URL、header、token、家庭固有IDが出ない回帰testを追加する。
+
+**実装状況:** 共通`ExternalErrorReport`、FusionSolarの主要collectorとapplication境界、
+秘密非表示の回帰testを実装済みである。error type、category、code、retry可否は固定された
+組合せだけを許可し、将来のAdapterが外部本文をcodeへ流用することも拒否する。
 
 ### P1: 最初のExecution経路をShadow Modeで固定する
 
@@ -160,8 +179,8 @@ SumiCoreを新規の正名とし、`hedp`、`HEDP_`、旧CLI、旧launchd label�
 | 順序 | 作業 | 自動実施 | 個別承認 |
 |---:|---|:---:|:---:|
 | 1 | 匿名容量、lock、skip、timeoutメトリクスの設計とtest | 可 | 不要 |
-| 2 | 外部例外の安全な共通形式と回帰test | 可 | 不要 |
-| 3 | `daily-health`とHTTPのtimeout改善 | 条件確認後可 | 本番設定変更前 |
+| 2 | 外部例外の安全な共通形式と回帰test（実装済み） | 可 | 不要 |
+| 3 | `daily-health`とHTTPのtimeout改善（実装済み、設定変更なし） | 条件確認後可 | 本番設定変更前 |
 | 4 | 1か月archiveのinspectと隔離復元計画 | 可 | 実archive作成前 |
 | 5 | 暗号化backupの保存先・鍵・復旧責任決定 | 不可 | 必要 |
 | 6 | OS非依存の秘密管理への移行とplist秘密撤去 | 不可 | launchd変更前 |

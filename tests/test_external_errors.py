@@ -1,9 +1,11 @@
 from unittest.mock import Mock
 
+import pytest
 import requests
 
 from hedp.adapters.external_errors import (
     AUTHENTICATION_REQUIRED,
+    ExternalErrorReport,
     ExternalServiceError,
     normalize_external_error,
 )
@@ -43,3 +45,20 @@ def test_external_service_error_message_excludes_upstream_detail() -> None:
 
     assert str(error) == "External service error: authentication_action_required"
     assert "CAPTCHA" not in str(error)
+
+
+def test_report_rejects_unregistered_or_inconsistent_vocabulary() -> None:
+    with pytest.raises(ValueError, match="fixed vocabulary"):
+        ExternalErrorReport(
+            "request_failed",
+            "network",
+            "private_upstream_detail",
+            True,
+        )
+    with pytest.raises(ValueError, match="fixed vocabulary"):
+        ExternalErrorReport(
+            "authentication_failed",
+            "authentication",
+            "authentication_failed",
+            True,
+        )
