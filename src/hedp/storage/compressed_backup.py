@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+from datetime import datetime
 import gzip
 import hashlib
 import os
 from pathlib import Path
+import re
+import sqlite3
 import tempfile
 from typing import BinaryIO
 
 
 class CompressedBackupError(RuntimeError):
     """Raised when a compressed backup cannot be created or verified."""
+
+
+_ARTIFACT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 
 def _copy_and_hash(source: BinaryIO, destination: BinaryIO) -> tuple[str, int]:
@@ -123,6 +129,91 @@ def verify_gzip(
         "compressed_sha256": _sha256_file(compressed),
         "compressed_size_bytes": compressed.stat().st_size,
     }
+
+
+def restore_and_verify_gzip_sqlite(
+    compressed_path: str | Path,
+    restored_path: str | Path,
+    *,
+    artifact_id: str,
+    verified_at: datetime,
+) -> dict[str, str | int]:
+    """Restore an isolated SQLite backup and return a secret-free receipt."""
+
+    compressed = Path(compressed_path)
+    restored = Path(restored_path)
+    if not compressed.is_file() or compressed.is_symlink():
+        raise CompressedBackupError("compressed backup must be a regular file")
+    if restored.exists() or restored.is_symlink():
+        raise CompressedBackupError("restore destination already exists")
+    if not isinstance(artifact_id, str) or not _ARTIFACT_ID.fullmatch(artifact_id):
+        raise CompressedBackupError("artifact_id must be an opaque identifier")
+    if (
+        not isinstance(verified_at, datetime)
+        or verified_at.tzinfo is None
+        or verified_at.utcoffset() is None
+    ):
+        raise CompressedBackupError("verified_at must include a timezone")
+
+    restored.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, partial_name = tempfile.mkstemp(
+        prefix=f".{restored.name}.",
+        suffix=".partial",
+        dir=restored.parent,
+    )
+    partial = Path(partial_name)
+    os.fchmod(descriptor, 0o600)
+    published = False
+    verified = False
+    connection: sqlite3.Connection | None = None
+
+    try:
+        with os.fdopen(descriptor, "wb") as destination_stream:
+            with gzip.open(compressed, "rb") as compressed_stream:
+                while chunk := compressed_stream.read(1024 * 1024):
+                    destination_stream.write(chunk)
+            destination_stream.flush()
+            os.fsync(destination_stream.fileno())
+
+        os.link(partial, restored)
+        published = True
+        partial.unlink()
+        os.chmod(restored, 0o600)
+
+        connection = sqlite3.connect(
+            f"{restored.resolve().as_uri()}?mode=ro",
+            uri=True,
+        )
+        connection.execute("PRAGMA query_only=ON")
+        quick_check = connection.execute("PRAGMA quick_check").fetchall()
+        if quick_check != [("ok",)]:
+            raise CompressedBackupError("restored database integrity check failed")
+        connection.close()
+        connection = None
+        verified = True
+
+        return {
+            "artifact_id": artifact_id,
+            "artifact_kind": "gzip_sqlite",
+            "gzip": "ok",
+            "outcome": "ok",
+            "sqlite_quick_check": "ok",
+            "verified_at": verified_at.isoformat(),
+            "version": 1,
+        }
+    except CompressedBackupError:
+        raise
+    except (OSError, EOFError, gzip.BadGzipFile, sqlite3.Error) as error:
+        raise CompressedBackupError("backup restore verification failed") from error
+    finally:
+        if connection is not None:
+            connection.close()
+        partial.unlink(missing_ok=True)
+        if published and not verified:
+            restored.unlink(missing_ok=True)
+        if published:
+            for suffix in ("-journal", "-wal", "-shm"):
+                Path(f"{restored}{suffix}").unlink(missing_ok=True)
 
 
 def _sha256_file(path: Path) -> str:

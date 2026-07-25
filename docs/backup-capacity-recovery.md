@@ -76,6 +76,11 @@ mode 0600 partialへgzipし、展開後のSHA-256と容量を照合してから�
 接続時は、圧縮成功後だけ元`.db`を削除する処理、保存世代整理、失敗時の運用metricを
 含めて次の変更として扱う。
 
+同じmoduleには、完成済み`.db.gz`を隔離directoryのmode 0600 partialへ展開し、
+既存出力を上書きせず、SQLite `quick_check`に成功した場合だけ秘密非表示の固定形式receiptを
+返す復元検査も実装済みである。将来resticを導入する場合は、resticが隔離directoryへ戻した
+`.db.gz`をこの検査へ渡し、repository URL、credential、path、DB内容をreceiptへ含めない。
+
 次の実装変更は日次本番処理へ影響するため、対象script、次回実行への影響、rollbackを
 提示して承認を得てから行う。
 
