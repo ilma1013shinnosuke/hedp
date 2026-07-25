@@ -168,7 +168,10 @@ hidden. Privacy-safe aggregate JSON logs are written to
 `daily-health.err.log`. When an issue is reported, rerun
 `hedp daily-health --verbose` and the existing quality/diagnose commands.
 Exact subjects, paths, and timestamps are reserved for intentional,
-interactive diagnosis and are not emitted by the scheduled job.
+interactive diagnosis and are not emitted by the scheduled job or `--verbose`.
+If those household-specific details are truly required, use
+`hedp daily-health --diagnostic-details` interactively and do not retain or
+share its output.
 
 SwitchBot uses an independent Open API v1.1 adapter. Credentials remain in
 the Git-ignored, mode-0600 `.env`; they are not copied into launchd plists or

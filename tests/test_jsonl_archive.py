@@ -123,6 +123,32 @@ def test_archive_detects_uncompressed_size_tampering(tmp_path: Path) -> None:
         verify_jsonl_gzip_archive(destination)
 
 
+@pytest.mark.parametrize("name", ["manifest.json", "data.jsonl.gz"])
+def test_archive_rejects_symlinked_bundle_file(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    destination = tmp_path / "fixture.archive"
+    create(destination)
+    original = destination / name
+    external = tmp_path / f"external-{name}"
+    original.rename(external)
+    original.symlink_to(external)
+
+    with pytest.raises(ArchiveValidationError, match="non-symlink"):
+        verify_jsonl_gzip_archive(destination)
+
+
+def test_archive_rejects_symlinked_bundle_directory(tmp_path: Path) -> None:
+    destination = tmp_path / "fixture.archive"
+    create(destination)
+    alias = tmp_path / "alias.archive"
+    alias.symlink_to(destination, target_is_directory=True)
+
+    with pytest.raises(ArchiveValidationError, match="non-symlink directory"):
+        verify_jsonl_gzip_archive(alias)
+
+
 def test_archive_requires_at_least_one_record(tmp_path: Path) -> None:
     destination = tmp_path / "fixture.archive"
 

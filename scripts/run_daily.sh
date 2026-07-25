@@ -15,6 +15,17 @@ BACKFILL_DAYS="${SUMICORE_DAILY_BACKFILL_DAYS:-${HEDP_DAILY_BACKFILL_DAYS:-30}}"
 BACKUP_RETENTION_COUNT="${SUMICORE_BACKUP_RETENTION_COUNT:-${HEDP_BACKUP_RETENTION_COUNT:-1}}"
 SECONDS=0
 
+case "${BACKUP_RETENTION_COUNT}" in
+    ''|*[!0-9]*)
+        echo "Backup retention count must be a positive whole number" >&2
+        exit 2
+        ;;
+esac
+if ((BACKUP_RETENTION_COUNT < 1)); then
+    echo "Backup retention count must be at least 1" >&2
+    exit 2
+fi
+
 if ! mkdir "${LOCK_DIRECTORY}" 2>/dev/null; then
     echo "Another HEDP database job is already running; skipping the daily job." >&2
     sumicore_record_operational_metric daily skipped "${SECONDS}" lock_held

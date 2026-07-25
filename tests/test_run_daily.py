@@ -5,6 +5,8 @@ import stat
 import subprocess
 import time
 
+import pytest
+
 
 def _daily_script_repository(tmp_path: Path) -> tuple[Path, Path]:
     repository = tmp_path / "repository"
@@ -172,3 +174,37 @@ def test_run_daily_skips_when_lock_is_held(tmp_path) -> None:
     assert result.returncode == 0
     assert "already running" in result.stderr
     assert not call_log.exists()
+
+
+@pytest.mark.parametrize("retention", ["0", "-1", "invalid"])
+def test_run_daily_rejects_invalid_retention_before_touching_backups(
+    tmp_path: Path,
+    retention: str,
+) -> None:
+    repository, run_daily = _daily_script_repository(tmp_path)
+    backups = repository / "backups"
+    backups.mkdir()
+    existing = backups / "hedp-20260724-030000.db.gz"
+    existing.write_bytes(b"existing-backup")
+    before = existing.read_bytes()
+    call_log = tmp_path / "calls.log"
+    lock = tmp_path / "database.lock"
+
+    result = subprocess.run(
+        [str(run_daily)],
+        env={
+            **os.environ,
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(lock),
+            "HEDP_BACKUP_RETENTION_COUNT": retention,
+            "CALL_LOG": str(call_log),
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "retention count" in result.stderr.casefold()
+    assert existing.read_bytes() == before
+    assert not call_log.exists()
+    assert not lock.exists()

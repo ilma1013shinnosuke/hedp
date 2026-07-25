@@ -1,5 +1,16 @@
 # SumiCore システム設計レビュー（2026-07-25）
 
+## 後続実装注記
+
+この文書の本文は、つむsnapshot 10を確認した時点の監査記録であり、当時の事実を
+書き換えない。現在状態の正本は
+[`full-system-review-20260725.md`](full-system-review-20260725.md)である。
+
+本文作成後、③には`solar_self_consumption_opportunity.py`とread-only表示、
+④には`shadow_execution.py`のfixture専用ExecutionGateが追加された。本番dispatch、
+永続監査、Adapter接続、read-backは引き続き未実装である。したがって本文の
+「③④は設計のみ」「Intent、Gateは存在しない」は監査時点の記述であり、現在状態ではない。
+
 ## 範囲と方法
 
 - 対象: `/Users/shinnosuke/hedp` のGit管理下の設計文書、Python、shell、testの静的レビュー。

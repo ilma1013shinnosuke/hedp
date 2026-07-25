@@ -53,6 +53,30 @@ Drive受け渡しキューへ保存し、ダウンロード後にMac側で検査
 | `adapters/switchbot/storage.py` | SwitchBot専用テーブル | 移動済み。統合は別途判断 |
 | `adapters/switchbot/cli.py` | SwitchBot用CLI | 移動済み |
 
+## 判断・実行の試作
+
+| 現在のファイル | 主な役割 | 状態 |
+|---|---|---|
+| `intelligence/solar_self_consumption_opportunity.py` | 前日電力収支の限定的な説明 | read-only表示まで。Intent・通知・操作なし |
+| `operations/shadow_execution.py` | 匿名fixtureのExecutionGate評価 | fixture限定。dispatch・DB・Adapter接続なし |
+
+本番Execution package、dispatch、永続監査、read-backはまだ存在しない。試作の存在を
+本番運用や自動化の完成とみなさない。
+
+## 未配備の機器Adapter
+
+| Adapter | repository内の範囲 | runtime状態 |
+|---|---|---|
+| BRAVIA | 安全な正規化と取得済みbatch reader | fixture限定 |
+| エコキュート | ECHONET property map decode | fixture限定 |
+| Miele@home | 洗濯乾燥機状態の純粋な正規化 | fixture限定 |
+| Smart LEDZ | frame、correlation、状態正規化 | offline試作 |
+| WAREMA | frame codecとstream parser | hardware待ち |
+| Qrio | 正式知識のみ | 実装なし |
+
+詳細な知識状態と昇格条件は`docs/integrations/README.md`を正本とする。これらを
+現役収集jobや操作経路として扱わない。
+
 ## 運用スクリプト
 
 | スクリプト | 稼働内容 |

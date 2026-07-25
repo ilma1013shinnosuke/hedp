@@ -1,5 +1,13 @@
 # 運用・エラー処理・セキュリティ監査（2026-07-25）
 
+## 後続実装注記
+
+この文書は初回監査時点の所見を保存する。現在状態と残課題の正本は
+[`full-system-review-20260725.md`](full-system-review-20260725.md)である。
+本文作成後、FusionSolar HTTPのconnect/read timeoutと操作予算、`daily-health`を含む
+jobのwall-clock timeout、外部例外の固定分類、匿名運用メトリクスを実装した。
+別障害領域backup、OS非依存の秘密管理、共有lockの長期実測は未完了である。
+
 ## 範囲と方法
 
 - 対象: Git管理中のコード・設定生成script・運用/統合文書。実機、API、DB、backup、

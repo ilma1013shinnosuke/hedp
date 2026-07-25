@@ -355,45 +355,59 @@ def _print_quality_diagnosis(diagnosis: dict[str, object]) -> None:
         )
 
 
-def _print_daily_health(report: dict[str, object], verbose: bool) -> None:
+def _print_daily_health(
+    report: dict[str, object],
+    verbose: bool,
+    diagnostic_details: bool = False,
+) -> None:
     status = str(report["status"]).upper()
     print(f"HEDP daily health: {status}")
-    print(
-        f"Checked window: {report['window_start']} - {report['window_end']}"
-    )
     summaries = report["source_summaries"]
     print(f"RawData sources: {len(summaries)}")
     print(f"Warnings: {len(report['warnings'])}")
     print(f"Critical: {len(report['critical'])}")
     issues = [*report["critical"], *report["warnings"]]
+    source_indexes: dict[str, int] = {}
     for issue in issues:
-        subject = f" ({issue['subject']})" if issue["subject"] else ""
-        print(f"- {issue['source']}{subject}: {issue['problem']}")
+        source = str(issue["source"])
+        source_indexes[source] = source_indexes.get(source, 0) + 1
         print(
-            f"  latest={issue['latest_timestamp']} "
-            f"expected={issue['expected']} actual={issue['actual']}"
+            f"- {source} target-{source_indexes[source]}: "
+            f"{issue['problem']}"
         )
+        if diagnostic_details:
+            subject = (
+                f" ({issue['subject']})" if issue["subject"] else ""
+            )
+            print(f"  diagnostic subject{subject}")
+            print(
+                f"  latest={issue['latest_timestamp']} "
+                f"expected={issue['expected']} actual={issue['actual']}"
+            )
     if verbose:
         for source, summary in summaries.items():
             print(
                 f"- {source}: count={summary['count']} "
-                f"latest={summary['latest_timestamp']} "
-                f"age_seconds={summary['seconds_since_latest']}"
+                f"freshness={_freshness_bucket(summary['seconds_since_latest'])}"
             )
         database = report["database_summary"]
         backup = report["backup_summary"]
         if database:
             print(
                 f"- database: integrity={database['integrity']} "
-                f"size={database['size_bytes']} "
                 f"raw={database['raw_data_count']} "
                 f"records={database['record_count']}"
             )
         if backup:
             print(
-                f"- backup: latest={backup['latest_timestamp']} "
-                f"age_hours={backup['age_hours']}"
+                "- backup: freshness="
+                f"{_backup_freshness_bucket(backup['age_hours'])}"
             )
+    if diagnostic_details:
+        print(
+            f"Diagnostic window: {report['window_start']} - "
+            f"{report['window_end']}"
+        )
 
 
 def _freshness_bucket(seconds: object) -> str:
@@ -548,6 +562,11 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     health_output_group.add_argument("--json", action="store_true")
     health_output_group.add_argument("--safe-json", action="store_true")
     health_parser.add_argument("--verbose", action="store_true")
+    health_parser.add_argument(
+        "--diagnostic-details",
+        action="store_true",
+        help="show household-specific paths, subjects, and exact timestamps",
+    )
     solar_explanation_parser = subparsers.add_parser(
         "explain-solar-self-consumption"
     )
@@ -605,7 +624,11 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         elif arguments.json:
             print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         else:
-            _print_daily_health(report, arguments.verbose)
+            _print_daily_health(
+                report,
+                arguments.verbose or arguments.diagnostic_details,
+                arguments.diagnostic_details,
+            )
         if report["status"] == "critical":
             return 2
         return 1 if report["status"] == "warning" else 0

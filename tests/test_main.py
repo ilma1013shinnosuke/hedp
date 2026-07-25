@@ -729,6 +729,59 @@ def test_cli_daily_health_warning_exit_and_display(capsys) -> None:
     storage_class.return_value.connect_readonly.return_value.close.assert_called_once()
 
 
+def test_cli_daily_health_verbose_is_safe_without_diagnostic_details(
+    capsys,
+) -> None:
+    private = "private-device-path-or-time"
+    service = Mock()
+    report = _daily_health_report("warning")
+    report["warnings"][0]["subject"] = private
+    report["warnings"][0]["latest_timestamp"] = (
+        "2026-07-21T03:19:59+09:00"
+    )
+    report["warnings"][0]["actual"] = f"/private/{private}"
+    report["source_summaries"] = {
+        "fusionsolar_device_realtime": {
+            "count": 1,
+            "latest_timestamp": "2026-07-21T03:19:59+09:00",
+            "seconds_since_latest": 1,
+        }
+    }
+    report["database_summary"] = {
+        "path": f"/private/{private}.db",
+        "integrity": ["ok"],
+        "raw_data_count": 1,
+        "record_count": 1,
+        "size_bytes": 123,
+    }
+    report["backup_summary"] = {
+        "latest_timestamp": "2026-07-21T03:00:00+09:00",
+        "latest_path": f"/private/{private}.db.gz",
+        "age_hours": 1,
+    }
+    with (
+        patch(
+            "hedp.main.Configuration.database_path_from_environment",
+            return_value="hedp.db",
+        ),
+        patch(
+            "hedp.main.Configuration.device_dns_from_environment",
+            return_value=[private],
+        ),
+        patch("hedp.main.Storage"),
+        patch("hedp.main.DailyHealthService", return_value=service),
+    ):
+        service.check.return_value = report
+        result = cli(["daily-health", "--verbose"])
+
+    output = capsys.readouterr().out
+    assert result == 1
+    assert "freshness=current" in output
+    assert private not in output
+    assert "/private/" not in output
+    assert "2026-07-21T" not in output
+
+
 def test_cli_daily_health_database_failure_returns_critical(capsys) -> None:
     with (
         patch(

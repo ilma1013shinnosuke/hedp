@@ -21,6 +21,20 @@ class ArchiveValidationError(ValueError):
     """Raised when an archive cannot be proven to match its manifest."""
 
 
+def _require_archive_directory(path: Path) -> None:
+    if path.is_symlink() or not path.is_dir():
+        raise ArchiveValidationError(
+            "archive path must be a non-symlink directory"
+        )
+
+
+def _require_regular_archive_file(path: Path, label: str) -> None:
+    if path.is_symlink() or not path.is_file():
+        raise ArchiveValidationError(
+            f"archive {label} must be a non-symlink regular file"
+        )
+
+
 def _json_line(record: Mapping[str, Any]) -> bytes:
     return (
         json.dumps(
@@ -161,7 +175,10 @@ def create_jsonl_gzip_archive(
 
 
 def load_archive_manifest(directory: str | Path) -> dict[str, Any]:
-    manifest_path = Path(directory) / MANIFEST_FILENAME
+    archive_directory = Path(directory)
+    _require_archive_directory(archive_directory)
+    manifest_path = archive_directory / MANIFEST_FILENAME
+    _require_regular_archive_file(manifest_path, "manifest")
     value = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ArchiveValidationError("manifest must be a JSON object")
@@ -171,7 +188,10 @@ def load_archive_manifest(directory: str | Path) -> dict[str, Any]:
 def iter_jsonl_gzip_archive(
     directory: str | Path,
 ) -> Iterator[dict[str, Any]]:
-    data_path = Path(directory) / DATA_FILENAME
+    archive_directory = Path(directory)
+    _require_archive_directory(archive_directory)
+    data_path = archive_directory / DATA_FILENAME
+    _require_regular_archive_file(data_path, "data")
     with gzip.open(data_path, "rt", encoding="utf-8", newline="") as stream:
         for line_number, line in enumerate(stream, start=1):
             try:
@@ -189,6 +209,7 @@ def iter_jsonl_gzip_archive(
 
 def verify_jsonl_gzip_archive(directory: str | Path) -> dict[str, Any]:
     archive_directory = Path(directory)
+    _require_archive_directory(archive_directory)
     manifest = load_archive_manifest(archive_directory)
     required = {
         "format_version",
@@ -211,6 +232,7 @@ def verify_jsonl_gzip_archive(directory: str | Path) -> dict[str, Any]:
         raise ArchiveValidationError("unsupported archive compression")
 
     data_path = archive_directory / DATA_FILENAME
+    _require_regular_archive_file(data_path, "data")
     if _sha256_file(data_path) != manifest["compressed_sha256"]:
         raise ArchiveValidationError("compressed checksum mismatch")
 
