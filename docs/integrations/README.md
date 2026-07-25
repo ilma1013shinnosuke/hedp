@@ -54,7 +54,7 @@ cache、build生成物は正本にしない。必要な知識、実装、匿名f
 | FusionSolar | observation / 移行検証中 | Modbus TCPを主経路候補として監視 |
 | SwitchBot | observation、機種追加継続中 | 既存収集を保ち、機種profileを拡張 |
 | Smart LEDZ | observation、限定操作実績あり | readerを先に正式化 |
-| Qrio | observation、限定操作実績あり | reader先行。解錠は別審査 |
+| Qrio | observation、限定操作実績あり | reader先行。指紋・暗証番号の自作連携は対象外 |
 | エコキュート | observation、能力確認中 | ECHONET Lite reader先行 |
 | Miele@home | research | OAuth/SSE readerを有界化して検証 |
 | WAREMA | research | Stick到着後に段階検証 |

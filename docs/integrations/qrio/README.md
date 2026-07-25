@@ -24,6 +24,12 @@ executorは別process/permissionでのみ構築する。施錠、解錠、設定
 解錠は高リスクで、実行直前承認、fresh state、対象一致、単発送信、job確認、read-backを
 必須とする。timeoutや結果不明では自動再送しない。
 
+## 対象外
+
+指紋や暗証番号を使う入口認証装置の自作、Qrioとの自作連携、SwitchBot純正製品との
+採用比較は行わない。これらを将来タスクへ戻さない。既存のQrio reader知識や一般的な
+高リスク操作契約は、この対象外判断とは分けて保持する。
+
 ## 保存
 
 現在状態、電池、firmware、Hub、設定と、施解錠・auto-lock・operation terminal eventを
