@@ -25,6 +25,12 @@ Device、Sensor応答だけを受け取る。実機で確認済みの`ErrorCode=
 未確認のネストschemaや値は解釈しない。未知fieldは値を複製せず最上位field名だけで検出し、
 名称、ID、認証、ネットワーク、設定に関わるfield名はreader境界でredactする。
 
+JSON command名とrequest-object schemaは匿名化して確認できる形で保存されていない。そのため
+`messages`部品はJSON requestを生成しない。別transportがframeのrequest IDと復号済みJSON
+objectを渡した場合だけ、Group/Scene/Schedule/Device/Sensorとして宣言済みのread requestへ
+一対一で相関し、通知、重複、未宣言ID、欠落応答を拒否する。fixtureの`request_id`はこの
+transport入力を表すテスト用の関連情報であり、Smart LEDZ JSON fieldを主張するものではない。
+
 Scene/Scheduleの定義、active、現在選択、実行中状態は同じ意味にしない。完全なpush event、
 fragmented frame実機値、MQTT、認証token lifecycle、Sensor luxは未確認である。
 

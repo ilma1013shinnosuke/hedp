@@ -1,0 +1,50 @@
+[
+  {
+    "request_id": 31,
+    "response": {
+      "ErrorCode": 0,
+      "Data": {
+        "revision": 1
+      },
+      "futureEnvelope": true
+    }
+  },
+  {
+    "request_id": 4,
+    "response": {
+      "ErrorCode": 0,
+      "Data": [],
+      "futureEnvelope": "present"
+    }
+  },
+  {
+    "request_id": 18,
+    "response": {
+      "ErrorCode": 0,
+      "Data": {
+        "schemaVersion": "v1"
+      },
+      "futureEnvelope": false
+    }
+  },
+  {
+    "request_id": 9,
+    "response": {
+      "ErrorCode": 0,
+      "Data": {
+        "observed": true
+      },
+      "futureEnvelope": 1
+    }
+  },
+  {
+    "request_id": 22,
+    "response": {
+      "ErrorCode": 0,
+      "Data": {
+        "observed": false
+      },
+      "futureEnvelope": null
+    }
+  }
+]
