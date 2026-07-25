@@ -208,7 +208,8 @@ class SolarSelfConsumptionOpportunityExplainer:
                 reported_context_intervals=context_intervals,
                 summary=(
                     "メーカー報告値で、発電が自家消費を上回り系統への送り出しとみられる"
-                    "状態が30分以上観測されました。ただし単位と一部キーの厳密な意味、"
+                    "状態が合計30分相当観測されました。ただし連続時間とは限らず、"
+                    "単位と一部キーの厳密な意味、"
                     "移動可能な負荷、料金根拠がないため金額効果は算出できません。"
                     "機器操作と快適性の変更は行っていません。"
                 ),
@@ -221,7 +222,8 @@ class SolarSelfConsumptionOpportunityExplainer:
             observation_age_minutes=age_minutes,
             reported_context_intervals=context_intervals,
             summary=(
-                "保守的な30分基準では、自家消費を増やせる可能性を示す十分な連続量を"
+                "保守的な合計30分相当の基準では、自家消費を増やせる可能性を示す"
+                "十分な報告区間を"
                 "確認できませんでした。単位と一部キーの厳密な意味は未確認です。"
                 "機器操作と快適性の変更は行っていません。"
             ),

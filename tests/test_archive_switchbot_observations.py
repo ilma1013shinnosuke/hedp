@@ -13,7 +13,9 @@ from hedp.storage.jsonl_archive import (
 from scripts.archive_switchbot_observations import (
     create_month_archive,
     inspect_month,
+    main,
     month_bounds,
+    safe_inspection_report,
 )
 
 
@@ -104,3 +106,53 @@ def test_archive_rejects_empty_month(tmp_path: Path) -> None:
             tmp_path / "2025-01.archive",
             month="2025-01",
         )
+
+
+def test_safe_inspection_omits_source_period_and_exact_timestamps(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    source = database(tmp_path)
+
+    assert main(
+        [
+            "--database",
+            str(source),
+            "--month",
+            "2026-07",
+            "--safe-inspect",
+        ]
+    ) == 0
+
+    output = capsys.readouterr().out
+    assert '"archive_candidate": true' in output
+    assert '"record_count": 2' in output
+    assert '"read_only": true' in output
+    for private_field in (
+        "source",
+        "month",
+        "first_timestamp",
+        "last_timestamp",
+        "2026-07",
+    ):
+        assert private_field not in output
+
+
+def test_safe_inspection_report_has_fixed_aggregate_shape() -> None:
+    report = safe_inspection_report(
+        {
+            "record_count": 2,
+            "raw_payload_bytes": 42,
+            "source": "private-source",
+            "month": "2026-07",
+            "first_timestamp": "private-time",
+            "last_timestamp": "private-time",
+        }
+    )
+
+    assert report == {
+        "archive_candidate": True,
+        "raw_payload_bytes": 42,
+        "read_only": True,
+        "record_count": 2,
+    }

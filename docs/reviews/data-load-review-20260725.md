@@ -78,8 +78,9 @@ SwitchBotでは `canonical_key` により同一の観測値を挿入しない。
    DB page数、WAL/backup容量、archive有無だけを出し、payloadや識別子を出力しない。最低30日
    実測後にlive増加率で予測を更新する。
 2. **P1: SwitchBotの1か月をarchive前提でinspectし、隔離コピーで圧縮率・復元時間を測る。**
-   既存の`archive_switchbot_observations.py --inspect`はread-only。実archive作成、別媒体複製、
-   compact DB作成・切替は明示承認を分ける。
+   `archive_switchbot_observations.py --safe-inspect`はread-onlyで、件数、Raw byte合計、
+   archive候補かだけを返し、source、月、正確な最初・最後の時刻を表示しない。実archive作成、
+   別媒体複製、compact DB作成・切替は明示承認を分ける。
 3. **P1: retention data dictionaryを実装前に確定する。** Adapter/sourceごとに最大payload、頻度、
    active日数、archive単位、集約、event保存年数、削除ゲートをlocal設定へ置く。
 4. **P2: cold archive済み月を除外した別名compact DBを検証する。** 既存builderはarchive checksum、

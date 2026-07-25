@@ -70,6 +70,18 @@ def inspect_month(
     }
 
 
+def safe_inspection_report(inspection: dict[str, Any]) -> dict[str, Any]:
+    """Return only aggregate fields suitable for routine operational output."""
+
+    record_count = int(inspection["record_count"])
+    return {
+        "archive_candidate": record_count > 0,
+        "raw_payload_bytes": int(inspection["raw_payload_bytes"]),
+        "read_only": True,
+        "record_count": record_count,
+    }
+
+
 def iter_month(
     connection: sqlite3.Connection,
     *,
@@ -142,25 +154,34 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--month", required=True)
     value.add_argument("--source", default="switchbot_csv_export")
     value.add_argument("--output")
-    value.add_argument("--inspect", action="store_true")
+    mode = value.add_mutually_exclusive_group()
+    mode.add_argument("--inspect", action="store_true")
+    mode.add_argument("--safe-inspect", action="store_true")
     return value
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = parser().parse_args(argv)
-    if arguments.inspect:
+    if arguments.inspect or arguments.safe_inspect:
         connection = connect_readonly(arguments.database)
         try:
-            report = inspect_month(
+            inspection = inspect_month(
                 connection,
                 month=arguments.month,
                 source=arguments.source,
             )
         finally:
             connection.close()
+        report = (
+            safe_inspection_report(inspection)
+            if arguments.safe_inspect
+            else inspection
+        )
     else:
         if not arguments.output:
-            parser().error("--output is required unless --inspect is used")
+            parser().error(
+                "--output is required unless an inspection mode is used"
+            )
         manifest = create_month_archive(
             arguments.database,
             arguments.output,

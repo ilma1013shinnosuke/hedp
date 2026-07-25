@@ -209,3 +209,10 @@ Intent作成、Adapter呼出し、通知、機器操作は行わず、出力は�
 4 KiB以下の説明に限定する。vendor報告値の単位と一部keyの正確な意味は未確認のままとし、
 5分値6点未満の短い変化では提案扱いにしない。料金と移動可能負荷の根拠がないため、
 通貨節約や実行効果を主張しない。
+
+`hedp explain-solar-self-consumption [--at <ISO-8601>] [--json]`は、この説明を利用者へ
+表示する最小のread-only経路である。設定済みDBをread-onlyで開き、直前の完了済みJST日について
+`fusionsolar_energy_balance`が厳密に1件ある場合だけ既存Explainerへ渡す。0件又は複数件、
+DB障害、解析不能では固定された「利用不可」だけを返し、件数、path、例外、Raw、識別子を
+表示しない。このcommandは説明専用であり、Intent、Shadow Gate、通知、Adapter、network、
+機器操作へ接続しない。

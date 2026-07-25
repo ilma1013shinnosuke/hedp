@@ -2,7 +2,7 @@ import argparse
 import json
 import sqlite3
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -10,6 +10,9 @@ from zoneinfo import ZoneInfo
 from hedp.application import Application
 from hedp.configuration import Configuration
 from hedp.daily_health import DailyHealthService
+from hedp.intelligence.solar_self_consumption_opportunity import (
+    explain_previous_day_solar_self_consumption_opportunity,
+)
 from hedp.adapters.fusionsolar.client import FusionSolarClient
 from hedp.adapters.fusionsolar.alarm_collector import FusionSolarAlarmCollector
 from hedp.adapters.fusionsolar.battery_dc_collector import (
@@ -468,6 +471,11 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     health_parser.add_argument("--hours", type=int, default=24)
     health_parser.add_argument("--json", action="store_true")
     health_parser.add_argument("--verbose", action="store_true")
+    solar_explanation_parser = subparsers.add_parser(
+        "explain-solar-self-consumption"
+    )
+    solar_explanation_parser.add_argument("--at", type=_datetime_argument)
+    solar_explanation_parser.add_argument("--json", action="store_true")
     add_switchbot_parser(subparsers)
     arguments = parser.parse_args(argv)
 
@@ -516,6 +524,50 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         if report["status"] == "critical":
             return 2
         return 1 if report["status"] == "warning" else 0
+
+    if arguments.command == "explain-solar-self-consumption":
+        evaluated_at = arguments.at or datetime.now(timezone.utc)
+        target_date = (
+            evaluated_at.astimezone(ZoneInfo("Asia/Tokyo")).date()
+            - timedelta(days=1)
+        )
+        connection = None
+        try:
+            storage = Storage(Configuration.database_path_from_environment())
+            connection = storage.connect_readonly()
+            raw_data = storage.load_rawdata_for_range(
+                "fusionsolar_energy_balance",
+                target_date,
+                target_date,
+            )
+            if len(raw_data) != 1:
+                raise LookupError
+            explanation = (
+                explain_previous_day_solar_self_consumption_opportunity(
+                    raw_data[0],
+                    evaluated_at=evaluated_at,
+                )
+            )
+        except Exception:
+            print(
+                "solar self-consumption explanation unavailable",
+                file=sys.stderr,
+            )
+            return 1
+        finally:
+            if connection is not None:
+                connection.close()
+        if arguments.json:
+            print(
+                json.dumps(
+                    explanation.safe_to_dict(),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(explanation.summary)
+        return 0
 
     if arguments.command == "backup":
         destination = _backup()

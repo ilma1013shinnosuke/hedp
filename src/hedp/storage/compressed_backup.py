@@ -131,6 +131,33 @@ def verify_gzip(
     }
 
 
+def verify_gzip_matches_file(
+    source_path: str | Path,
+    compressed_path: str | Path,
+) -> dict[str, str | int]:
+    """Verify that an existing gzip restores exactly to a regular source file."""
+
+    source = Path(source_path)
+    compressed = Path(compressed_path)
+    if not source.is_file() or source.is_symlink():
+        raise CompressedBackupError("source must be a regular file")
+    if not compressed.is_file() or compressed.is_symlink():
+        raise CompressedBackupError("compressed backup must be a regular file")
+    source_sha256 = _sha256_file(source)
+    source_size = source.stat().st_size
+    receipt = verify_gzip(
+        compressed,
+        expected_sha256=source_sha256,
+        expected_size_bytes=source_size,
+    )
+    return {
+        "source_sha256": source_sha256,
+        "source_size_bytes": source_size,
+        "compressed_sha256": receipt["compressed_sha256"],
+        "compressed_size_bytes": receipt["compressed_size_bytes"],
+    }
+
+
 def restore_and_verify_gzip_sqlite(
     compressed_path: str | Path,
     restored_path: str | Path,

@@ -799,3 +799,101 @@ def test_cli_gas_queue_dry_run_uses_readonly_database(tmp_path, capsys) -> None:
     importer_class.return_value.run.assert_called_once_with(tmp_path, dry_run=True)
     connection.close.assert_called_once_with()
     assert json.loads(capsys.readouterr().out) == report
+
+
+def test_cli_explains_previous_day_from_exactly_one_readonly_observation(
+    capsys,
+) -> None:
+    raw_data = Mock()
+    explanation = Mock()
+    explanation.safe_to_dict.return_value = {
+        "outcome": "explain",
+        "reason_code": "reported_context",
+        "summary": "safe fixture summary",
+    }
+    connection = Mock()
+    with (
+        patch(
+            "hedp.main.Configuration.database_path_from_environment",
+            return_value="hedp.db",
+        ),
+        patch("hedp.main.Storage") as storage_class,
+        patch(
+            "hedp.main.explain_previous_day_solar_self_consumption_opportunity",
+            return_value=explanation,
+        ) as explain,
+    ):
+        storage = storage_class.return_value
+        storage.connect_readonly.return_value = connection
+        storage.load_rawdata_for_range.return_value = [raw_data]
+        result = cli(
+            [
+                "explain-solar-self-consumption",
+                "--at",
+                "2026-07-25T03:00:00+09:00",
+                "--json",
+            ]
+        )
+
+    assert result == 0
+    storage.connect_readonly.assert_called_once_with()
+    storage.connect.assert_not_called()
+    storage.load_rawdata_for_range.assert_called_once_with(
+        "fusionsolar_energy_balance",
+        date(2026, 7, 24),
+        date(2026, 7, 24),
+    )
+    explain.assert_called_once_with(
+        raw_data,
+        evaluated_at=datetime.fromisoformat("2026-07-25T03:00:00+09:00"),
+    )
+    connection.close.assert_called_once_with()
+    assert json.loads(capsys.readouterr().out) == explanation.safe_to_dict()
+
+
+@pytest.mark.parametrize("observations", [[], [Mock(), Mock()]])
+def test_cli_solar_explanation_hides_missing_or_ambiguous_evidence(
+    observations,
+    capsys,
+) -> None:
+    connection = Mock()
+    with (
+        patch(
+            "hedp.main.Configuration.database_path_from_environment",
+            return_value="private-database-path",
+        ),
+        patch("hedp.main.Storage") as storage_class,
+        patch(
+            "hedp.main.explain_previous_day_solar_self_consumption_opportunity"
+        ) as explain,
+    ):
+        storage = storage_class.return_value
+        storage.connect_readonly.return_value = connection
+        storage.load_rawdata_for_range.return_value = observations
+        result = cli(
+            [
+                "explain-solar-self-consumption",
+                "--at",
+                "2026-07-25T03:00:00+09:00",
+                "--json",
+            ]
+        )
+
+    assert result == 1
+    explain.assert_not_called()
+    connection.close.assert_called_once_with()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == "solar self-consumption explanation unavailable\n"
+    assert "private" not in output.err
+
+
+def test_cli_solar_explanation_rejects_naive_at() -> None:
+    with pytest.raises(SystemExit):
+        cli(
+            [
+                "explain-solar-self-consumption",
+                "--at",
+                "2026-07-25T03:00:00",
+            ]
+        )

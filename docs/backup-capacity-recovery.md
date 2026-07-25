@@ -81,6 +81,11 @@ mode 0600 partialへgzipし、展開後のSHA-256と容量を照合してから�
 返す復元検査も実装済みである。将来resticを導入する場合は、resticが隔離directoryへ戻した
 `.db.gz`をこの検査へ渡し、repository URL、credential、path、DB内容をreceiptへ含めない。
 
+`scripts/compress_verified_backup.py`は日次jobから呼ぶための準備済みcommandである。同名
+`.gz`が既にある場合は元`.db`と展開後のchecksum・容量が一致するときだけ再開成功とし、
+不一致なら両方を保持して停止する。`--remove-source`でも検証成功後にだけ元`.db`を削除する。
+このcommandも現役`run_daily.sh`へは未接続である。
+
 次の実装変更は日次本番処理へ影響するため、対象script、次回実行への影響、rollbackを
 提示して承認を得てから行う。
 
