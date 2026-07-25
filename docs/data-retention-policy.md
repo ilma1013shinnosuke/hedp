@@ -80,6 +80,66 @@ SwitchBot OpenAPIのstatus snapshotは、機器発生時刻が確認できない
 取得時刻として扱い`source_precision=collection_time_snapshot`で識別する。これを人感等の
 event発生秒として分析しない。明示時刻を持つimportと将来のdevice eventは別精度として扱う。
 
+## 第2層で保持する五つの形
+
+第1層が取得した回数をそのまま永久保存せず、「何が変化したか」「どの期間その状態だったか」
+「その期間を観測できていたか」を再現できる最小の形へ変換する。
+
+1. **current state**: 現在値、品質、観測時刻、受信時刻を一件だけ更新保存する。
+2. **state interval**: 照明、鍵、運転mode等の離散状態を`valid_from`と`valid_until`で表す。
+3. **event ledger**: 状態変化、人感、警報、障害、復旧等を発生時刻の精度を保って保存する。
+4. **continuous series**: 温湿度、CO2、照度、電力等を詳細値と段階的集約で保存する。
+5. **observation coverage**: 正常観測、不安定、観測不能の期間と根拠件数を区間で保存する。
+
+離散状態の同一値を定期取得しても、新しい状態履歴を追加しない。既存intervalを継続し、
+current stateの受信時刻と品質だけを更新する。状態が変化したときにintervalを閉じ、
+新しいintervalとeventを作る。提供元eventと定期snapshotが同じ変化を示す場合は、
+同一事実として重複適用しない。
+
+連続値は変化量だけで保存すると長時間の観測不能と一定値を区別できないため、sensorごとの
+変化閾値に加えて最大保存間隔を必ず設ける。直近詳細値を長期集約した後も、最小、最大、平均、
+件数、品質、観測coverageを残す。積算counterや料金計算に使う値は、単純平均ではなく
+用途に合う集約規則をデータ辞書へ明記する。
+
+observation coverageはRawの成功・失敗列から第2層が生成する派生事実である。一回の失敗を
+直ちに「通信不能」と断定せず、取得周期、連続失敗数、経過時間から`healthy`、`degraded`、
+`unavailable`を判定する。区間には開始、終了、期待回数、成功数、失敗数、最後の成功時刻、
+判定規則versionを持たせる。判定元の詳細な成功記録は短期保持後に集約できるが、障害開始と
+復旧はeventとして残す。
+
+離散状態をpush通知できるsourceでは、正規化したpush eventを変化の正本候補とし、同じ状態を
+示す定期snapshot本文は長期保存しない。push受信時にcurrent stateとstate intervalを更新する。
+ただしpushだけへ完全依存せず、低頻度または再接続直後のread-only snapshotで照合する。
+snapshotが一致した場合はcoverageだけを更新し、不一致、欠落回復、順序逆転を検出した場合は
+reconciliation eventを残して現在状態を修正する。提供元が一意event ID、連番、再送、resumeを
+保証する場合は照合頻度を下げられるが、実測前に保証されたものとして扱わない。
+
+取得周期は第1層の外部設定、保存方法は第2層のデータ辞書で決める。同じ1分pollでも、
+離散状態は変化時だけ、連続値は必要粒度で、通信品質はcoverage区間として保存できる。
+
+## 想定外の値・Schemaへの共通対処
+
+想定外値を正常値へ丸めたり、0、空文字、前回値で置き換えたりしない。次の順で処理する。
+
+1. 既知fieldの型、列挙値、単位、範囲、target、時刻、Schema世代をAdapter境界で検証する。
+2. 既知fieldだが形式・範囲が不正なら`quality=invalid`、意味を解釈できない値や未知fieldは
+   `quality=unknown`とし、正規化値を`null`にする。
+3. field単位で安全に分離できる場合、正常なfieldまで捨てない。targetや時刻を特定できない、
+   frame境界が壊れている等、事実の帰属が曖昧な場合は観測全体を通常系列へ入れない。
+4. Schema異常eventへ、取得元alias、Adapter version、Schema fingerprint、reason code、
+   初回・最終時刻、重複件数を保存する。秘密値やRaw本文を通常logへ出さない。
+5. 原因解析に必要なRawは、秘密・家庭固有情報を安全に扱える隔離領域へ、件数・一件容量・
+   日次容量・保存日数の上限付きで可逆保存する。同一payloadはhashで重複抑止する。
+6. 異常が連続する場合は無制限再試行せず、source単位でbackoffまたは収集停止し、
+   正常な他sourceと機器標準機能を巻き込まない。
+7. Adapterを更新して解釈可能になった場合、隔離Rawから正規化値を再生成する。元の
+   `invalid`または`unknown`記録を上書きせず、再処理versionと対応関係を残す。
+
+`invalid`と`unknown`は第3層へ正常な判断材料として渡さず、第4層の操作根拠にも使わない。
+ただし異常の発生自体は、監視、障害診断、Schema更新判断に使える正式な事実として扱う。
+上限値とRaw保存期間が未確定の新Adapterは、隔離された有限試験から開始し、無制限の
+本番収集を許可しない。
+
 ## 可逆圧縮アーカイブ
 
 長期Rawは、原文を変えずに復元できるUTF-8 JSON Linesのgzip圧縮を標準候補とする。
@@ -126,9 +186,10 @@ archiveできる。処理はDBをread-onlyで開き、元行を削除しない�
 
 ## Adapter追加時の必須項目
 
-データ辞書へ、保存クラス、Raw一件の最大量、最大頻度、日次増加量、直近保持期間、
-長期粒度、圧縮単位、復元方法、削除条件を追加する。値が未確定なら、上限付きの隔離保存で
-観測し、無制限の本番保存を開始しない。
+データ辞書へ、保存クラス、データ種別、Raw一件の最大量、最大頻度、日次増加量、
+直近保持期間、長期粒度、圧縮単位、復元方法、削除条件を追加する。離散状態は
+`state_interval`、通信品質は`observation_coverage`として、連続値やeventと区別する。
+値が未確定なら、上限付きの隔離保存で観測し、無制限の本番保存を開始しない。
 
 共通形式は`docs/schemas/retention-data-dictionary-v1.schema.json`、匿名の未確定例は
 `docs/templates/retention-data-dictionary.example.json`を使う。`draft`では未確定値を

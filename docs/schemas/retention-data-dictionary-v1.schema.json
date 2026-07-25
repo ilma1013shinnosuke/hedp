@@ -29,7 +29,15 @@
     "status": {"enum": ["draft", "approved"]},
     "retention_class": {"enum": ["A", "B", "C", "D"]},
     "data_kind": {
-      "enum": ["raw", "continuous", "event", "audit", "current"]
+      "enum": [
+        "raw",
+        "continuous",
+        "event",
+        "audit",
+        "current",
+        "state_interval",
+        "observation_coverage"
+      ]
     },
     "contains_household_identifiers": {"type": "boolean"},
     "contains_sensitive_behavior": {"type": "boolean"},

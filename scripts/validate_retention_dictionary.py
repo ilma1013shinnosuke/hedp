@@ -74,6 +74,8 @@ def validate_retention_dictionary(value: object) -> tuple[str, ...]:
         "event",
         "audit",
         "current",
+        "state_interval",
+        "observation_coverage",
     }:
         issues.append("data_kind is invalid")
     for field in (

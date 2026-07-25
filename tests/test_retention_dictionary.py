@@ -68,3 +68,11 @@ def test_schema_and_validator_require_the_same_top_level_fields() -> None:
 
     assert set(schema["required"]) == set(schema["properties"])
     assert set(schema["required"]) == set(example())
+
+
+def test_interval_data_kinds_are_valid() -> None:
+    for data_kind in ("state_interval", "observation_coverage"):
+        value = example()
+        value["data_kind"] = data_kind
+
+        assert validate_retention_dictionary(value) == ()
