@@ -45,6 +45,44 @@ def _daily_health_script_repository(tmp_path: Path) -> tuple[Path, Path]:
     return repository, runner
 
 
+def _collection_script_repository(tmp_path: Path, runner_name: str) -> tuple[Path, Path]:
+    repository = tmp_path / "repository"
+    scripts = repository / "scripts"
+    command_directory = repository / ".venv" / "bin"
+    scripts.mkdir(parents=True)
+    command_directory.mkdir(parents=True)
+    for name in (
+        runner_name,
+        "run_with_timeout.py",
+        "run_with_env.py",
+        "log_maintenance.sh",
+        "operational_metrics.sh",
+    ):
+        shutil.copy(ROOT / "scripts" / name, scripts / name)
+    runner = scripts / runner_name
+    runner.chmod(0o755)
+    python = command_directory / "python"
+    python.symlink_to(sys.executable)
+    hedp = command_directory / "hedp"
+    hedp.write_text(
+        "#!/bin/bash\n"
+        "printf '%s\\n' \"$*\" >> \"${CALL_LOG}\"\n"
+        "if [[ \"${HEDP_SLEEP_SECONDS:-0}\" != \"0\" ]]; then sleep \"${HEDP_SLEEP_SECONDS}\"; fi\n"
+        "exit \"${HEDP_EXIT_CODE:-0}\"\n"
+    )
+    hedp.chmod(0o755)
+    metric_recorder = scripts / "record_operational_metric.py"
+    metric_recorder.write_text(
+        "from pathlib import Path\n"
+        "import os\n"
+        "import sys\n"
+        "path = os.environ.get('METRIC_LOG')\n"
+        "if path:\n"
+        "    Path(path).open('a', encoding='utf-8').write(' '.join(sys.argv[1:]) + '\\n')\n"
+    )
+    return repository, runner
+
+
 def test_five_minute_script_collects_realtime_and_current_alarms():
     script = (ROOT / "scripts" / "run_device_realtime.sh").read_text()
     assert "collect-realtime" in script
@@ -63,6 +101,59 @@ def test_equipment_job_runs_battery_dc_at_0310():
     assert "<integer>3</integer>" in installer
     assert "<integer>10</integer>" in installer
     assert "chmod 600" in installer
+    assert "run_with_timeout.py" in runner
+    assert "SUMICORE_EQUIPMENT_TIMEOUT_SECONDS" in runner
+    assert "HEDP_EQUIPMENT_TIMEOUT_SECONDS" in runner
+    assert "between 1 and 1800 seconds" in runner
+
+
+def test_equipment_runner_rejects_an_unbounded_timeout(tmp_path):
+    _, runner = _collection_script_repository(tmp_path, "run_equipment_daily.sh")
+
+    result = subprocess.run(
+        [str(runner)],
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(tmp_path / "database.lock"),
+            "HEDP_EQUIPMENT_TIMEOUT_SECONDS": "1801",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "between 1 and 1800 seconds" in result.stderr
+
+
+def test_equipment_runner_records_a_reachable_timeout(tmp_path):
+    _, runner = _collection_script_repository(tmp_path, "run_equipment_daily.sh")
+    call_log = tmp_path / "calls.log"
+    metric_log = tmp_path / "metrics.log"
+
+    result = subprocess.run(
+        [str(runner)],
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "CALL_LOG": str(call_log),
+            "METRIC_LOG": str(metric_log),
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(tmp_path / "database.lock"),
+            "HEDP_EQUIPMENT_TIMEOUT_SECONDS": "1",
+            "HEDP_SLEEP_SECONDS": "2",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 124
+    assert call_log.read_text().splitlines() == ["collect-battery-dc"]
+    fields = metric_log.read_text().splitlines()[-1].split()
+    assert fields[:3] == ["operation", "equipment", "timed_out"]
+    assert fields[3].isdigit()
+    assert fields[4] == "timeout"
 
 
 def test_daily_health_job_runs_json_at_0410_without_credentials():
@@ -153,9 +244,10 @@ def test_daily_health_warning_is_completed_operation_but_keeps_exit_one(tmp_path
 
     assert result.returncode == 1
     assert call_log.read_text().splitlines() == ["daily-health"]
-    assert metric_log.read_text().splitlines() == [
-        "operation daily_health completed 0 none"
-    ]
+    fields = metric_log.read_text().splitlines()[-1].split()
+    assert fields[:3] == ["operation", "daily_health", "completed"]
+    assert fields[3].isdigit()
+    assert fields[4] == "none"
 
 
 def test_switchbot_job_runs_hourly_at_minute_five_without_plist_secrets():
@@ -173,6 +265,62 @@ def test_switchbot_job_runs_hourly_at_minute_five_without_plist_secrets():
     assert "SWITCHBOT_SECRET" not in installer
     assert "chmod 600" in installer
     assert "switch_macos_launchd_job.sh" in installer
+    assert "run_with_timeout.py" in runner
+    assert "SUMICORE_SWITCHBOT_TIMEOUT_SECONDS" in runner
+    assert "HEDP_SWITCHBOT_TIMEOUT_SECONDS" in runner
+    assert "between 1 and 600 seconds" in runner
+
+
+def test_switchbot_runner_rejects_an_unbounded_timeout(tmp_path):
+    repository, runner = _collection_script_repository(tmp_path, "run_switchbot_hourly.sh")
+    (repository / ".env").write_text("# test environment only\n")
+
+    result = subprocess.run(
+        [str(runner)],
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(tmp_path / "database.lock"),
+            "HEDP_SWITCHBOT_TIMEOUT_SECONDS": "601",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "between 1 and 600 seconds" in result.stderr
+
+
+def test_switchbot_runner_records_a_reachable_timeout(tmp_path):
+    repository, runner = _collection_script_repository(tmp_path, "run_switchbot_hourly.sh")
+    (repository / ".env").write_text("# test environment only\n")
+    (repository / ".env").chmod(0o600)
+    call_log = tmp_path / "calls.log"
+    metric_log = tmp_path / "metrics.log"
+
+    result = subprocess.run(
+        [str(runner)],
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "CALL_LOG": str(call_log),
+            "METRIC_LOG": str(metric_log),
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(tmp_path / "database.lock"),
+            "HEDP_SWITCHBOT_TIMEOUT_SECONDS": "1",
+            "HEDP_SLEEP_SECONDS": "2",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 124
+    assert call_log.read_text().splitlines() == ["switchbot collect"]
+    fields = metric_log.read_text().splitlines()[-1].split()
+    assert fields[:3] == ["operation", "switchbot", "timed_out"]
+    assert fields[3].isdigit()
+    assert fields[4] == "timeout"
 
 
 def test_all_database_jobs_share_one_lock():

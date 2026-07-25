@@ -5,6 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/operational_metrics.sh"
 SECONDS=0
+TIMEOUT_RUNNER="${SCRIPT_DIR}/run_with_timeout.py"
+SWITCHBOT_TIMEOUT_SECONDS="${SUMICORE_SWITCHBOT_TIMEOUT_SECONDS:-${HEDP_SWITCHBOT_TIMEOUT_SECONDS:-180}}"
+
+case "${SWITCHBOT_TIMEOUT_SECONDS}" in
+    ''|*[!0-9]*)
+        echo "SwitchBot timeout must be a whole number of seconds" >&2
+        sumicore_record_operational_metric switchbot failed "${SECONDS}" internal
+        exit 2
+        ;;
+esac
+if ((SWITCHBOT_TIMEOUT_SECONDS < 1 || SWITCHBOT_TIMEOUT_SECONDS > 600)); then
+    echo "SwitchBot timeout must be between 1 and 600 seconds" >&2
+    sumicore_record_operational_metric switchbot failed "${SECONDS}" internal
+    exit 2
+fi
 
 cd "${REPOSITORY_ROOT}"
 if [[ ! -f .env ]]; then
@@ -30,7 +45,9 @@ if ! mkdir "${LOCK_DIRECTORY}" 2>/dev/null; then
 fi
 trap 'rmdir "${LOCK_DIRECTORY}"' EXIT
 
-if "${REPOSITORY_ROOT}/.venv/bin/hedp" switchbot collect; then
+if "${REPOSITORY_ROOT}/.venv/bin/python" "${TIMEOUT_RUNNER}" \
+    "${SWITCHBOT_TIMEOUT_SECONDS}" \
+    "${REPOSITORY_ROOT}/.venv/bin/hedp" switchbot collect; then
     sumicore_record_operational_metric switchbot completed "${SECONDS}" none
     exit 0
 else

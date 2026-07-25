@@ -11,14 +11,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
 import shutil
 import sqlite3
 import stat
-from time import monotonic
-from typing import Protocol
+from time import monotonic, sleep, time
+from typing import Iterator, Protocol
 
 
 class OperationName(str, Enum):
@@ -149,6 +150,7 @@ class ReadOnlyDatabaseMetrics:
         database_path: str | Path,
         *,
         job: OperationName = OperationName.DAILY_HEALTH,
+        include_table_counts: bool = False,
     ) -> DatabaseCapacityMetric:
         database = Path(database_path).resolve()
         started = monotonic()
@@ -178,8 +180,18 @@ class ReadOnlyDatabaseMetrics:
                 free_page_count = int(
                     connection.execute("PRAGMA freelist_count").fetchone()[0]
                 )
-                raw_data_rows = self._count_if_present(connection, "raw_data")
-                record_rows = self._count_if_present(connection, "records")
+                # Exact row counts can scan multi-gigabyte tables.  They are
+                # therefore opt-in diagnostics, never part of the daily probe.
+                raw_data_rows = (
+                    self._count_if_present(connection, "raw_data")
+                    if include_table_counts
+                    else None
+                )
+                record_rows = (
+                    self._count_if_present(connection, "records")
+                    if include_table_counts
+                    else None
+                )
             finally:
                 connection.close()
         except sqlite3.OperationalError as error:
@@ -233,6 +245,14 @@ class OperationalMetricsJournal:
     filename = "operational-metrics.jsonl"
     maximum_bytes = 1024 * 1024
     generations = 2
+    # The journal is written by several launchd jobs.  Keep contention short:
+    # a missed diagnostic is preferable to delaying the job that it describes.
+    lock_wait_seconds = 0.5
+    lock_retry_seconds = 0.01
+    # A stale lock is recovered only after its owner is known to be gone.  The
+    # deliberately generous age avoids stealing a lock from a slow filesystem.
+    stale_lock_seconds = 60.0
+    _lock_owner_filename = "owner.json"
 
     def __init__(self, state_home: str | Path | None = None) -> None:
         configured_path = os.environ.get("SUMICORE_OPERATIONAL_METRICS_PATH")
@@ -278,8 +298,9 @@ class OperationalMetricsJournal:
             "utf-8"
         )
         self._prepare_directory()
-        self._rotate_if_needed(len(encoded))
-        self._append_bytes(encoded)
+        with self._exclusive_lock():
+            self._rotate_if_needed(len(encoded))
+            self._append_bytes(encoded)
 
     def _prepare_directory(self) -> None:
         self._ensure_safe_state_home()
@@ -294,7 +315,16 @@ class OperationalMetricsJournal:
             if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
                 raise RuntimeError("operational metrics directory is unsafe")
             return
-        self._state_home.mkdir(mode=0o700, parents=True, exist_ok=False)
+        try:
+            self._state_home.mkdir(mode=0o700, parents=True, exist_ok=False)
+        except FileExistsError:
+            # Another scheduled job won the creation race.  Validate the
+            # object it created rather than treating a harmless race as a
+            # metrics failure.
+            metadata = os.lstat(self._state_home)
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                raise RuntimeError("operational metrics directory is unsafe") from None
+            return
         metadata = os.lstat(self._state_home)
         if not stat.S_ISDIR(metadata.st_mode):
             raise RuntimeError("operational metrics directory is unsafe")
@@ -306,10 +336,16 @@ class OperationalMetricsJournal:
             if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
                 raise RuntimeError("operational metrics directory is unsafe")
         else:
-            directory.mkdir(mode=0o700, parents=True, exist_ok=False)
-            metadata = os.lstat(directory)
-            if not stat.S_ISDIR(metadata.st_mode):
-                raise RuntimeError("operational metrics directory is unsafe")
+            try:
+                directory.mkdir(mode=0o700, parents=True, exist_ok=False)
+            except FileExistsError:
+                metadata = os.lstat(directory)
+                if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                    raise RuntimeError("operational metrics directory is unsafe") from None
+            else:
+                metadata = os.lstat(directory)
+                if not stat.S_ISDIR(metadata.st_mode):
+                    raise RuntimeError("operational metrics directory is unsafe")
         os.chmod(directory, 0o700)
 
     @staticmethod
@@ -321,7 +357,15 @@ class OperationalMetricsJournal:
             if stat.S_IMODE(metadata.st_mode) != 0o700:
                 raise RuntimeError("operational metrics directory must be private")
             return
-        directory.mkdir(mode=0o700, parents=True, exist_ok=False)
+        try:
+            directory.mkdir(mode=0o700, parents=True, exist_ok=False)
+        except FileExistsError:
+            metadata = os.lstat(directory)
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                raise RuntimeError("operational metrics directory is unsafe") from None
+            if stat.S_IMODE(metadata.st_mode) != 0o700:
+                raise RuntimeError("operational metrics directory must be private")
+            return
         metadata = os.lstat(directory)
         if not stat.S_ISDIR(metadata.st_mode):
             raise RuntimeError("operational metrics directory is unsafe")
@@ -364,6 +408,152 @@ class OperationalMetricsJournal:
     def _generation_path(self, generation: int) -> Path:
         return self._path.with_name(f"{self._path.name}.{generation}")
 
+    @property
+    def _lock_path(self) -> Path:
+        return self._path.with_name(f".{self._path.name}.lock")
+
+    @contextmanager
+    def _exclusive_lock(self) -> Iterator[None]:
+        """Serialise append and rotation with a portable private mkdir lock.
+
+        Advisory file locks differ across platforms and can be released when a
+        descriptor is accidentally inherited.  Creating a directory is atomic
+        on the supported local filesystems, so it also protects the rename
+        sequence used for rotation.  Lock metadata contains only an OS process
+        id and a coarse creation timestamp; it is never added to the journal.
+        """
+        deadline = monotonic() + self.lock_wait_seconds
+        acquired = False
+        while not acquired:
+            try:
+                self._lock_path.mkdir(mode=0o700)
+                self._write_lock_owner()
+                acquired = True
+            except FileExistsError:
+                self._recover_stale_lock_if_safe()
+                if monotonic() >= deadline:
+                    raise RuntimeError("operational metrics journal is busy")
+                sleep(self.lock_retry_seconds)
+            except OSError as error:
+                raise RuntimeError("operational metrics journal lock failed") from error
+        try:
+            yield
+        finally:
+            self._release_lock()
+
+    def _write_lock_owner(self) -> None:
+        owner_path = self._lock_path / self._lock_owner_filename
+        descriptor = os.open(
+            owner_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        try:
+            os.write(
+                descriptor,
+                json.dumps({"pid": os.getpid(), "created_at": int(time())}).encode(
+                    "utf-8"
+                ),
+            )
+        except Exception:
+            os.close(descriptor)
+            self._release_lock()
+            raise
+        else:
+            os.close(descriptor)
+
+    def _recover_stale_lock_if_safe(self) -> None:
+        """Detach a dead, old lock without following or deleting unknown files."""
+        lock_path = self._lock_path
+        try:
+            metadata = os.lstat(lock_path)
+        except FileNotFoundError:
+            return
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise RuntimeError("operational metrics journal lock is unsafe")
+        if time() - metadata.st_mtime < self.stale_lock_seconds:
+            return
+        owner = self._read_lock_owner(lock_path / self._lock_owner_filename)
+        if owner is None:
+            # A process can die after mkdir and before owner metadata is
+            # written.  Recover only an empty old directory; a malformed or
+            # unexpected lock is left untouched for a human to inspect.
+            try:
+                if any(lock_path.iterdir()):
+                    return
+            except OSError:
+                return
+        elif self._owner_process_is_alive(owner):
+            return
+
+        # Renaming first is atomic: a new writer may safely acquire the now
+        # vacant lock path while this process disposes of the detached one.
+        detached = lock_path.with_name(
+            f".{self._path.name}.stale-{os.getpid()}-{int(monotonic() * 1_000_000)}"
+        )
+        try:
+            os.rename(lock_path, detached)
+        except FileNotFoundError:
+            return
+        except OSError:
+            return
+        self._remove_own_detached_lock(detached)
+
+    @staticmethod
+    def _read_lock_owner(owner_path: Path) -> int | None:
+        try:
+            metadata = os.lstat(owner_path)
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                return None
+            owner = json.loads(owner_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return None
+        pid = owner.get("pid") if isinstance(owner, dict) else None
+        return pid if type(pid) is int and pid > 0 else None
+
+    @staticmethod
+    def _owner_process_is_alive(pid: int) -> bool:
+        if pid == os.getpid():
+            return True
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except (PermissionError, OSError):
+            # An inaccessible or platform-specific process is not proof that it
+            # is dead, so leave the lock alone.
+            return True
+        return True
+
+    def _remove_own_detached_lock(self, detached: Path) -> None:
+        """Clean only the exact private lock structure created by this class."""
+        try:
+            contents = list(detached.iterdir())
+            if not contents:
+                detached.rmdir()
+                return
+            if len(contents) != 1 or contents[0].name != self._lock_owner_filename:
+                return
+            metadata = os.lstat(contents[0])
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                return
+            contents[0].unlink()
+            detached.rmdir()
+        except OSError:
+            # Detached remnants do not affect future journal writes.
+            return
+
+    def _release_lock(self) -> None:
+        try:
+            owner_path = self._lock_path / self._lock_owner_filename
+            if owner_path.exists() and not owner_path.is_symlink():
+                self._require_regular_file(owner_path)
+                owner_path.unlink()
+            self._lock_path.rmdir()
+        except (FileNotFoundError, OSError, RuntimeError):
+            # Metrics must never make their caller fail while releasing a lock.
+            return
+
     @staticmethod
     def _require_regular_file(path: Path) -> None:
         metadata = os.lstat(path)
@@ -375,3 +565,130 @@ class OperationalMetricsJournal:
             return
         self._require_regular_file(path)
         path.unlink()
+
+
+def summarize_operational_metrics(
+    state_home: str | Path | None = None,
+) -> dict[str, object]:
+    """Return aggregate facts from the private journal and two old generations.
+
+    This reader is deliberately stricter than the writer: records must have the
+    exact, published schema and vocabulary before they affect a report.  Broken
+    lines are counted but never returned, so an accidental payload in a journal
+    cannot be surfaced by a status command.
+    """
+    journal = OperationalMetricsJournal(state_home)
+    paths = [
+        journal._generation_path(generation)
+        for generation in range(journal.generations, 0, -1)
+    ] + [journal.path]
+    records: list[dict[str, object]] = []
+    invalid_lines = 0
+    files_read = 0
+    for path in paths:
+        if not path.exists() and not path.is_symlink():
+            continue
+        try:
+            journal._require_regular_file(path)
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError, RuntimeError):
+            invalid_lines += 1
+            continue
+        files_read += 1
+        for line in text.splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                invalid_lines += 1
+                continue
+            if not _is_valid_metric_record(record):
+                invalid_lines += 1
+                continue
+            records.append(record)
+
+    operation_counts: dict[tuple[str, str, str, str, str], int] = {}
+    database_by_date: dict[str, int] = {}
+    for record in records:
+        if record["kind"] == MetricKind.OPERATION.value:
+            key = tuple(
+                str(record[field])
+                for field in ("date", "job", "outcome", "failure_category", "duration")
+            )
+            operation_counts[key] = operation_counts.get(key, 0) + 1
+        elif record["status"] == DatabaseProbeStatus.OK.value:
+            # Later valid entries for one date replace earlier ones.  Exact time
+            # is not stored, so this is only a daily observation, not an event log.
+            database_by_date[str(record["date"])] = int(record["database_bytes"])
+
+    database_dates = sorted(database_by_date)
+    first_bytes = database_by_date[database_dates[0]] if database_dates else None
+    last_bytes = database_by_date[database_dates[-1]] if database_dates else None
+    return {
+        "schema_version": 1,
+        "files_read": files_read,
+        "accepted_records": len(records),
+        "invalid_lines": invalid_lines,
+        "operation_counts": [
+            {
+                "date": key[0],
+                "job": key[1],
+                "outcome": key[2],
+                "failure_category": key[3],
+                "duration": key[4],
+                "count": count,
+            }
+            for key, count in sorted(operation_counts.items())
+        ],
+        "database_capacity": {
+            "observed_days": len(database_dates),
+            "first_database_bytes": first_bytes,
+            "last_database_bytes": last_bytes,
+            "database_bytes_delta": (
+                last_bytes - first_bytes
+                if first_bytes is not None and last_bytes is not None
+                else None
+            ),
+        },
+    }
+
+
+def _is_valid_metric_record(record: object) -> bool:
+    if not isinstance(record, dict) or not isinstance(record.get("date"), str):
+        return False
+    try:
+        parsed_date = datetime.strptime(record["date"], "%Y-%m-%d")
+    except ValueError:
+        return False
+    if parsed_date.strftime("%Y-%m-%d") != record["date"]:
+        return False
+    if record.get("kind") == MetricKind.OPERATION.value:
+        return (
+            set(record)
+            == {"date", "kind", "job", "outcome", "duration", "failure_category"}
+            and record["job"] in {item.value for item in OperationName}
+            and record["outcome"] in {item.value for item in OperationOutcome}
+            and record["duration"]
+            in {"under_1s", "1_to_5s", "5_to_30s", "30s_or_more"}
+            and record["failure_category"] in {item.value for item in FailureCategory}
+        )
+    if record.get("kind") == MetricKind.DATABASE.value:
+        expected = {
+            "date", "kind", "job", "status", "database_bytes", "filesystem_free_bytes",
+            "page_count", "free_page_count", "raw_data_rows", "record_rows", "probe_duration",
+        }
+        numeric = ("database_bytes", "filesystem_free_bytes")
+        optional_numeric = ("page_count", "free_page_count", "raw_data_rows", "record_rows")
+        return (
+            set(record) == expected
+            and record["job"] in {item.value for item in OperationName}
+            and record["status"] in {item.value for item in DatabaseProbeStatus}
+            and record["probe_duration"]
+            in {"under_1s", "1_to_5s", "5_to_30s", "30s_or_more"}
+            and all(type(record[field]) is int and record[field] >= 0 for field in numeric)
+            and all(
+                record[field] is None
+                or (type(record[field]) is int and record[field] >= 0)
+                for field in optional_numeric
+            )
+        )
+    return False
