@@ -141,6 +141,16 @@ job also collects battery DC daily at 03:10 as a daily recovery/health
 snapshot. Logs are stored with mode `0600` under
 `~/Library/Logs/hedp/`; macOS-specific behavior remains in `scripts/`.
 
+All five scheduled jobs also append a separate anonymous operational journal.
+It records only the UTC date, fixed job/outcome/error categories, coarse
+duration, and a daily read-only capacity probe. It contains no payload,
+device identifier, database path, exception text, or exact execution time.
+The default is `~/.local/state/sumicore/operational-metrics.jsonl`, mode
+`0600`, with a 1 MiB limit and two rotated generations. Set
+`SUMICORE_OPERATIONAL_METRICS_PATH` to an absolute path whose directory is
+private. Details are in
+[`docs/operational-metrics.md`](docs/operational-metrics.md).
+
 The read-only daily health check runs independently at 04:10. It checks recent
 collection coverage and gaps, ten derived Records for every checked
 FusionSolar Modbus snapshot, previous-day daily data and derived Records,

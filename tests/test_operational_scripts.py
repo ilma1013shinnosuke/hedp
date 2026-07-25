@@ -15,7 +15,12 @@ def _daily_health_script_repository(tmp_path: Path) -> tuple[Path, Path]:
     command_directory = repository / ".venv" / "bin"
     scripts.mkdir(parents=True)
     command_directory.mkdir(parents=True)
-    for name in ("run_daily_health.sh", "run_with_timeout.py", "log_maintenance.sh"):
+    for name in (
+        "run_daily_health.sh",
+        "run_with_timeout.py",
+        "log_maintenance.sh",
+        "operational_metrics.sh",
+    ):
         shutil.copy(ROOT / "scripts" / name, scripts / name)
     runner = scripts / "run_daily_health.sh"
     runner.chmod(0o755)
@@ -25,8 +30,18 @@ def _daily_health_script_repository(tmp_path: Path) -> tuple[Path, Path]:
     hedp.write_text(
         "#!/bin/bash\n"
         "printf '%s\\n' \"$1\" >> \"${CALL_LOG}\"\n"
+        "exit \"${HEDP_EXIT_CODE:-0}\"\n"
     )
     hedp.chmod(0o755)
+    metric_recorder = scripts / "record_operational_metric.py"
+    metric_recorder.write_text(
+        "from pathlib import Path\n"
+        "import os\n"
+        "import sys\n"
+        "path = os.environ.get('METRIC_LOG')\n"
+        "if path:\n"
+        "    Path(path).open('a', encoding='utf-8').write(' '.join(sys.argv[1:]) + '\\n')\n"
+    )
     return repository, runner
 
 
@@ -113,6 +128,34 @@ def test_daily_health_runner_uses_the_bounded_timeout_wrapper(tmp_path):
 
     assert result.returncode == 0
     assert call_log.read_text().splitlines() == ["daily-health"]
+
+
+def test_daily_health_warning_is_completed_operation_but_keeps_exit_one(tmp_path):
+    _, runner = _daily_health_script_repository(tmp_path)
+    call_log = tmp_path / "calls.log"
+    metric_log = tmp_path / "metrics.log"
+
+    result = subprocess.run(
+        [str(runner)],
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "CALL_LOG": str(call_log),
+            "METRIC_LOG": str(metric_log),
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(tmp_path / "database.lock"),
+            "HEDP_DAILY_HEALTH_TIMEOUT_SECONDS": "1",
+            "HEDP_EXIT_CODE": "1",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert call_log.read_text().splitlines() == ["daily-health"]
+    assert metric_log.read_text().splitlines() == [
+        "operation daily_health completed 0 none"
+    ]
 
 
 def test_switchbot_job_runs_hourly_at_minute_five_without_plist_secrets():
@@ -205,6 +248,30 @@ def test_every_runner_uses_common_log_rotation():
         script = (ROOT / "scripts" / name).read_text()
         assert 'source "${SCRIPT_DIR}/log_maintenance.sh"' in script
         assert f"sumicore_rotate_job_logs {job}" in script
+
+
+def test_every_runner_records_anonymous_operation_outcomes():
+    runners = {
+        "run_daily.sh": "daily",
+        "run_device_realtime.sh": "device_realtime",
+        "run_equipment_daily.sh": "equipment",
+        "run_switchbot_hourly.sh": "switchbot",
+        "run_daily_health.sh": "daily_health",
+    }
+    for name, operation in runners.items():
+        script = (ROOT / "scripts" / name).read_text()
+        assert 'source "${SCRIPT_DIR}/operational_metrics.sh"' in script
+        assert f"sumicore_record_operational_metric {operation}" in script
+        assert "skipped \"${SECONDS}\" lock_held" in script
+        assert "timed_out \"${SECONDS}\" timeout" in script
+        assert "failed \"${SECONDS}\" internal" in script
+        assert "completed \"${SECONDS}\" none" in script
+
+
+def test_daily_runner_records_one_nonblocking_database_probe():
+    script = (ROOT / "scripts" / "run_daily.sh").read_text()
+
+    assert script.count("sumicore_record_database_metric") == 1
 
 
 def test_common_log_rotation_keeps_two_generations(tmp_path):

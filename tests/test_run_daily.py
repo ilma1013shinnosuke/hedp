@@ -25,6 +25,10 @@ def _daily_script_repository(tmp_path: Path) -> tuple[Path, Path]:
         Path(__file__).parents[1] / "scripts" / "log_maintenance.sh",
         scripts / "log_maintenance.sh",
     )
+    shutil.copy(
+        Path(__file__).parents[1] / "scripts" / "operational_metrics.sh",
+        scripts / "operational_metrics.sh",
+    )
     run_daily.chmod(0o755)
     hedp = command_directory / "hedp"
     hedp.write_text(

@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/log_maintenance.sh"
+source "${SCRIPT_DIR}/operational_metrics.sh"
 sumicore_rotate_job_logs collect
 HEDP_COMMAND="${REPOSITORY_ROOT}/.venv/bin/hedp"
 BACKUP_DIRECTORY="${REPOSITORY_ROOT}/backups"
@@ -12,9 +13,11 @@ TIMEOUT_RUNNER="${SCRIPT_DIR}/run_with_timeout.py"
 COMMAND_TIMEOUT_SECONDS="${SUMICORE_DAILY_COMMAND_TIMEOUT_SECONDS:-${HEDP_DAILY_COMMAND_TIMEOUT_SECONDS:-900}}"
 BACKFILL_DAYS="${SUMICORE_DAILY_BACKFILL_DAYS:-${HEDP_DAILY_BACKFILL_DAYS:-30}}"
 BACKUP_RETENTION_COUNT="${SUMICORE_BACKUP_RETENTION_COUNT:-${HEDP_BACKUP_RETENTION_COUNT:-1}}"
+SECONDS=0
 
 if ! mkdir "${LOCK_DIRECTORY}" 2>/dev/null; then
     echo "Another HEDP database job is already running; skipping the daily job." >&2
+    sumicore_record_operational_metric daily skipped "${SECONDS}" lock_held
     exit 0
 fi
 trap 'rmdir "${LOCK_DIRECTORY}" 2>/dev/null || true' EXIT
@@ -59,7 +62,7 @@ compress_backups() {
     for backup_file in "${BACKUP_DIRECTORY}"/hedp-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].db; do
         [[ -f "${backup_file}" && ! -L "${backup_file}" ]] || continue
         chmod 600 "${backup_file}" || return 1
-        run_timed gzip -f -- "${backup_file}" || return 1
+        run_daily_command gzip -f -- "${backup_file}" || return 1
         chmod 600 "${backup_file}.gz" || return 1
     done
 }
@@ -80,27 +83,47 @@ cleanup_stale_partial_backups() {
 cd "${REPOSITORY_ROOT}"
 cleanup_stale_partial_backups
 status=0
-run_timed "${HEDP_COMMAND}" collect || status=1
+timed_out=0
+run_daily_command() {
+    if run_timed "$@"; then
+        return 0
+    fi
+
+    local exit_code=$?
+    status=1
+    if [[ "${exit_code}" -eq 124 ]]; then
+        timed_out=1
+    fi
+    return "${exit_code}"
+}
+
+run_daily_command "${HEDP_COMMAND}" collect || true
 previous_date="$(TZ=Asia/Tokyo date -v-1d +%F)"
 backfill_start="$(TZ=Asia/Tokyo date -v-"${BACKFILL_DAYS}"d +%F)"
-run_timed "${HEDP_COMMAND}" backfill-missing --start "${backfill_start}" --end "${previous_date}" || status=1
-run_timed "${HEDP_COMMAND}" backfill-energy-balance --start "${backfill_start}" --end "${previous_date}" || status=1
-run_timed "${HEDP_COMMAND}" quality --start "${backfill_start}" --end "${previous_date}" || status=1
-run_timed "${HEDP_COMMAND}" quality-energy-balance --start "${backfill_start}" --end "${previous_date}" || status=1
+run_daily_command "${HEDP_COMMAND}" backfill-missing --start "${backfill_start}" --end "${previous_date}" || true
+run_daily_command "${HEDP_COMMAND}" backfill-energy-balance --start "${backfill_start}" --end "${previous_date}" || true
+run_daily_command "${HEDP_COMMAND}" quality --start "${backfill_start}" --end "${previous_date}" || true
+run_daily_command "${HEDP_COMMAND}" quality-energy-balance --start "${backfill_start}" --end "${previous_date}" || true
 if [[ -d "${BACKUP_DIRECTORY}" ]]; then
     if compress_backups; then
         prune_backups "${BACKUP_RETENTION_COUNT}"
-        if run_timed "${HEDP_COMMAND}" backup; then
+        if run_daily_command "${HEDP_COMMAND}" backup; then
             compress_backups || status=1
             prune_backups "${BACKUP_RETENTION_COUNT}"
-        else
-            status=1
         fi
     else
         status=1
     fi
 else
-    run_timed "${HEDP_COMMAND}" backup || status=1
+    run_daily_command "${HEDP_COMMAND}" backup || true
 fi
 
+sumicore_record_database_metric
+if [[ "${timed_out}" -eq 1 ]]; then
+    sumicore_record_operational_metric daily timed_out "${SECONDS}" timeout
+elif [[ "${status}" -eq 0 ]]; then
+    sumicore_record_operational_metric daily completed "${SECONDS}" none
+else
+    sumicore_record_operational_metric daily failed "${SECONDS}" internal
+fi
 exit "${status}"

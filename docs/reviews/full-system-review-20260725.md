@@ -164,3 +164,4 @@ SumiCoreを新規の正名とし、`hedp`、`HEDP_`、旧CLI、旧launchd label�
 - `docs/03_intelligence.md`
 - `docs/04_execution.md`
 - `docs/secret-management.md`
+- `docs/operational-metrics.md`
