@@ -20,6 +20,11 @@ readerはGateway、Group、Scene、Schedule、Device、Sensor、現在の運転�
 transportはframingとJSON相関だけを担当する。executorはreader完成後に別経路で追加し、
 Collectionからimportできないようにする。
 
+現時点のオフラインreader部品は、すでにJSONへ復号・相関済みのGroup、Scene、Schedule、
+Device、Sensor応答だけを受け取る。実機で確認済みの`ErrorCode=0`は受付済みとして表し、
+未確認のネストschemaや値は解釈しない。未知fieldは値を複製せず最上位field名だけで検出し、
+名称、ID、認証、ネットワーク、設定に関わるfield名はreader境界でredactする。
+
 Scene/Scheduleの定義、active、現在選択、実行中状態は同じ意味にしない。完全なpush event、
 fragmented frame実機値、MQTT、認証token lifecycle、Sensor luxは未確認である。
 
