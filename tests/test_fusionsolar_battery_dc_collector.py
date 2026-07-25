@@ -52,5 +52,11 @@ def test_collect_modules_continues_after_failure(caplog):
 
     assert [item.metadata["module_id"] for item in collected] == [1, 3]
     assert failures[0][0] == 2
-    assert "RuntimeError" in caplog.text
+    assert failures[0][1] == {
+        "error_type": "unexpected_error",
+        "category": "internal",
+        "code": "unexpected_error",
+        "retryable": False,
+    }
+    assert "RuntimeError" not in caplog.text
     assert "sensitive-detail" not in caplog.text

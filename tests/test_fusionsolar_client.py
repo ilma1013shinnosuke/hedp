@@ -2,7 +2,9 @@ from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 import pytest
+import requests
 
+from hedp.adapters.external_errors import normalize_external_error
 from hedp.adapters.fusionsolar.client import FusionSolarClient
 
 
@@ -69,6 +71,7 @@ def test_login_uses_verified_requests_and_follows_redirects(
     assert login_call.kwargs == {
         "params": {"service": auth_service},
         "allow_redirects": False,
+        "timeout": (10.0, 30.0),
     }
 
     public_key_call = session.get.call_args_list[1]
@@ -81,6 +84,7 @@ def test_login_uses_verified_requests_and_follows_redirects(
         ),
         "X-Requested-With": "XMLHttpRequest",
     }
+    assert public_key_call.kwargs["timeout"] == (10.0, 30.0)
 
     validate_call = session.post.call_args
     assert validate_call.args == (
@@ -107,6 +111,7 @@ def test_login_uses_verified_requests_and_follows_redirects(
         ),
         "X-Requested-With": "XMLHttpRequest",
     }
+    assert validate_call.kwargs["timeout"] == (10.0, 30.0)
     assert session.get.call_args_list[2].args[0].endswith("ticket=ticket-value")
     assert session.get.call_args_list[3].args[0] == (
         "https://example.test/redirect/two"
@@ -116,6 +121,10 @@ def test_login_uses_verified_requests_and_follows_redirects(
     )
     assert session.get.call_args_list[5].kwargs["params"]["_"] > 0
     assert client.csrf_token == "1234567890abcdef"
+    assert all(
+        call.kwargs["timeout"] == (10.0, 30.0)
+        for call in session.get.call_args_list[2:]
+    )
 
 
 def test_encrypt_password_url_encodes_chunks_and_appends_version(
@@ -174,6 +183,7 @@ def test_get_json_uses_default_and_overridden_headers(client_and_session) -> Non
         "X-Non-Renewal-Session": "true",
         "roarand": "1234567890abcdef",
     }
+    assert session.get.call_args.kwargs["timeout"] == (10.0, 30.0)
 
 
 def test_get_json_logs_in_and_retries_once(client_and_session) -> None:
@@ -204,7 +214,7 @@ def test_get_json_fails_after_single_retry(client_and_session) -> None:
     ]
     client.login = Mock()
 
-    with pytest.raises(RuntimeError, match="authentication failed after retry"):
+    with pytest.raises(RuntimeError, match="authentication_failed"):
         client.get_json("/data")
 
     client.login.assert_called_once_with()
@@ -217,8 +227,28 @@ def test_get_json_rejects_non_json_response(client_and_session) -> None:
     response.json.side_effect = ValueError
     session.get.return_value = response
 
-    with pytest.raises(RuntimeError, match="not valid JSON"):
+    with pytest.raises(RuntimeError, match="invalid_response"):
         client.get_json("/data")
+
+
+def test_get_json_discards_upstream_http_error_text(client_and_session) -> None:
+    client, session = client_and_session
+    response = make_response(status_code=503, text="private upstream error body")
+    response.raise_for_status.side_effect = requests.HTTPError(
+        "private upstream error body", response=response
+    )
+    session.get.return_value = response
+
+    with pytest.raises(RuntimeError) as raised:
+        client.get_json("/data")
+
+    assert "private upstream" not in str(raised.value)
+    assert normalize_external_error(raised.value).as_dict() == {
+        "error_type": "service_unavailable",
+        "category": "service",
+        "code": "service_unavailable",
+        "retryable": True,
+    }
 
 
 def test_post_json_uses_url_body_and_headers(client_and_session) -> None:
@@ -244,7 +274,62 @@ def test_post_json_uses_url_body_and_headers(client_and_session) -> None:
             "Origin": "https://example.test",
         },
         allow_redirects=False,
+        timeout=(10.0, 30.0),
     )
+
+
+@pytest.mark.parametrize(
+    "keyword,value",
+    [
+        ("connect_timeout_seconds", 0),
+        ("connect_timeout_seconds", 61),
+        ("read_timeout_seconds", 0),
+        ("read_timeout_seconds", 121),
+        ("operation_timeout_seconds", 0),
+        ("operation_timeout_seconds", 301),
+    ],
+)
+def test_client_rejects_unbounded_or_invalid_timeouts(keyword, value) -> None:
+    with pytest.raises(ValueError):
+        FusionSolarClient(
+            "https://example.test",
+            "station-dn",
+            "user",
+            "password",
+            **{keyword: value},
+        )
+
+
+def test_operation_budget_stops_before_another_http_request(
+    client_and_session,
+) -> None:
+    client, session = client_and_session
+    client.operation_timeout_seconds = 5
+
+    with patch(
+        "hedp.adapters.fusionsolar.client.time.monotonic",
+        side_effect=[100, 105],
+    ):
+        with pytest.raises(requests.Timeout, match="exceeded its time budget"):
+            client.get_json("/data")
+
+    session.get.assert_not_called()
+
+
+def test_request_timeout_tuple_cannot_exceed_remaining_operation_budget(
+    client_and_session,
+) -> None:
+    client, _ = client_and_session
+    client._operation_deadline = 105
+
+    with patch(
+        "hedp.adapters.fusionsolar.client.time.monotonic",
+        return_value=100,
+    ):
+        connect_timeout, read_timeout = client._request_timeout()
+
+    assert connect_timeout == 2.5
+    assert read_timeout == 2.5
 
 
 def test_post_json_logs_in_and_retries_once(client_and_session) -> None:
@@ -279,7 +364,7 @@ def test_login_rejects_captcha_message(client_and_session) -> None:
         json_data={"errorMsg": "verifycode is required"}
     )
 
-    with pytest.raises(RuntimeError, match="CAPTCHA or a verification code"):
+    with pytest.raises(RuntimeError, match="authentication_action_required"):
         client.login()
 
 
@@ -298,7 +383,7 @@ def test_auth_challenge_accepts_empty_and_success_messages(message) -> None:
 def test_auth_challenge_rejects_other_non_empty_message() -> None:
     response = make_response(json_data={"errorMsg": "Invalid credentials"})
 
-    with pytest.raises(RuntimeError, match="authentication failed"):
+    with pytest.raises(RuntimeError, match="authentication_failed"):
         FusionSolarClient._raise_for_auth_challenge(
             response, {"errorMsg": "Invalid credentials"}
         )

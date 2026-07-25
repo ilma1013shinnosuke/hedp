@@ -135,9 +135,11 @@ def test_alarm_quality_reports_hits_and_missing_current_device():
     assert report["issue_count"] == 1
 
 
-def test_realtime_snapshot_continues_independent_collectors():
+def test_realtime_snapshot_continues_independent_collectors(caplog):
     application = Application(None, Mock(), None)
-    application.run_device_realtime = Mock(side_effect=RuntimeError("device"))
+    application.run_device_realtime = Mock(
+        side_effect=RuntimeError("private upstream response")
+    )
     application.run_battery_dc = Mock(return_value=([Mock()], []))
     application.run_current_alarms = Mock(return_value=([Mock()], []))
 
@@ -146,6 +148,13 @@ def test_realtime_snapshot_continues_independent_collectors():
     )
 
     assert "device_error" in result
+    assert result["device_error"] == {
+        "error_type": "unexpected_error",
+        "category": "internal",
+        "code": "unexpected_error",
+        "retryable": False,
+    }
+    assert "private upstream response" not in caplog.text
     assert len(result["battery"][0]) == 1
     assert len(result["alarm"][0]) == 1
     application.run_battery_dc.assert_called_once_with(

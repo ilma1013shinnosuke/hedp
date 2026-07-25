@@ -204,7 +204,8 @@ temperature and humidity normalize to null, battery remains zero, status is
   committed to Git.
 - Cookie, CSRF token, session ID, and password values are not displayed or
   logged.
-- Generated launchd plist files contain runtime credentials only when required
-  by the existing installation method and use mode `0600`; they are outside
-  the repository.
+- Existing launchd plist files may contain runtime credentials under the
+  legacy installation method and use mode `0600`; they are outside the
+  repository. New deployments must use OS-independent encrypted storage and
+  inject secrets only at process start.
 - Operational logs are checked for accidental secret disclosure.

@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
+from hedp.adapters.external_errors import normalize_external_error
 from hedp.adapters.fusionsolar.client import FusionSolarClient
 from hedp.storage import RawData
 
@@ -48,12 +49,12 @@ class FusionSolarAlarmCollector:
 
     def collect_current_devices(
         self, device_dns: list[str]
-    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         return self._collect_devices(device_dns, "CURRENT")
 
     def collect_history_devices(
         self, device_dns: list[str], start_date: date, end_date: date
-    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         if start_date > end_date:
             raise ValueError("start_date must not be after end_date")
         return self._collect_devices(
@@ -66,7 +67,7 @@ class FusionSolarAlarmCollector:
         data_type: str,
         start_date: date | None = None,
         end_date: date | None = None,
-    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         collected = []
         failures = []
         for target_index, device_dn in enumerate(device_dns, start=1):
@@ -81,14 +82,18 @@ class FusionSolarAlarmCollector:
                         )
                     )
             except Exception as error:
-                summary = f"{type(error).__name__}: {error}"
+                report = normalize_external_error(error).as_dict()
                 logging.error(
-                    "alarm %s failed for target_index=%s: %s",
+                    "alarm %s failed target_index=%s error_type=%s "
+                    "category=%s code=%s retryable=%s",
                     data_type.lower(),
                     target_index,
-                    type(error).__name__,
+                    report["error_type"],
+                    report["category"],
+                    report["code"],
+                    report["retryable"],
                 )
-                failures.append((device_dn, summary))
+                failures.append((target_index, report))
         return collected, failures
 
     def _collect_pages(

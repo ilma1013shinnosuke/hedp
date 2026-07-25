@@ -41,7 +41,7 @@ docs/integrations/<vendor>/README.md
 - [ ] 削除、初期化、再登録、network変更、firmware更新、校正、Webhook変更、
       認証変更を承認必須として残した。
 - [ ] 調査ファイルを`runtime/research/<vendor>/<date-topic>/`へ隔離した。
-- [ ] `.env`、Keychain、家庭固有設定、実Rawの保存場所を決めた。
+- [ ] `.env`、暗号化正本、家庭固有設定、実Rawの保存場所を決めた。
 
 成果物:
 

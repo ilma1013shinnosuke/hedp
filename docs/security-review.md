@@ -33,7 +33,7 @@ macOSとWindowsの両方で復号でき、改ざん検出、version固定、回�
 
 現行plistは0600だが、FusionSolarの認証情報を平文で保持する。Modbus-only切替後は
 realtime plistからクラウド認証値を除去できる。日次クラウド処理に残る秘密は、
-macOS Keychain等から実行時だけ取得する方式へ移す。installerの標準出力、process引数、
+OS非依存の暗号化正本から実行時だけ取得する方式へ移す。installerの標準出力、process引数、
 一時fileへ値を出さない。
 
 ### 過去Git履歴の家庭固有ID

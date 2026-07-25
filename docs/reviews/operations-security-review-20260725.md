@@ -3,7 +3,7 @@
 ## 範囲と方法
 
 - 対象: Git管理中のコード・設定生成script・運用/統合文書。実機、API、DB、backup、
-  launchd、`.env`、Keychain、Git履歴の内容および設定は変更・閲覧していない。
+  launchd、`.env`、Git履歴の内容および設定は変更・閲覧していない。
 - つむ `homecore` の固定snapshot `10` を使用した。ops/security Context Pack
   `b426714e12cd4aa213b62fcfd9512f642777b330994b36db5315dac3cf52a97d` と検索で候補を
   絞り、重要箇所だけを確認した。再スキャンは183ファイル全件cache hitで、snapshotは不変である。
@@ -21,7 +21,7 @@ executorを有効化する根拠はまだない。
 | 優先度 | 所見 | 根拠・影響 | 推奨する次の作業 |
 |---|---|---|---|
 | P0 | backupは同一Macのgzip一世代で、暗号化・別障害領域への複製・定期restore検証が未完了 | `docs/security-review.md`、`docs/backup-capacity-recovery.md`。端末故障、盗難、ランサムウェア、誤削除で正本とbackupを同時に失い得る | 保存先と鍵管理を承認して決定し、認証付き暗号化、checksum、SQLite整合性、定期restore試験を実装・記録する。既存backupを削除しない |
-| P0 | FusionSolar日次launchd installerは認証情報をplistの環境変数へ平文展開する | `scripts/install_macos_launchd.sh` は0600を設定するが、秘密を永続plistへ書く。設計文書自身もKeychain等への移行を未解決としている | Modbus切替完了後に不要なクラウド秘密を除去し、残る値はKeychain等から実行時に限定取得する。process引数・一時file・installer出力へ出さない回帰試験を追加する |
+| P0 | FusionSolar日次launchd installerは認証情報をplistの環境変数へ平文展開する | `scripts/install_macos_launchd.sh` は0600を設定するが、秘密を永続plistへ書く。OS非依存の秘密管理への移行が必要である | Modbus切替完了後に不要なクラウド秘密を除去し、残る値は暗号化正本から実行時に限定取得する。process引数・一時file・installer出力へ出さない回帰試験を追加する |
 | P1 | 独立した収集/健全性確認が単一DB directory lockを共有し、遅いクラウド処理が他経路をskipさせる | `scripts/run_daily.sh`、`scripts/run_daily_health.sh`、`scripts/run_device_realtime.sh`。日次は収集・30日補完・品質・backupを同じlock中に直列実行する | まず実行時間・skip頻度を計測する。次に取得と短いDB反映transactionを分離するか、source別queue/lockへ移す。Modbusはクラウド経路と独立運用へ切替判定する |
 | P1 | FusionSolar HTTP clientにリクエスト単位のtimeoutが見当たらず、日次の広いwall-clock timeoutへ依存する | `src/hedp/adapters/fusionsolar/client.py` のSession GET/POST。realtimeは240秒、日次の各commandは既定900秒で強制終了できるが、クラウド待ちがその間lockを占有し得る | connect/read timeout、認証再試行を含む総予算、retry対象を明示し、timeout・CAPTCHA・通信断で他sourceを妨げないテストを追加する |
 | P1 | `daily-health` launchd経路にはwall-clock timeoutがない | `scripts/run_daily_health.sh` は`hedp daily-health --json`を直接実行する。DB不調等で停止した場合、次回jobや共通lockへの影響が上限化されない | realtime/dailyと同じtimeout runnerを適用し、timeout時の終了コード・次回復旧・通知方針をテストで固定する |

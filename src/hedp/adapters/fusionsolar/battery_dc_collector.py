@@ -5,6 +5,7 @@ import logging
 import time
 from urllib.parse import urlencode
 
+from hedp.adapters.external_errors import normalize_external_error
 from hedp.adapters.fusionsolar.client import FusionSolarClient
 from hedp.storage import RawData
 
@@ -36,7 +37,7 @@ class FusionSolarBatteryDcCollector:
 
     def collect_modules(
         self, device_dn: str, sigids: str, module_ids: list[int]
-    ) -> tuple[list[RawData], list[tuple[int, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         collected = []
         failures = []
         for module_id in module_ids:
@@ -45,11 +46,15 @@ class FusionSolarBatteryDcCollector:
                     self.collect_module(device_dn, sigids, module_id)
                 )
             except Exception as error:
-                summary = f"{type(error).__name__}: {error}"
+                report = normalize_external_error(error).as_dict()
                 logging.error(
-                    "battery-dc failed for module_index=%s: %s",
+                    "battery-dc failed module_index=%s error_type=%s "
+                    "category=%s code=%s retryable=%s",
                     module_id,
-                    type(error).__name__,
+                    report["error_type"],
+                    report["category"],
+                    report["code"],
+                    report["retryable"],
                 )
-                failures.append((module_id, summary))
+                failures.append((module_id, report))
         return collected, failures

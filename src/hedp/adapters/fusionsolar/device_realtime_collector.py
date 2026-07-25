@@ -5,6 +5,7 @@ import logging
 import time
 from urllib.parse import urlencode
 
+from hedp.adapters.external_errors import normalize_external_error
 from hedp.adapters.fusionsolar.client import FusionSolarClient
 from hedp.storage import RawData
 
@@ -27,18 +28,22 @@ class FusionSolarDeviceRealtimeCollector:
 
     def collect_devices(
         self, device_dns: list[str]
-    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         collected = []
         failures = []
         for target_index, device_dn in enumerate(device_dns, start=1):
             try:
                 collected.append(self.collect_device(device_dn))
             except Exception as error:
-                summary = f"{type(error).__name__}: {error}"
+                report = normalize_external_error(error).as_dict()
                 logging.error(
-                    "device-realtime failed for target_index=%s: %s",
+                    "device-realtime failed target_index=%s error_type=%s "
+                    "category=%s code=%s retryable=%s",
                     target_index,
-                    type(error).__name__,
+                    report["error_type"],
+                    report["category"],
+                    report["code"],
+                    report["retryable"],
                 )
-                failures.append((device_dn, summary))
+                failures.append((target_index, report))
         return collected, failures

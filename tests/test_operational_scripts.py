@@ -1,10 +1,33 @@
 import os
 from pathlib import Path
 import plistlib
+import shutil
 import subprocess
+import sys
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def _daily_health_script_repository(tmp_path: Path) -> tuple[Path, Path]:
+    repository = tmp_path / "repository"
+    scripts = repository / "scripts"
+    command_directory = repository / ".venv" / "bin"
+    scripts.mkdir(parents=True)
+    command_directory.mkdir(parents=True)
+    for name in ("run_daily_health.sh", "run_with_timeout.py", "log_maintenance.sh"):
+        shutil.copy(ROOT / "scripts" / name, scripts / name)
+    runner = scripts / "run_daily_health.sh"
+    runner.chmod(0o755)
+    python = command_directory / "python"
+    python.symlink_to(sys.executable)
+    hedp = command_directory / "hedp"
+    hedp.write_text(
+        "#!/bin/bash\n"
+        "printf '%s\\n' \"$1\" >> \"${CALL_LOG}\"\n"
+    )
+    hedp.chmod(0o755)
+    return repository, runner
 
 
 def test_five_minute_script_collects_realtime_and_current_alarms():
@@ -33,6 +56,10 @@ def test_daily_health_job_runs_json_at_0410_without_credentials():
         ROOT / "scripts" / "install_macos_daily_health_launchd.sh"
     ).read_text()
     assert "daily-health --json" in runner
+    assert "run_with_timeout.py" in runner
+    assert "SUMICORE_DAILY_HEALTH_TIMEOUT_SECONDS" in runner
+    assert "HEDP_DAILY_HEALTH_TIMEOUT_SECONDS" in runner
+    assert "between 1 and 300 seconds" in runner
     assert "<key>Hour</key><integer>4</integer>" in installer
     assert "<key>Minute</key><integer>10</integer>" in installer
     assert "daily-health.out.log" in installer
@@ -41,6 +68,51 @@ def test_daily_health_job_runs_json_at_0410_without_credentials():
     assert "switch_macos_launchd_job.sh" in installer
     assert "HEDP_FUSIONSOLAR_PASSWORD" not in installer
     assert "com.hedp.database.lock" in runner
+
+
+def test_daily_health_runner_rejects_an_unbounded_timeout(tmp_path):
+    _, runner = _daily_health_script_repository(tmp_path)
+    call_log = tmp_path / "calls.log"
+
+    result = subprocess.run(
+        [str(runner)],
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "CALL_LOG": str(call_log),
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(tmp_path / "database.lock"),
+            "HEDP_DAILY_HEALTH_TIMEOUT_SECONDS": "301",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "between 1 and 300 seconds" in result.stderr
+    assert not call_log.exists()
+
+
+def test_daily_health_runner_uses_the_bounded_timeout_wrapper(tmp_path):
+    _, runner = _daily_health_script_repository(tmp_path)
+    call_log = tmp_path / "calls.log"
+
+    result = subprocess.run(
+        [str(runner)],
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "CALL_LOG": str(call_log),
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(tmp_path / "database.lock"),
+            "HEDP_DAILY_HEALTH_TIMEOUT_SECONDS": "1",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert call_log.read_text().splitlines() == ["daily-health"]
 
 
 def test_switchbot_job_runs_hourly_at_minute_five_without_plist_secrets():

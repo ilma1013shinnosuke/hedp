@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from hedp.adapters.external_errors import normalize_external_error
 from hedp.adapters.fusionsolar.station_collector import FusionSolarCollector
 from hedp.adapters.fusionsolar.alarm_collector import FusionSolarAlarmCollector
 from hedp.adapters.fusionsolar.battery_dc_collector import (
@@ -196,7 +197,7 @@ class Application:
 
     def run_device_realtime(
         self, device_dns: list[str]
-    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         if self.device_realtime_collector is None:
             raise RuntimeError("Device-realtime collector is not configured")
         collected, failures = self.device_realtime_collector.collect_devices(
@@ -208,7 +209,7 @@ class Application:
 
     def run_battery_dc(
         self, device_dn: str, sigids: str, module_ids: list[int]
-    ) -> tuple[list[RawData], list[tuple[int, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         if self.battery_dc_collector is None:
             raise RuntimeError("Battery DC collector is not configured")
         collected, failures = self.battery_dc_collector.collect_modules(
@@ -220,7 +221,7 @@ class Application:
 
     def run_current_alarms(
         self, device_dns: list[str]
-    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         if self.alarm_collector is None:
             raise RuntimeError("Alarm collector is not configured")
         collected, failures = self.alarm_collector.collect_current_devices(
@@ -244,7 +245,7 @@ class Application:
 
     def run_alarm_history(
         self, device_dns: list[str], start_date: date, end_date: date
-    ) -> tuple[list[RawData], list[tuple[str, str]]]:
+    ) -> tuple[list[RawData], list[tuple[int, dict[str, object]]]]:
         if self.alarm_collector is None:
             raise RuntimeError("Alarm collector is not configured")
         collected, failures = self.alarm_collector.collect_history_devices(
@@ -264,18 +265,18 @@ class Application:
         try:
             result["modbus"] = self.run_modbus()
         except Exception as error:
-            result["modbus_error"] = f"{type(error).__name__}: {error}"
+            result["modbus_error"] = normalize_external_error(error).as_dict()
             logging.error(
-                "realtime Modbus collection failed: %s",
-                type(error).__name__,
+                "realtime Modbus collection failed code=%s",
+                result["modbus_error"]["code"],
             )
         try:
             result["device"] = self.run_device_realtime(device_dns)
         except Exception as error:
-            result["device_error"] = f"{type(error).__name__}: {error}"
+            result["device_error"] = normalize_external_error(error).as_dict()
             logging.error(
-                "realtime device collection failed: %s",
-                type(error).__name__,
+                "realtime device collection failed code=%s",
+                result["device_error"]["code"],
             )
         if self._authentication_failed(result.get("device")):
             result["authentication_required"] = True
@@ -285,18 +286,18 @@ class Application:
                 battery_device_dn, battery_sigids, [1, 2, 3, 4]
             )
         except Exception as error:
-            result["battery_error"] = f"{type(error).__name__}: {error}"
+            result["battery_error"] = normalize_external_error(error).as_dict()
             logging.error(
-                "realtime battery collection failed: %s",
-                type(error).__name__,
+                "realtime battery collection failed code=%s",
+                result["battery_error"]["code"],
             )
         try:
             result["alarm"] = self.run_current_alarms(device_dns)
         except Exception as error:
-            result["alarm_error"] = f"{type(error).__name__}: {error}"
+            result["alarm_error"] = normalize_external_error(error).as_dict()
             logging.error(
-                "realtime alarm collection failed: %s",
-                type(error).__name__,
+                "realtime alarm collection failed code=%s",
+                result["alarm_error"]["code"],
             )
         return result
 
@@ -308,9 +309,14 @@ class Application:
         return isinstance(failures, list) and any(
             isinstance(item, tuple)
             and len(item) == 2
-            and any(
-                marker in item[1]
-                for marker in cls._AUTHENTICATION_FAILURE_MARKERS
+            and (
+                isinstance(item[1], dict)
+                and item[1].get("code") == "authentication_action_required"
+                or isinstance(item[1], str)
+                and any(
+                    marker in item[1]
+                    for marker in cls._AUTHENTICATION_FAILURE_MARKERS
+                )
             )
             for item in failures
         )

@@ -121,7 +121,8 @@ def test_collect_devices_continues_after_failure(caplog):
     collected, failures = collector.collect_current_devices(["bad", "good"])
 
     assert len(collected) == 1
-    assert failures[0][0] == "bad"
+    assert failures[0][0] == 1
+    assert "bad" not in repr(failures)
     assert "target_index=1" in caplog.text
     assert "bad" not in caplog.text
 

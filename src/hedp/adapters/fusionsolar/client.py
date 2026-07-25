@@ -1,12 +1,40 @@
 import base64
 import secrets
 import time
+from functools import wraps
 from typing import Any, Optional
 from urllib.parse import quote, urljoin, urlsplit
 
 import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+
+from hedp.adapters.external_errors import (
+    AUTHENTICATION_FAILED,
+    AUTHENTICATION_REQUIRED,
+    INVALID_RESPONSE,
+    ExternalErrorReport,
+    ExternalServiceError,
+)
+
+
+def _within_operation_budget(method):
+    """Share one wall-clock budget across a public client operation."""
+
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        outermost = self._operation_deadline is None
+        if outermost:
+            self._operation_deadline = (
+                time.monotonic() + self.operation_timeout_seconds
+            )
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            if outermost:
+                self._operation_deadline = None
+
+    return wrapped
 
 
 class FusionSolarClient:
@@ -19,14 +47,35 @@ class FusionSolarClient:
         station_dn: str,
         username: str,
         password: str,
+        *,
+        connect_timeout_seconds: float = 10.0,
+        read_timeout_seconds: float = 30.0,
+        operation_timeout_seconds: float = 120.0,
     ) -> None:
+        if not 0 < connect_timeout_seconds <= 60:
+            raise ValueError(
+                "connect_timeout_seconds must be greater than 0 and at most 60"
+            )
+        if not 0 < read_timeout_seconds <= 120:
+            raise ValueError(
+                "read_timeout_seconds must be greater than 0 and at most 120"
+            )
+        if not 0 < operation_timeout_seconds <= 300:
+            raise ValueError(
+                "operation_timeout_seconds must be greater than 0 and at most 300"
+            )
         self.base_url = base_url.rstrip("/")
         self.station_dn = station_dn
         self.username = username
         self.password = password
+        self.connect_timeout_seconds = connect_timeout_seconds
+        self.read_timeout_seconds = read_timeout_seconds
+        self.operation_timeout_seconds = operation_timeout_seconds
+        self._operation_deadline: Optional[float] = None
         self.session = requests.Session()
         self.csrf_token: Optional[str] = None
 
+    @_within_operation_budget
     def login(self) -> None:
         app_url = (
             f"{self.base_url}/pvmswebsite/assets/build/index.html"
@@ -45,14 +94,17 @@ class FusionSolarClient:
             login_url,
             params={"service": auth_service},
             allow_redirects=False,
+            timeout=self._request_timeout(),
         )
-        login_response.raise_for_status()
+        self._raise_for_status(login_response)
         self._raise_for_auth_challenge(login_response)
 
         public_key_response = self.session.get(
-            self._url("/unisso/pubkey"), headers=common_headers
+            self._url("/unisso/pubkey"),
+            headers=common_headers,
+            timeout=self._request_timeout(),
         )
-        public_key_response.raise_for_status()
+        self._raise_for_status(public_key_response)
         public_key_data = self._nested_data(self._json_object(public_key_response))
 
         enable_encrypt = bool(public_key_data.get("enableEncrypt"))
@@ -63,9 +115,9 @@ class FusionSolarClient:
             public_key = public_key_data.get("pubKey")
             public_key_version = public_key_data.get("version")
             if not isinstance(public_key, str):
-                raise RuntimeError("FusionSolar public key is missing")
+                raise ExternalServiceError(INVALID_RESPONSE)
             if not isinstance(public_key_version, (str, int)):
-                raise RuntimeError("FusionSolar public key version is missing")
+                raise ExternalServiceError(INVALID_RESPONSE)
             password = self._encrypt_password(
                 public_key, str(public_key_version)
             )
@@ -93,22 +145,24 @@ class FusionSolarClient:
                 "multiRegionName": "",
             },
             headers=validation_headers,
+            timeout=self._request_timeout(),
         )
-        validation_response.raise_for_status()
+        self._raise_for_status(validation_response)
         validation_data = self._json_object(validation_response)
         self._raise_for_auth_challenge(validation_response, validation_data)
 
         transition_url = self._transition_url(validation_data)
         if transition_url is None:
-            raise RuntimeError("FusionSolar authentication transition URL is missing")
+            raise ExternalServiceError(AUTHENTICATION_FAILED)
         self._follow_redirects(urljoin(self.base_url, transition_url))
 
         session_data = self._get_session_data()
         csrf_token = session_data.get("csrfToken")
         if not isinstance(csrf_token, str) or len(csrf_token) < 16:
-            raise RuntimeError("FusionSolar csrfToken is missing or invalid")
+            raise ExternalServiceError(AUTHENTICATION_FAILED)
         self.csrf_token = csrf_token
 
+    @_within_operation_budget
     def is_session_active(self) -> bool:
         try:
             data = self._get_session_data()
@@ -120,6 +174,7 @@ class FusionSolarClient:
         self.csrf_token = csrf_token
         return True
 
+    @_within_operation_budget
     def get_json(
         self, url: str, headers: Optional[dict[str, str]] = None
     ) -> Any:
@@ -142,13 +197,14 @@ class FusionSolarClient:
                 request_headers.update(headers)
             response = self._get_api_response(url, request_headers)
         if self._is_auth_failure(response):
-            raise RuntimeError("FusionSolar authentication failed after retry")
-        response.raise_for_status()
+            raise ExternalServiceError(AUTHENTICATION_FAILED)
+        self._raise_for_status(response)
         try:
             return response.json()
         except ValueError as error:
-            raise RuntimeError("FusionSolar response is not valid JSON") from error
+            raise ExternalServiceError(INVALID_RESPONSE) from error
 
+    @_within_operation_budget
     def post_json(
         self,
         url: str,
@@ -174,6 +230,7 @@ class FusionSolarClient:
             json=payload,
             headers=request_headers,
             allow_redirects=False,
+            timeout=self._request_timeout(),
         )
         if self._is_auth_failure(response):
             self.login()
@@ -185,14 +242,15 @@ class FusionSolarClient:
                 json=payload,
                 headers=request_headers,
                 allow_redirects=False,
+                timeout=self._request_timeout(),
             )
         if self._is_auth_failure(response):
-            raise RuntimeError("FusionSolar authentication failed after retry")
-        response.raise_for_status()
+            raise ExternalServiceError(AUTHENTICATION_FAILED)
+        self._raise_for_status(response)
         try:
             return response.json()
         except ValueError as error:
-            raise RuntimeError("FusionSolar response is not valid JSON") from error
+            raise ExternalServiceError(INVALID_RESPONSE) from error
 
     def _get_api_response(
         self, url: str, headers: dict[str, str]
@@ -201,6 +259,7 @@ class FusionSolarClient:
             urljoin(f"{self.base_url}/", url),
             headers=headers,
             allow_redirects=False,
+            timeout=self._request_timeout(),
         )
 
     def _get_session_data(self) -> dict[str, Any]:
@@ -208,25 +267,30 @@ class FusionSolarClient:
             self._url("/unisess/v1/auth/session"),
             params={"_": int(time.time() * 1000)},
             allow_redirects=False,
+            timeout=self._request_timeout(),
         )
         if self._is_auth_failure(response):
-            raise RuntimeError("FusionSolar authentication failed")
-        response.raise_for_status()
+            raise ExternalServiceError(AUTHENTICATION_FAILED)
+        self._raise_for_status(response)
         return self._nested_data(self._json_object(response))
 
     def _follow_redirects(self, url: str) -> None:
         current_url = url
         for redirect_count in range(13):
-            response = self.session.get(current_url, allow_redirects=False)
+            response = self.session.get(
+                current_url,
+                allow_redirects=False,
+                timeout=self._request_timeout(),
+            )
             if response.status_code not in self._REDIRECT_STATUSES:
-                response.raise_for_status()
+                self._raise_for_status(response)
                 self._raise_for_auth_challenge(response)
                 return
             if redirect_count == 12:
-                raise RuntimeError("FusionSolar authentication exceeded 12 redirects")
+                raise ExternalServiceError(AUTHENTICATION_FAILED)
             location = response.headers.get("Location")
             if not location:
-                raise RuntimeError("FusionSolar redirect is missing Location")
+                raise ExternalServiceError(AUTHENTICATION_FAILED)
             current_url = urljoin(current_url, location)
 
     def _url(self, path: str) -> str:
@@ -235,6 +299,25 @@ class FusionSolarClient:
     def _origin(self) -> str:
         parts = urlsplit(self.base_url)
         return f"{parts.scheme}://{parts.netloc}"
+
+    def _request_timeout(self) -> tuple[float, float]:
+        """Return bounded connect/read timeouts without exceeding the operation budget."""
+
+        if self._operation_deadline is None:
+            raise RuntimeError("FusionSolar request attempted outside an operation")
+        remaining_seconds = self._operation_deadline - time.monotonic()
+        if remaining_seconds <= 0:
+            raise requests.Timeout("FusionSolar operation exceeded its time budget")
+        connect_timeout = min(
+            self.connect_timeout_seconds, remaining_seconds / 2
+        )
+        read_timeout = min(
+            self.read_timeout_seconds, remaining_seconds - connect_timeout
+        )
+        return (
+            connect_timeout,
+            read_timeout,
+        )
 
     @staticmethod
     def _nested_data(data: dict[str, Any]) -> dict[str, Any]:
@@ -246,9 +329,9 @@ class FusionSolarClient:
         try:
             data = response.json()
         except ValueError as error:
-            raise RuntimeError("FusionSolar response is not valid JSON") from error
+            raise ExternalServiceError(INVALID_RESPONSE) from error
         if not isinstance(data, dict):
-            raise RuntimeError("FusionSolar JSON response must be an object")
+            raise ExternalServiceError(INVALID_RESPONSE)
         return data
 
     @classmethod
@@ -278,9 +361,7 @@ class FusionSolarClient:
                     "verificationCodeRequired",
                 ):
                     if source.get(key) is True:
-                        raise RuntimeError(
-                            "FusionSolar requires CAPTCHA or a verification code"
-                        )
+                        raise ExternalServiceError(AUTHENTICATION_REQUIRED)
                 for key in ("errorMsg", "message"):
                     value = source.get(key)
                     if isinstance(value, str) and value:
@@ -294,7 +375,7 @@ class FusionSolarClient:
             "確認コード",
         )
         if any(marker in message.lower() for marker in challenge_markers):
-            raise RuntimeError("FusionSolar requires CAPTCHA or a verification code")
+            raise ExternalServiceError(AUTHENTICATION_REQUIRED)
         successful_messages = {
             "success",
             "ok",
@@ -303,9 +384,7 @@ class FusionSolarClient:
         }
         for auth_message in auth_messages:
             if auth_message.strip().lower() not in successful_messages:
-                raise RuntimeError(
-                    f"FusionSolar authentication failed: {auth_message}"
-                )
+                raise ExternalServiceError(AUTHENTICATION_FAILED)
 
     @staticmethod
     def _transition_url(data: dict[str, Any]) -> Optional[str]:
@@ -360,5 +439,24 @@ class FusionSolarClient:
                     base64.b64encode(encrypted).decode("ascii")
                 )
         except (TypeError, ValueError) as error:
-            raise RuntimeError("FusionSolar public key is invalid") from error
+            raise ExternalServiceError(INVALID_RESPONSE) from error
         return "00000001".join(encrypted_blocks) + version
+
+    @staticmethod
+    def _raise_for_status(response: requests.Response) -> None:
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as error:
+            status_code = getattr(response, "status_code", 0)
+            if status_code in {401, 403}:
+                raise ExternalServiceError(AUTHENTICATION_FAILED) from error
+            retryable = status_code >= 500 or status_code == 429
+            code = "service_unavailable" if retryable else "request_rejected"
+            raise ExternalServiceError(
+                ExternalErrorReport(
+                    "service_unavailable" if retryable else "request_rejected",
+                    "service",
+                    code,
+                    retryable,
+                )
+            ) from error

@@ -11,7 +11,7 @@ SumiCoreを長期間運用しても、利用者、機器、Mac、家庭内ネッ
 - Git管理中の設計文書、コード、テスト、運用scriptを確認した。
 - つむの固定snapshot 10を使い、候補を絞ってから必要なファイルだけを読んだ。
 - DBはpayload、機器ID、名称、場所、時刻、秘密値を表示しないread-only統計だけを使用した。
-- 実機、実API、家庭LAN、現役DB、backup、launchd、`.env`、Keychainは変更していない。
+- 実機、実API、家庭LAN、現役DB、backup、launchd、`.env`は変更していない。
 
 ## 総合評価
 
@@ -37,8 +37,9 @@ checksum、SQLite整合性確認、隔離環境での定期restore試験を導�
 ### P0: launchdから秘密値の永続平文をなくす
 
 FusionSolarの既存installerはmode 0600でも、認証情報をplistへ展開する。Modbus TCPへの
-切替結果を確認した後、不要になったクラウド秘密を撤去し、残る秘密はKeychain等から
-実行時だけ取得する。秘密をprocess引数、一時file、installer出力、例外本文へ出さない。
+切替結果を確認した後、不要になったクラウド秘密を撤去し、残る秘密はOS非依存の
+暗号化正本から実行時だけ取得する。秘密をprocess引数、一時file、installer出力、
+例外本文へ出さない。
 
 ### P1: 容量とbackup余裕を毎日測る
 
@@ -124,10 +125,22 @@ SumiCoreを新規の正名とし、`hedp`、`HEDP_`、旧CLI、旧launchd label�
 | 3 | `daily-health`とHTTPのtimeout改善 | 条件確認後可 | 本番設定変更前 |
 | 4 | 1か月archiveのinspectと隔離復元計画 | 可 | 実archive作成前 |
 | 5 | 暗号化backupの保存先・鍵・復旧責任決定 | 不可 | 必要 |
-| 6 | Keychain化とplist秘密撤去 | 不可 | launchd変更前 |
+| 6 | OS非依存の秘密管理への移行とplist秘密撤去 | 不可 | launchd変更前 |
 | 7 | 別名compact DBの作成・照合 | 不可 | DBコピー作成前 |
 | 8 | DB切替、旧DB又は旧backup削除 | 不可 | 対象ごとに必要 |
 | 9 | ③④のShadow Mode実装 | 可 | 実送信は別承認 |
+
+## 2026-07-25 改善状況
+
+- 匿名運用メトリクスの安全なデータ型とread-only DB容量probeを実装した。
+  現役jobへの組込みと保存はまだ行っていない。
+- FusionSolar HTTPにconnect/read timeoutと操作予算を追加した。実APIでは未検証である。
+- `daily-health`にwall-clock timeoutを追加した。launchd plistの再生成は不要であり、
+  現役jobの実行結果は次回運用確認の対象とする。
+- 外部例外を固定分類へ変換し、外部本文、URL、家庭固有IDを結果とlogへ渡さない
+  回帰testを追加した。
+- Keychainを将来の正本候補から外し、`docs/secret-management.md`へOS非依存方針を定義した。
+  暗号化方式とUbuntu配備は未決・未実装である。
 
 ## 完了条件
 
@@ -150,3 +163,4 @@ SumiCoreを新規の正名とし、`hedp`、`HEDP_`、旧CLI、旧launchd label�
 - `docs/execution-contract.md`
 - `docs/03_intelligence.md`
 - `docs/04_execution.md`
+- `docs/secret-management.md`

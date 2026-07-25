@@ -75,9 +75,9 @@ runtime/research/<vendor>/<YYYYMMDD>-<topic>/
 解析領域では次を守る。
 
 - 原本を複製せず、作業生成物は`10_work/`へ置く。
-- `.env`、Keychain内容、password、token、cookie、暗号鍵を通常の解析ファイルへ転記しない。
+- `.env`、暗号化正本の復号内容、password、token、cookie、暗号鍵を通常の解析ファイルへ転記しない。
 - 既存成果物に秘密が埋め込まれている場合は内容を表示せず`00_inbox/restricted/`へ移し、
-  directory 0700、file 0600で隔離する。値は`.env`またはKeychainへ安全に収容してから
+  directory 0700、file 0600で隔離する。値は`.env`またはOS非依存の暗号化正本へ安全に収容してから
   利用し、引き継ぎ書、台帳、Git、通常logへ複製しない。
 - 家庭固有ID、IP、SSID、MAC、認証済み画面、未匿名RawをGitへ追加しない。
 - 秘密を含む可能性がある原本はmode 0600、directoryは0700とする。
@@ -87,7 +87,7 @@ runtime/research/<vendor>/<YYYYMMDD>-<topic>/
 
 別の調査場所から統合するときは、大容量原本をコピーせず同一Mac内で移動する。移動前後に
 件数、総容量、可能ならSHA-256を照合し、元の場所を消す前に移管先で読めることを確認する。
-共有SDK、既存AVD、`.env`、Keychainは移動せず、台帳に所在と用途だけを記録する。
+共有SDK、既存AVD、`.env`、暗号化正本は移動せず、台帳に所在と用途だけを記録する。
 
 調査終了時は、必要な知識を`docs/integrations/<vendor>/`、実装を
 `src/hedp/adapters/<vendor>/`、小さな匿名fixtureを`tests/fixtures/<vendor>/`へ移す。
