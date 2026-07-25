@@ -5,6 +5,12 @@ import zipfile
 
 from hedp.adapters.switchbot.household import SwitchBotHouseholdConfiguration
 from hedp.adapters.switchbot.importer import CSV_COLUMNS, SwitchBotImporter
+from hedp.adapters.switchbot.profiles import (
+    expected_interval_seconds,
+    normalize_status,
+    profile_for,
+    success_raw_retention_reasons,
+)
 from hedp.adapters.switchbot.service import SwitchBotService
 from hedp.adapters.switchbot.storage import SwitchBotStorage
 
@@ -106,16 +112,85 @@ def test_collect_normalizes_types_empty_body_unknown_and_zero_status(tmp_path):
     assert len(report["results"]) == 7
     assert len(observations) == 7
     assert len(events) == 7
-    assert all(row["raw_payload_json"] for row in observations)
+    normal_ids = {"meter", "co2", "plug", "vac"}
+    assert all(
+        row["raw_payload_json"] is None
+        for row in observations
+        if row["device_id"] in normal_ids
+    )
+    evidence_ids = {"remote", "unknown", "zero"}
+    assert all(
+        row["raw_payload_json"]
+        for row in observations
+        if row["device_id"] in evidence_ids
+    )
     assert all(row["raw_payload_json"] is None for row in events)
     zero = next(row for row in observations if row["device_id"] == "zero")
     assert zero["temperature_c"] is None
     assert zero["relative_humidity_percent"] is None
     assert zero["battery_percent"] == 0
     assert zero["measurement_status"] == "battery_depleted_or_unavailable"
+    vacuum = next(row for row in observations if row["device_id"] == "vac")
+    assert vacuum["working_status"] == "run"
     assert next(item for item in report["results"] if item["device_id"] == "remote")[
         "status_body_empty"
     ] is True
+
+
+def test_profiles_are_read_only_extensible_and_report_unknown_fields():
+    assert profile_for("Strip Light 3").name == "light"
+    assert profile_for("Color Bulb").name == "light"
+    assert profile_for("Motion Sensor").name == "motion"
+    assert profile_for("Future Sensor") is None
+
+    normalized = normalize_status(
+        {"deviceType": "Strip Light 3"},
+        {
+            "power": "on",
+            "brightness": 30,
+            "colorTemperature": 4000,
+            "newFirmwareField": "kept-in-raw",
+        },
+    )
+
+    assert normalized["status_profile"] == "light"
+    assert normalized["power_state"] == "on"
+    assert normalized["unknown_status_fields"] == ("newFirmwareField",)
+    assert expected_interval_seconds("Strip Light 3") == 3600
+    assert success_raw_retention_reasons(
+        "Strip Light 3",
+        {"power": "on", "newFirmwareField": "kept-in-raw"},
+        normalized,
+    ) == ("unknown_status_fields",)
+
+
+def test_success_raw_policy_omits_normal_copy_but_keeps_schema_evidence():
+    normal = normalize_status(
+        {"deviceType": "Meter"},
+        {"temperature": 20, "humidity": 50, "battery": 90},
+    )
+    assert success_raw_retention_reasons(
+        "Meter",
+        {"temperature": 20, "humidity": 50, "battery": 90},
+        normal,
+    ) == ()
+
+    unknown = normalize_status(
+        {"deviceType": "Future Sensor"},
+        {"futureField": 1},
+    )
+    assert success_raw_retention_reasons(
+        "Future Sensor",
+        {"futureField": 1},
+        unknown,
+    ) == ("unknown_device_profile", "unknown_status_fields")
+
+    invalid = normalize_status({"deviceType": "Meter"}, {})
+    assert success_raw_retention_reasons(
+        "Meter",
+        [],
+        invalid,
+    ) == ("invalid_body_shape",)
 
 
 def test_failed_switchbot_response_is_kept_only_in_collection_event(tmp_path):

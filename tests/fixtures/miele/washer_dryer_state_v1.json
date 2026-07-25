@@ -1,0 +1,15 @@
+{
+  "state": {
+    "status": {"value_raw": 4},
+    "ProgramID": {"value_raw": 42},
+    "programType": {"value_raw": 1},
+    "programPhase": {"value_raw": 0},
+    "startTime": [1, 30],
+    "remainingTime": [3, 15],
+    "elapsedTime": [0, 10],
+    "temperature": {"value_raw": 40},
+    "spinningSpeed": {"value_raw": 1200},
+    "dryingStep": {"value_raw": 2},
+    "unknown_future_field": {"value": "ignored"}
+  }
+}

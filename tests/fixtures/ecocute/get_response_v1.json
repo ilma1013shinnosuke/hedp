@@ -1,0 +1,5 @@
+{
+  "protocol": "ECHONET Lite format 1",
+  "service": "Get_Res",
+  "packet_hex": "10810001026b0105ff017203800130b00142e102012c"
+}

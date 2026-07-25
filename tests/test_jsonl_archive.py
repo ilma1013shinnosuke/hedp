@@ -51,6 +51,7 @@ def test_archive_round_trip_preserves_every_field(tmp_path: Path) -> None:
     assert manifest["record_count"] == 2
     assert manifest["first_timestamp"] == "2026-07-01T00:00:00+00:00"
     assert manifest["last_timestamp"] == "2026-07-01T00:01:00+00:00"
+    assert manifest["uncompressed_size_bytes"] > 0
     assert os.stat(destination).st_mode & 0o777 == 0o700
     assert os.stat(destination / "data.jsonl.gz").st_mode & 0o777 == 0o600
     assert os.stat(destination / "manifest.json").st_mode & 0o777 == 0o600
@@ -105,6 +106,20 @@ def test_archive_detects_manifest_tampering(tmp_path: Path) -> None:
     path.write_text(json.dumps(manifest))
 
     with pytest.raises(ArchiveValidationError, match="record_count mismatch"):
+        verify_jsonl_gzip_archive(destination)
+
+
+def test_archive_detects_uncompressed_size_tampering(tmp_path: Path) -> None:
+    destination = tmp_path / "fixture.archive"
+    create(destination)
+    path = destination / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["uncompressed_size_bytes"] += 1
+    path.write_text(json.dumps(manifest))
+
+    with pytest.raises(
+        ArchiveValidationError, match="uncompressed_size_bytes mismatch"
+    ):
         verify_jsonl_gzip_archive(destination)
 
 

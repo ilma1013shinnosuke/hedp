@@ -44,3 +44,33 @@ def test_timeout_propagates_without_embedding_secret():
         with pytest.raises(requests.Timeout) as raised:
             SwitchBotClient("token", "secret").devices()
     assert "secret" not in str(raised.value)
+
+
+def test_read_only_retry_is_bounded_and_generates_fresh_authentication():
+    responses = [
+        requests.Timeout("first"),
+        Mock(json=lambda: {"statusCode": 100, "body": {}}),
+    ]
+    request_get = Mock(side_effect=responses)
+    request_get.return_value = responses[-1]
+    responses[-1].raise_for_status = Mock()
+    nonces = iter(("nonce-1", "nonce-2"))
+    client = SwitchBotClient(
+        "token",
+        "secret",
+        nonce_factory=lambda: next(nonces),
+        request_get=request_get,
+        max_attempts=2,
+    )
+
+    assert client.devices()["statusCode"] == 100
+    assert request_get.call_count == 2
+    assert request_get.call_args_list[0].kwargs["headers"]["nonce"] == "nonce-1"
+    assert request_get.call_args_list[1].kwargs["headers"]["nonce"] == "nonce-2"
+
+
+def test_retry_configuration_rejects_unbounded_or_invalid_values():
+    with pytest.raises(ValueError, match="positive"):
+        SwitchBotClient("token", "secret", timeout_seconds=0)
+    with pytest.raises(ValueError, match="at least one"):
+        SwitchBotClient("token", "secret", max_attempts=0)

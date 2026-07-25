@@ -1,0 +1,165 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from hedp.adapters.bravia import (
+    ErrorCategory,
+    PowerState,
+    Quality,
+    ReadBatch,
+    normalize_content,
+    normalize_power,
+    normalize_read_batch,
+    normalize_volume,
+)
+
+
+FIXTURES = Path(__file__).parent / "fixtures" / "bravia"
+
+
+def _fixture(name: str) -> dict:
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def _batch(name: str) -> ReadBatch:
+    payload = _fixture(name)
+    return ReadBatch(
+        power_response=payload["responses"]["power"],
+        volume_response=payload["responses"]["volume"],
+        content_response=payload["responses"]["content"],
+        observed_at=payload["observed_at"],
+        received_at=payload["received_at"],
+    )
+
+
+def test_active_snapshot_normalizes_zero_safe_values_and_unknown_fields() -> None:
+    state = normalize_read_batch(_batch("active_anonymous.json"))
+
+    assert state.power.value == PowerState.ACTIVE
+    assert state.power.quality == Quality.GOOD
+    assert state.power.unknown == {
+        "apiGeneration": "fixture",
+        "result_fields": {"futurePowerField": "example"},
+    }
+    assert state.audio.quality == Quality.GOOD
+    assert state.audio.outputs[0].volume == 0
+    assert state.audio.outputs[0].muted is False
+    assert state.audio.outputs[0].minimum == 0
+    assert state.audio.outputs[0].unknown == {"futureAudioField": "example"}
+    assert state.content.source == "extInput"
+    assert state.content.uri == "extInput:hdmi?port=1"
+    assert state.content.unknown == {
+        "result_fields": {"futureContentField": "example"}
+    }
+
+
+def test_standby_snapshot_does_not_invent_unavailable_active_state() -> None:
+    state = normalize_read_batch(_batch("standby_missing_anonymous.json"))
+
+    assert state.power.value == PowerState.STANDBY
+    assert state.audio.quality == Quality.MISSING
+    assert state.audio.outputs == ()
+    assert state.content.quality == Quality.MISSING
+    assert state.content.error is not None
+    assert state.content.error.category == ErrorCategory.INVALID_STATE
+    assert state.content.error.retryable is False
+
+
+def test_unknown_and_invalid_values_are_not_coerced() -> None:
+    state = normalize_read_batch(_batch("unknown_schema_anonymous.json"))
+
+    assert state.power.value == PowerState.UNKNOWN
+    assert state.power.raw_value == "future-state"
+    assert state.power.quality == Quality.UNKNOWN
+    assert state.audio.outputs[0].volume is None
+    assert state.audio.outputs[0].muted is None
+    assert state.audio.outputs[0].quality == Quality.INVALID
+    assert state.content.quality == Quality.MISSING
+    assert state.content.unknown == {
+        "result_fields": {"futureContentField": {"revision": 2}}
+    }
+
+
+def test_viewing_titles_are_omitted_from_normalized_content() -> None:
+    content = normalize_content(
+        {
+            "id": 10,
+            "result": [
+                {
+                    "source": "tv",
+                    "title": "sensitive-program-name",
+                    "programTitle": "sensitive-program-name",
+                    "durationSec": 120,
+                    "futureField": "kept",
+                }
+            ],
+        }
+    )
+
+    assert content.source == "tv"
+    assert content.omitted_private_fields == ("durationSec", "programTitle", "title")
+    assert content.unknown == {"result_fields": {"futureField": "kept"}}
+    assert not hasattr(content, "title")
+    assert "sensitive-program-name" not in repr(content)
+
+
+def test_api_error_categories_do_not_retain_error_detail() -> None:
+    authentication = normalize_power({"error": [401, "sensitive detail"]})
+    temporary = normalize_volume({"error": [503, "sensitive detail"]})
+    malformed = normalize_content({"error": "not-an-array"})
+
+    assert authentication.error is not None
+    assert authentication.error.category == ErrorCategory.AUTHENTICATION
+    assert authentication.error.retryable is False
+    assert "sensitive detail" not in repr(authentication)
+    assert temporary.error is not None
+    assert temporary.error.category == ErrorCategory.TEMPORARY
+    assert temporary.error.retryable is True
+    assert malformed.error is not None
+    assert malformed.error.category == ErrorCategory.MALFORMED_RESPONSE
+
+
+def test_malformed_envelopes_are_invalid_not_zero_or_empty_success() -> None:
+    power = normalize_power({"result": {"status": "active"}})
+    volume = normalize_volume({"result": [{"target": "speaker"}]})
+    content = normalize_content({"result": [False]})
+
+    assert power.quality == Quality.INVALID
+    assert power.value == PowerState.UNKNOWN
+    assert volume.quality == Quality.INVALID
+    assert volume.outputs == ()
+    assert content.quality == Quality.INVALID
+
+
+def test_bravia_fixtures_do_not_contain_secrets_or_viewing_titles() -> None:
+    forbidden_keys = {
+        "title",
+        "programTitle",
+        "psk",
+        "password",
+        "token",
+        "cookie",
+        "serial",
+        "mac",
+        "ip",
+    }
+    for path in FIXTURES.glob("*.json"):
+        text = path.read_text(encoding="utf-8")
+        payload = json.loads(text)
+        assert not forbidden_keys.intersection(_all_keys(payload))
+        assert "192.168." not in text
+
+
+def _all_keys(value: object) -> set[str]:
+    if isinstance(value, dict):
+        keys = set(value)
+        for nested in value.values():
+            keys.update(_all_keys(nested))
+        return keys
+    if isinstance(value, list):
+        keys: set[str] = set()
+        for nested in value:
+            keys.update(_all_keys(nested))
+        return keys
+    return set()

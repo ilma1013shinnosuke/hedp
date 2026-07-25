@@ -1,0 +1,36 @@
+{
+  "observed_at": "2026-01-01T00:10:00Z",
+  "received_at": "2026-01-01T00:10:01Z",
+  "responses": {
+    "power": {
+      "id": 7,
+      "result": [
+        {
+          "status": "future-state"
+        }
+      ]
+    },
+    "volume": {
+      "id": 8,
+      "result": [
+        [
+          {
+            "target": "speaker",
+            "volume": true,
+            "mute": "false"
+          }
+        ]
+      ]
+    },
+    "content": {
+      "id": 9,
+      "result": [
+        {
+          "futureContentField": {
+            "revision": 2
+          }
+        }
+      ]
+    }
+  }
+}

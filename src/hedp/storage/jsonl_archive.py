@@ -83,6 +83,7 @@ def create_jsonl_gzip_archive(
     data_path = temporary_directory / DATA_FILENAME
     manifest_path = temporary_directory / MANIFEST_FILENAME
     content_digest = hashlib.sha256()
+    uncompressed_size = 0
     count = 0
     first_timestamp: str | None = None
     last_timestamp: str | None = None
@@ -107,6 +108,7 @@ def create_jsonl_gzip_archive(
                     timestamp_key = _timestamp_key(timestamp, timestamp_field)
                     line = _json_line(record)
                     content_digest.update(line)
+                    uncompressed_size += len(line)
                     compressed_stream.write(line)
                     count += 1
                     if (
@@ -137,6 +139,7 @@ def create_jsonl_gzip_archive(
             "first_timestamp": first_timestamp,
             "last_timestamp": last_timestamp,
             "uncompressed_sha256": content_digest.hexdigest(),
+            "uncompressed_size_bytes": uncompressed_size,
             "compressed_sha256": _sha256_file(data_path),
             "compressed_size_bytes": data_path.stat().st_size,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -215,6 +218,7 @@ def verify_jsonl_gzip_archive(directory: str | Path) -> dict[str, Any]:
     if not isinstance(timestamp_field, str) or not timestamp_field:
         raise ArchiveValidationError("invalid timestamp field")
     digest = hashlib.sha256()
+    uncompressed_size = 0
     count = 0
     first_timestamp: str | None = None
     last_timestamp: str | None = None
@@ -227,7 +231,9 @@ def verify_jsonl_gzip_archive(directory: str | Path) -> dict[str, Any]:
                 f"record requires string field {timestamp_field!r}"
             )
         timestamp_key = _timestamp_key(timestamp, timestamp_field)
-        digest.update(_json_line(record))
+        line = _json_line(record)
+        digest.update(line)
+        uncompressed_size += len(line)
         count += 1
         if first_timestamp_key is None or timestamp_key < first_timestamp_key:
             first_timestamp = timestamp
@@ -242,6 +248,8 @@ def verify_jsonl_gzip_archive(directory: str | Path) -> dict[str, Any]:
         "last_timestamp": last_timestamp,
         "uncompressed_sha256": digest.hexdigest(),
     }
+    if "uncompressed_size_bytes" in manifest:
+        checks["uncompressed_size_bytes"] = uncompressed_size
     for field, actual in checks.items():
         if actual != manifest[field]:
             raise ArchiveValidationError(f"{field} mismatch")
@@ -257,6 +265,7 @@ def verify_archive_matches_records(
     manifest = verify_jsonl_gzip_archive(directory)
     timestamp_field = manifest["timestamp_field"]
     digest = hashlib.sha256()
+    uncompressed_size = 0
     count = 0
     first_timestamp: str | None = None
     last_timestamp: str | None = None
@@ -269,7 +278,9 @@ def verify_archive_matches_records(
                 f"record requires string field {timestamp_field!r}"
             )
         timestamp_key = _timestamp_key(timestamp, timestamp_field)
-        digest.update(_json_line(record))
+        line = _json_line(record)
+        digest.update(line)
+        uncompressed_size += len(line)
         count += 1
         if first_timestamp_key is None or timestamp_key < first_timestamp_key:
             first_timestamp = timestamp
@@ -283,6 +294,8 @@ def verify_archive_matches_records(
         "last_timestamp": last_timestamp,
         "uncompressed_sha256": digest.hexdigest(),
     }
+    if "uncompressed_size_bytes" in manifest:
+        actual["uncompressed_size_bytes"] = uncompressed_size
     for field, value in actual.items():
         if value != manifest[field]:
             raise ArchiveValidationError(

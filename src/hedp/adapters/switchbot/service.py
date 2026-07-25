@@ -7,6 +7,11 @@ from zoneinfo import ZoneInfo
 
 from hedp.adapters.switchbot.client import SwitchBotClient
 from hedp.adapters.switchbot.household import SwitchBotHouseholdConfiguration
+from hedp.adapters.switchbot.profiles import (
+    expected_interval_seconds,
+    normalize_status,
+    success_raw_retention_reasons,
+)
 from hedp.adapters.switchbot.storage import SwitchBotStorage
 
 
@@ -69,6 +74,9 @@ class SwitchBotService:
             }
             if success and response is not None and not dry_run:
                 observation = self._observation(device, response, collected_at)
+                result["raw_retention_reasons"] = observation.pop(
+                    "_raw_retention_reasons"
+                )
                 result["storage_result"] = self.storage.insert_observation(
                     observation
                 )
@@ -91,35 +99,46 @@ class SwitchBotService:
         device: dict[str, Any], response: dict[str, Any], collected_at: datetime
     ) -> dict[str, Any]:
         body = response.get("body")
-        body = body if isinstance(body, dict) else {}
-        zero_unavailable = all(body.get(key) == 0 for key in (
-            "temperature", "humidity", "battery"
-        )) and all(key in body for key in ("temperature", "humidity", "battery"))
+        normalized = normalize_status(
+            device, body if isinstance(body, dict) else {}
+        )
+        raw_retention_reasons = success_raw_retention_reasons(
+            str(device.get("deviceType", "")),
+            body,
+            normalized,
+        )
         return {
             "device_id": str(device["deviceId"]),
             "observed_at_utc": collected_at.isoformat(),
             "observed_at_local": collected_at.astimezone(TOKYO).isoformat(),
             "timezone": "Asia/Tokyo",
             "observation_kind": "status_snapshot",
-            "temperature_c": None if zero_unavailable else body.get("temperature"),
-            "relative_humidity_percent": None
-            if zero_unavailable else body.get("humidity"),
-            "co2_ppm": body.get("CO2"),
-            "battery_percent": body.get("battery"),
-            "power_state": body.get("power"),
-            "electric_current_ma": body.get("electricCurrent"),
-            "voltage_v": body.get("voltage"),
-            "power_consumed_daily_w": body.get("weight"),
-            "usage_minutes_of_day": body.get("electricityOfDay"),
-            "online_status": body.get("onlineStatus"),
-            "working_status": body.get("workingStatus"),
+            "temperature_c": normalized["temperature_c"],
+            "relative_humidity_percent": normalized[
+                "relative_humidity_percent"
+            ],
+            "co2_ppm": normalized["co2_ppm"],
+            "battery_percent": normalized["battery_percent"],
+            "power_state": normalized["power_state"],
+            "electric_current_ma": normalized["electric_current_ma"],
+            "voltage_v": normalized["voltage_v"],
+            "power_consumed_daily_w": normalized["power_consumed_daily_w"],
+            "usage_minutes_of_day": normalized["usage_minutes_of_day"],
+            "online_status": normalized["online_status"],
+            "working_status": normalized["working_status"],
             "source": "switchbot_api_v1_1",
             "source_precision": "snapshot",
-            "expected_interval_seconds": 3600,
+            "expected_interval_seconds": expected_interval_seconds(
+                str(device.get("deviceType", ""))
+            ),
             "collection_method": "open_api_v1_1",
-            "measurement_status": "battery_depleted_or_unavailable"
-            if zero_unavailable else "observed",
-            "raw_payload_json": json.dumps(response, ensure_ascii=False),
+            "measurement_status": normalized["measurement_status"],
+            "raw_payload_json": (
+                json.dumps(response, ensure_ascii=False)
+                if raw_retention_reasons
+                else None
+            ),
+            "_raw_retention_reasons": raw_retention_reasons,
         }
 
     def _ensure_household_history(self) -> None:

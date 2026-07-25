@@ -1,0 +1,41 @@
+{
+  "observed_at": "2026-01-01T00:00:00Z",
+  "received_at": "2026-01-01T00:00:01Z",
+  "responses": {
+    "power": {
+      "id": 1,
+      "result": [
+        {
+          "status": "active",
+          "futurePowerField": "example"
+        }
+      ],
+      "apiGeneration": "fixture"
+    },
+    "volume": {
+      "id": 2,
+      "result": [
+        [
+          {
+            "target": "speaker",
+            "volume": 0,
+            "mute": false,
+            "minVolume": 0,
+            "maxVolume": 100,
+            "futureAudioField": "example"
+          }
+        ]
+      ]
+    },
+    "content": {
+      "id": 3,
+      "result": [
+        {
+          "source": "extInput",
+          "uri": "extInput:hdmi?port=1",
+          "futureContentField": "example"
+        }
+      ]
+    }
+  }
+}
