@@ -70,6 +70,13 @@ Mac停止中の空白はModbus障害へ数えないが、その観測窓は合�
 この改善はMacを常時起動機へ変えるものではない。開発Macでsleepを除外して合格にすることも
 せず、将来の常時起動機へ移した後も同じqualificationを再実施する。
 
+### 配備確認
+
+検証済みwheelを現行仮想環境へ反映し、既存`parallel` launchd jobを同じplistで再開した。
+再開後の1回目は終了コード0で、Modbus RawDataにcontinuity IDと固定語彙のreasonが付与された。
+`qualify-modbus`は最新epochだけを読み取り、予想どおり`under_24h`として不合格を返した。
+従って正式な24時間観測は開始済みだが、まだ本番切替条件を満たしていない。
+
 ## 段階的な廃止手順
 
 1. Modbusを既存5分ジョブの先頭で収集する。
