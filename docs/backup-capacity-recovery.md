@@ -70,6 +70,12 @@ SQLite backup本体は隠しpartialへ作成し、完了後にatomic renameす�
 `run_daily.sh`は正式名の`.db`を`gzip -f`で直接圧縮し、`gzip -t`による完了性確認と
 圧縮済みpartialからのatomic renameを行っていない。
 
+`src/hedp/storage/compressed_backup.py`には、元ファイルを残して同一filesystemの
+mode 0600 partialへgzipし、展開後のSHA-256と容量を照合してから正式名へ原子的に
+切り替える安全部品を実装済みである。ただし、現役の日次jobにはまだ接続していない。
+接続時は、圧縮成功後だけ元`.db`を削除する処理、保存世代整理、失敗時の運用metricを
+含めて次の変更として扱う。
+
 次の実装変更は日次本番処理へ影響するため、対象script、次回実行への影響、rollbackを
 提示して承認を得てから行う。
 
