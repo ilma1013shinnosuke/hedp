@@ -16,20 +16,30 @@
 ## 将来の正本
 
 OS非依存で、認証付き暗号化、改ざん検出、version固定、複数端末での復旧が可能な
-暗号化ファイルを秘密情報の可搬な正本とする。SOPSとageは有力候補だが、採用は
-復号鍵の保管場所、紛失時の復旧、Ubuntu移行先の確定後に決める。
+暗号化ファイルを秘密情報の可搬な正本とする。小さな構造化秘密にはSOPSとage、
+大容量DB・Raw archiveにはresticを候補とし、役割を混ぜない。採用は復号鍵の
+保管場所、紛失時の復旧、保存先、Ubuntu移行先の確定後に決める。
 
 暗号化ファイルと復号鍵を同じrepository、同じbackup、同じ端末だけに置かない。
 暗号化済みであっても、保存先、共有範囲、履歴保持を承認してからGit又はcloudへ置く。
+
+ageはruntime用とoffline recovery用の複数recipientを持たせる。暗号化正本、
+runtime復号鍵、offline復旧鍵、bulk backup repositoryは、同じ一台又は同じ障害領域だけに
+置かない。Keychainは補助に使えても、可搬な正本にはしない。
 
 ## 実行時注入
 
 - macOSではlaunchd、Ubuntuではsystemdを薄い起動層として扱う。
 - plist、unit file、process引数へ秘密値を書かない。
 - 起動時に復号し、対象processの環境へだけ渡す。
+- resticのpasswordは、利用可能な場合は`RESTIC_PASSWORD_COMMAND`等の標準入力に近い
+  受渡しを使い、CLI引数や恒久平文fileへ置かない。
 - 平文の一時fileを原則作らず、必要な場合は専用directory 0700、file 0600、
   短い寿命、確実な終了時削除、異常終了時回収を必須とする。
 - 標準出力、標準エラー、例外本文、diagnostic JSONへ秘密を含めない。
+
+外部backupを書き込むcredentialと、remote snapshotを削除・pruneできる管理credentialを
+分ける。通常jobに削除権限を持たせず、retention変更は別承認にする。
 
 ## 移行と復旧
 

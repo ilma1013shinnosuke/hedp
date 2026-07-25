@@ -94,6 +94,28 @@ Sony REST/IRCC/WoLの能力候補と仮想試験は有用である。試作内�
 38 kHz NEC形式と操作候補は確認できたが、ボタン別codeとread-back経路がない。総当たりを
 行わず、所有remoteの波形実測後に匿名fixtureを作る。トグル命令は結果不明時に再送しない。
 
+## 実装優先度と次の合格条件
+
+運用中の収集経路と、新しく作るreaderを同じ待ち行列へ入れない。FusionSolarとSwitchBotは
+現行機能の安定化を優先し、新規連携は読み取りを完成させてから操作経路を別に審査する。
+
+| 区分 | 優先度 | 連携 | 次の合格条件 | 操作経路 |
+|---|---:|---|---|---|
+| 既存運用 | 1 | FusionSolar | Modbusが連続24時間、99%以上、15分超の欠損なしを満たす | Modbus writeは作らない |
+| 既存運用 | 1 | SwitchBot | 到着機器の実測schemaを確認し、機種profileと保存上限を追加する | 照明操作はcollectorへ入れない |
+| 新規reader | 1 | Smart LEDZ | local transport、主要reader、normalizer、capabilityを匿名fixtureで固定する | reader完成後に能力単位で別審査 |
+| 新規reader | 2 | エコキュート | 実機property mapをread-onlyで取得し、実装EPCだけを能力化する | ECHONET Setを初期公開しない |
+| 新規reader | 3 | BRAVIA | allowlistした単一hostへのREST capability queryをread-onlyで確認する | WoLとIRCCを別executorにする |
+| 条件待ち | 4 | Qrio | 非公開APIの利用許容性を確認し、status readerだけを固定する | 解錠は別process・単発・直前承認 |
+| 条件待ち | 5 | Miele@home | credential再発行、SSEの有界再接続、offline testを完了する | 初期段階では作らない |
+| 実物待ち | 6 | WAREMA | Stickとremoteの互換、passive受信、state readを確認する | 方向・角度・安全条件の確認後 |
+| 実測待ち | 7 | MTRL-RK-901SI | 所有remoteの波形、ボタンcode、read-back可否を確認する | IR送信経路と能力を分離する |
+| 経路待ち | 8 | 日産サクラ | 公式又は明示的に許容された通信経路を確定する | UI bridgeを正式経路にしない |
+
+この順序は製品価値だけでなく、確認済み知識、標準protocol、結果確認の可否、誤操作時の
+影響を合わせたものである。条件待ちの連携を推測で完成扱いせず、その間は次の独立した
+reader又は運用改善へ進む。
+
 ## 移管・削除ゲート
 
 各連携で次が揃うまで、元解析資産を削除しない。

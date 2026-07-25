@@ -87,6 +87,27 @@ SwitchBotでは `canonical_key` により同一の観測値を挿入しない。
 5. **P2: backup容量の運用閾値をdaily healthへ追加する。** 「次回atomic backup必要量」と空き容量の
    差を警告し、34 GiBのような境界状態を事前に通知する。
 
+## SwitchBot代表月のread-only試算
+
+2024年7月を完全月の代表として、`switchbot_csv_export`だけをSQLiteの`mode=ro`と
+`query_only`でinspectした。DB、archive、compact DBは変更又は作成していない。
+
+| 項目 | 結果 |
+|---|---:|
+| 観測件数 | 490,295件 |
+| Raw本文の合計 | 89,721,700 bytes（約85.6 MiB） |
+| 全列JSONLの未圧縮概算 | 約626 MiB |
+| 可逆gzipの概算 | 約25〜45 MiB |
+| inspect所要時間 | 約34秒 |
+
+gzip概算は20,000件のメモリ内標本から得たもので、実archiveの作成結果ではない。
+Raw本文合計と全列JSONL概算は対象が異なり、前者だけをarchive容量と見なさない。
+
+現在のindexは`(device_id, observed_at_utc)`とcanonical key向けであり、
+月次inspectの`(source, observed_at_utc)`条件には合わない。このため約900万行を走査する。
+月次archiveを定常運用へ入れる前に、同条件の複合indexをschemaと新規DBで検証する。
+現役DBへのindex追加は、作成時間、一時容量、writer停止時間を提示して別途承認を得る。
+
 ## 受入条件
 
 - 実API、DB、backup、launchdを変更せず、30日分の匿名化された容量時系列を取得できる。
