@@ -1,6 +1,7 @@
 import argparse
 import json
 import sqlite3
+import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -36,7 +37,13 @@ from hedp.adapters.fusionsolar.modbus_profiles import SUN2000_JPL1_RANGES
 from hedp.adapters.fusionsolar.modbus_record_builder import (
     FusionSolarModbusRecordBuilder,
 )
-from hedp.adapters.fusionsolar.modbus_tcp import ReadOnlyModbusTcpClient
+from hedp.adapters.fusionsolar.modbus_qualification import (
+    ModbusQualificationChecker,
+)
+from hedp.adapters.fusionsolar.modbus_tcp import (
+    ModbusTransportError,
+    ReadOnlyModbusTcpClient,
+)
 from hedp.storage import RawData
 from hedp.storage import Storage
 from hedp.adapters.switchbot.cli import add_switchbot_parser, run_switchbot
@@ -177,6 +184,8 @@ def _create_realtime_application() -> tuple[Application, sqlite3.Connection]:
             ),
             target_alias="solar-inverter",
             register_ranges=SUN2000_JPL1_RANGES,
+            continuity_id=modbus.continuity_id,
+            continuity_reason=modbus.continuity_reason,
         ),
         modbus_record_builder=FusionSolarModbusRecordBuilder(),
     )
@@ -202,6 +211,8 @@ def _create_modbus_application() -> tuple[
             ),
             target_alias="solar-inverter",
             register_ranges=SUN2000_JPL1_RANGES,
+            continuity_id=modbus.continuity_id,
+            continuity_reason=modbus.continuity_reason,
         ),
         modbus_record_builder=FusionSolarModbusRecordBuilder(),
     )
@@ -397,6 +408,7 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     device_group.add_argument("--device-dn")
     subparsers.add_parser("collect-realtime")
     subparsers.add_parser("collect-modbus")
+    subparsers.add_parser("qualify-modbus")
     battery_parser = subparsers.add_parser("collect-battery-dc")
     battery_parser.add_argument("--device-dn")
     battery_parser.add_argument("--sigids")
@@ -622,11 +634,36 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     if arguments.command == "collect-modbus":
         application, connection = _create_modbus_application()
         try:
-            application.run_modbus()
+            try:
+                application.run_modbus()
+            except ModbusTransportError:
+                print("modbus: transport unavailable", file=sys.stderr)
+                return 75
         finally:
             connection.close()
         print("modbus: collected 1")
         return 0
+
+    if arguments.command == "qualify-modbus":
+        storage = Storage(Configuration.database_path_from_environment())
+        connection = storage.connect_readonly()
+        try:
+            raw_data = storage.load_rawdata_for_sources(
+                (ModbusQualificationChecker.source,)
+            )
+            if raw_data:
+                records = storage.load_records_for_source_window(
+                    ModbusQualificationChecker.source,
+                    min(item.timestamp for item in raw_data),
+                    max(item.timestamp for item in raw_data),
+                )
+            else:
+                records = []
+        finally:
+            connection.close()
+        report = ModbusQualificationChecker().evaluate(raw_data, records)
+        print(json.dumps(report.as_dict(), sort_keys=True))
+        return 0 if report.status == "qualified" else 1
 
     if arguments.command == "collect-battery-dc":
         if arguments.device_dn and arguments.sigids:

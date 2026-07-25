@@ -71,13 +71,22 @@ touch "${LOG_DIRECTORY}/device-realtime.out.log" \
 chmod 600 "${LOG_DIRECTORY}/device-realtime.out.log" \
           "${LOG_DIRECTORY}/device-realtime.err.log"
 chmod +x "${RUN_SCRIPT}"
+chmod +x "${SCRIPT_DIR}/run_modbus_realtime.sh" \
+          "${SCRIPT_DIR}/modbus_continuity.py"
 umask 077
 {
     printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>'
     printf '  <key>Label</key><string>%s</string>\n' "${LABEL}"
     printf '  <key>ProgramArguments</key><array><string>%s</string></array>\n' "$(xml_escape "${RUN_SCRIPT}")"
     printf '  <key>WorkingDirectory</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}")"
-    printf '%s\n' '  <key>StartInterval</key><integer>300</integer>' '  <key>EnvironmentVariables</key><dict>'
+    printf '%s\n' '  <key>StartInterval</key><integer>300</integer>'
+    # The Modbus-only route is safe to start immediately after login/reboot.
+    # Do not change the legacy parallel cloud route's startup behaviour during
+    # its qualification period.
+    if [[ "${HEDP_FUSIONSOLAR_REALTIME_MODE}" == "modbus" ]]; then
+        printf '%s\n' '  <key>RunAtLoad</key><true/>'
+    fi
+    printf '%s\n' '  <key>EnvironmentVariables</key><dict>'
     for name in "${environment_names[@]}"; do
         printf '    <key>%s</key><string>%s</string>\n' "${name}" "$(xml_escape "${!name}")"
     done

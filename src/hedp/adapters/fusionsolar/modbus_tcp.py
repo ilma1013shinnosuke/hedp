@@ -11,6 +11,16 @@ class ModbusTcpError(RuntimeError):
     """A safe Modbus TCP error that does not contain addresses or payloads."""
 
 
+class ModbusTransportError(ModbusTcpError):
+    """A retryable failure before a confirmed Modbus response is available.
+
+    This type intentionally carries no target, register, or exception details.
+    A caller may retry it because no response was accepted and no persistence has
+    begun.  Protocol and validation errors remain ``ModbusTcpError`` and are
+    not retried automatically.
+    """
+
+
 @dataclass(frozen=True)
 class ModbusReadResult:
     function_code: int
@@ -94,7 +104,7 @@ class ReadOnlyModbusTcpClient:
         except ModbusTcpError:
             raise
         except (OSError, TimeoutError) as error:
-            raise ModbusTcpError("Modbus target is unavailable") from error
+            raise ModbusTransportError("Modbus target is unavailable") from error
 
         if transaction_id != self._transaction_id:
             raise ModbusTcpError("Modbus transaction ID does not match")
@@ -134,9 +144,11 @@ class ReadOnlyModbusTcpClient:
                 )
             }
         except OSError as error:
-            raise ModbusTcpError("Modbus target name cannot be resolved") from error
+            raise ModbusTransportError(
+                "Modbus target name cannot be resolved"
+            ) from error
         if not addresses:
-            raise ModbusTcpError("Modbus target name cannot be resolved")
+            raise ModbusTransportError("Modbus target name cannot be resolved")
         for address in addresses:
             parsed = ipaddress.ip_address(address)
             if not (parsed.is_private or parsed.is_link_local):

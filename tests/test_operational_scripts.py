@@ -83,10 +83,17 @@ def _collection_script_repository(tmp_path: Path, runner_name: str) -> tuple[Pat
     return repository, runner
 
 
-def test_five_minute_script_collects_realtime_and_current_alarms():
+def test_five_minute_script_preserves_parallel_mode_and_has_modbus_only_runner():
     script = (ROOT / "scripts" / "run_device_realtime.sh").read_text()
+    modbus_runner = (ROOT / "scripts" / "run_modbus_realtime.sh").read_text()
     assert "collect-realtime" in script
-    assert "collect-modbus" in script
+    assert "run_modbus_realtime.sh" in script
+    assert "modbus_continuity.py" in script
+    assert 'env "${CONTINUITY_ENV[@]}"' in script
+    assert "collect-modbus" in modbus_runner
+    assert "com.hedp.database.lock" in modbus_runner
+    assert "MAX_ATTEMPTS" in modbus_runner
+    assert '"${exit_code}" -ne 75' in modbus_runner
     assert "FUSIONSOLAR_REALTIME_MODE" in script
     assert "com.hedp.database.lock" in script
 
@@ -338,6 +345,15 @@ def test_all_database_jobs_share_one_lock():
         assert "SUMICORE_DATABASE_LOCK_DIRECTORY" in script
 
 
+def test_modbus_runner_uses_the_established_common_lock():
+    runner = (ROOT / "scripts" / "run_modbus_realtime.sh").read_text()
+    assert "com.hedp.database.lock" in runner
+    assert "HEDP_DATABASE_LOCK_DIRECTORY" in runner
+    assert "SUMICORE_DATABASE_LOCK_DIRECTORY" in runner
+    assert "modbus_continuity.py" in runner
+    assert 'env "${CONTINUITY_ENV[@]}"' in runner
+
+
 def test_all_launchd_installers_make_logs_private():
     installers = [
         "install_macos_launchd.sh",
@@ -391,6 +407,7 @@ def test_every_runner_uses_common_log_rotation():
         "run_equipment_daily.sh": "equipment",
         "run_switchbot_hourly.sh": "switchbot",
         "run_daily_health.sh": "daily-health",
+        "run_modbus_realtime.sh": "modbus-realtime",
     }
     for name, job in runners.items():
         script = (ROOT / "scripts" / name).read_text()
@@ -405,6 +422,7 @@ def test_every_runner_records_anonymous_operation_outcomes():
         "run_equipment_daily.sh": "equipment",
         "run_switchbot_hourly.sh": "switchbot",
         "run_daily_health.sh": "daily_health",
+        "run_modbus_realtime.sh": "modbus_realtime",
     }
     for name, operation in runners.items():
         script = (ROOT / "scripts" / name).read_text()
@@ -490,6 +508,7 @@ def test_modbus_only_installer_omits_cloud_credentials(tmp_path):
     )
     values = plist["EnvironmentVariables"]
     assert values["HEDP_FUSIONSOLAR_REALTIME_MODE"] == "modbus"
+    assert plist["RunAtLoad"] is True
     assert "HEDP_FUSIONSOLAR_PASSWORD" not in values
     assert "HEDP_FUSIONSOLAR_USERNAME" not in values
     assert "HEDP_FUSIONSOLAR_DEVICE_DNS" not in values

@@ -36,14 +36,35 @@ class FusionSolarModbusCollector:
         *,
         target_alias: str,
         register_ranges: tuple[ModbusRegisterRange, ...],
+        continuity_id: str | None = None,
+        continuity_reason: str | None = None,
     ) -> None:
         if not target_alias:
             raise ValueError("target_alias must not be empty")
         if not register_ranges:
             raise ValueError("at least one register range is required")
+        if continuity_id is not None and (
+            len(continuity_id) != 32
+            or any(character not in "0123456789abcdef" for character in continuity_id)
+        ):
+            raise ValueError("continuity_id must be a 32-character opaque token")
+        if continuity_id is None and continuity_reason is not None:
+            raise ValueError("continuity_reason requires continuity_id")
+        if continuity_reason not in {
+            None,
+            "initial",
+            "continuous",
+            "boot_changed",
+            "scheduling_gap",
+            "boot_evidence_unavailable",
+            "boot_evidence_recovered",
+        }:
+            raise ValueError("continuity_reason is invalid")
         self.client = client
         self.target_alias = target_alias
         self.register_ranges = register_ranges
+        self.continuity_id = continuity_id
+        self.continuity_reason = continuity_reason
 
     def collect(self) -> RawData:
         ranges = []
@@ -64,9 +85,16 @@ class FusionSolarModbusCollector:
                     "registers": list(result.registers),
                 }
             )
+        metadata: dict[str, object] = {"target_alias": self.target_alias}
+        if self.continuity_id is not None:
+            # This is a process-local opaque token.  It contains no wall
+            # clock, device identifier, or network detail and changes after a
+            # reboot, scheduler gap, or sentinel state loss.
+            metadata["continuity_id"] = self.continuity_id
+            metadata["continuity_reason"] = self.continuity_reason
         return RawData(
             source="fusionsolar_modbus_tcp",
             timestamp=datetime.now(timezone.utc),
             payload={"ranges": ranges},
-            metadata={"target_alias": self.target_alias},
+            metadata=metadata,
         )

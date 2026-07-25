@@ -10,7 +10,7 @@
 操作メトリクスは次の固定語彙だけを持つ。
 
 - 記録日: UTCの日付。正確な時刻は保存しない。
-- job: `device_realtime`、`switchbot`、`equipment`、`daily_health`、`daily`
+- job: `device_realtime`、`modbus_realtime`、`switchbot`、`equipment`、`daily_health`、`daily`
 - outcome: `completed`、`skipped`、`timed_out`、`failed`
 - duration: `under_1s`、`1_to_5s`、`5_to_30s`、`30s_or_more`
 - failure_category: `none`、`lock_held`、`timeout`、`network`、

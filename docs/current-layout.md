@@ -59,6 +59,7 @@ Drive受け渡しキューへ保存し、ダウンロード後にMac側で検査
 |---|---|
 | `run_daily.sh` | 日次取得、欠損補完、品質確認、バックアップ |
 | `run_device_realtime.sh` | 5分ごとの機器現在値・蓄電池・現在アラーム |
+| `run_modbus_realtime.sh` | 切替後の5分Modbus専用取得。共通DB lock・上限付きtransport再試行・連続性証跡 |
 | `run_equipment_daily.sh` | 日次の蓄電池復旧スナップショット |
 | `run_switchbot_hourly.sh` | SwitchBotの1時間ごとの状態取得 |
 | `run_daily_health.sh` | DBを変更しない日次健全性確認 |
@@ -69,7 +70,7 @@ Drive受け渡しキューへ保存し、ダウンロード後にMac側で検査
 `run_device_realtime.sh`は監視期間中の`parallel`と、切替後の`modbus`を明示選択する。
 未設定時は従来互換の`parallel`であり、自動的には切り替わらない。
 
-DBを使用する5つの実行スクリプトは `com.hedp.database.lock`を共有する。これにより、
+DBを使用する6つの実行スクリプトは `com.hedp.database.lock`を共有する。これにより、
 別ジョブ同士が同じSQLiteを長時間読み書きすることを防ぐ。健全性確認は読み取り専用
 だが、全体整合性検査中に書込みを妨げるため、このロックへ参加する。
 

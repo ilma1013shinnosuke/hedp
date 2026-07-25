@@ -26,6 +26,7 @@ class OperationName(str, Enum):
     """Fixed job names used by the supported scheduled runners."""
 
     DEVICE_REALTIME = "device_realtime"
+    MODBUS_REALTIME = "modbus_realtime"
     SWITCHBOT = "switchbot"
     EQUIPMENT = "equipment"
     DAILY_HEALTH = "daily_health"

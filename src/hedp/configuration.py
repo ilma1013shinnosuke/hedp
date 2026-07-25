@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import os
 
 from hedp.environment import require_compatible_environment
 
@@ -9,6 +10,8 @@ class ModbusConfiguration:
     port: int
     unit_id: int
     expected_serial: str
+    continuity_id: str | None = None
+    continuity_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,9 +82,33 @@ class Configuration:
             raise RuntimeError(
                 "FusionSolar Modbus expected serial must not be empty"
             )
+        continuity_id = os.environ.get("SUMICORE_FUSIONSOLAR_MODBUS_CONTINUITY_ID")
+        if continuity_id is None:
+            continuity_id = os.environ.get("HEDP_FUSIONSOLAR_MODBUS_CONTINUITY_ID")
+        continuity_reason = None
+        if continuity_id is not None:
+            if len(continuity_id) != 32 or any(
+                character not in "0123456789abcdef" for character in continuity_id
+            ):
+                raise RuntimeError("FusionSolar Modbus continuity ID is invalid")
+            continuity_reason = os.environ.get(
+                "SUMICORE_FUSIONSOLAR_MODBUS_CONTINUITY_REASON",
+                os.environ.get("HEDP_FUSIONSOLAR_MODBUS_CONTINUITY_REASON"),
+            )
+            if continuity_reason not in {
+                "initial",
+                "continuous",
+                "boot_changed",
+                "scheduling_gap",
+                "boot_evidence_unavailable",
+                "boot_evidence_recovered",
+            }:
+                raise RuntimeError("FusionSolar Modbus continuity reason is invalid")
         return ModbusConfiguration(
             host=host,
             port=port,
             unit_id=unit_id,
             expected_serial=expected_serial,
+            continuity_id=continuity_id,
+            continuity_reason=continuity_reason,
         )

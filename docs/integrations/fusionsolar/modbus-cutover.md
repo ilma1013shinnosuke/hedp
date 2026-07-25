@@ -39,6 +39,37 @@ Mac停止中の空白はModbus障害へ数えないが、その観測窓は合�
 従って`device_realtime`の成功・失敗件数だけでModbus品質を判定しない。Modbus RawDataの
 5分間隔、対応する10 Record、欠損値、15分超gapを独立集計し、クラウド側の失敗と分ける。
 
+## 常時稼働性の改善
+
+直近のread-only再判定では、取得値と10指標の正規化は正常だった一方、直近24時間の
+5分枠充足は約75%で、15分超の空白もあった。このため**本番切替は不可**である。
+空白にはOS更新後の再起動と開発Macのsleepが含まれるが、旧`parallel` runnerの失敗だけでは
+クラウド失敗、共通DB lock、Mac停止、Modbus通信失敗を区別できなかった。
+
+次の改善を追加した。`parallel`経路では次回収集から連続性証拠をRawData metadataへ追加する。
+実機・ネットワーク設定は変更しない。`modbus`専用plistへの切替は、24時間合格と利用者承認まで
+行わない。
+
+- `modbus`専用modeは既存の共通DB lockを維持し、1回のjob全体を240秒以内に制限する。
+  既存の`parallel` modeは収集内容・timeout・lockを変えず、判定用の匿名continuity metadata
+  だけを追加する。
+- 再試行はDNS・接続・socket timeoutのように、応答受領・DB保存前と確認できるtransport
+  failureだけを最大3回に限定する。DB commit、decode、protocol、設定、wall-clock timeoutは
+  結果不明として再試行しない。
+- privateな0600 sentinelは、boot marker変化、5分周期を大きく超えたscheduling gap、
+  boot marker取得不能を検知する。新しい非再利用continuity IDを次のRawDataへ付けるため、
+  sleep・再起動・sentinel state消失の前後を同じ24時間へ結合しない。ID自体は出力しない。
+- `hedp qualify-modbus`はread-onlyで、最新continuity IDの**直近24時間だけ**を評価する。
+  99%の5分slot、15分超gapなし、Rawから再decodeした10 Recordのmetric/unit/有限数値一致、
+  最新snapshotの鮮度、boot evidenceを集計だけで返す。旧RawDataにIDがない場合は、遡って
+  合格にはしない。
+- `modbus`専用modeで再登録したlaunchd jobだけに`RunAtLoad`を付ける。login/reboot後に
+  次の5分周期まで待たず開始する。ただしsleep中の取得は保証しないため、復帰後は新しい
+  24時間を測定する。
+
+この改善はMacを常時起動機へ変えるものではない。開発Macでsleepを除外して合格にすることも
+せず、将来の常時起動機へ移した後も同じqualificationを再実施する。
+
 ## 段階的な廃止手順
 
 1. Modbusを既存5分ジョブの先頭で収集する。
@@ -110,3 +141,18 @@ Modbus通信障害とは断定しない。一方、停止時間を推測で除�
 rollbackは、旧plistの安全な退避物又はinstallerへ`parallel`を指定して再登録し、一回実行と
 保存を確認する。Modbus-only登録に失敗した場合は新jobを停止し、旧設定を復元する。
 rollback確認前に旧コード、旧plist、クラウド秘密を削除しない。
+
+## 改善版を実運用へ反映する明示手順
+
+コードのレビューと利用者承認後だけに実行する。旧plistやクラウド経路は先に削除しない。
+
+1. 監視を継続する間は`parallel`のままinstallerを再実行せず、既存の比較条件を保つ。
+2. `modbus`への切替を承認した時点で、modeを`modbus`にして
+   `scripts/install_macos_device_realtime_launchd.sh`を再実行する。これはlaunchd plistの
+   更新・再登録、cloud realtime用の環境値除去、`RunAtLoad`有効化を伴う。
+3. plist構文、登録状態、1回のModbus収集、RawDataと10 Recordの増加を、秘密値を表示せず
+   確認する。
+4. その後24時間以上、Mac停止・sleep・明示停止を挟まずに稼働させ、
+   `hedp qualify-modbus`が`qualified`を返すことを確認する。
+5. この確認後も旧クラウド経路を自動削除しない。旧5分クラウド取得の停止は、影響とrollbackを
+   改めて確認して承認する。

@@ -10,6 +10,7 @@ from hedp.adapters.fusionsolar.modbus_collector import (
 )
 from hedp.adapters.fusionsolar.modbus_tcp import (
     ModbusTcpError,
+    ModbusTransportError,
     ReadOnlyModbusTcpClient,
 )
 
@@ -111,3 +112,45 @@ def test_collector_preserves_register_words_without_guessing_meaning():
 
     assert raw.payload["ranges"][0]["registers"] == [100, 200]
     assert raw.metadata == {"target_alias": "solar-inverter"}
+
+
+@patch(
+    "hedp.adapters.fusionsolar.modbus_tcp.socket.getaddrinfo",
+    side_effect=OSError("unavailable"),
+)
+def test_name_resolution_failure_is_a_retryable_transport_error(_):
+    client = ReadOnlyModbusTcpClient("inverter.local")
+
+    with pytest.raises(ModbusTransportError):
+        client.read_holding_registers(1, 1)
+
+
+def test_collector_can_attach_opaque_continuity_evidence():
+    client = type(
+        "Client",
+        (),
+        {
+            "read_holding_registers": lambda self, start, count: type(
+                "Result",
+                (),
+                {
+                    "function_code": 3,
+                    "start_address": start,
+                    "registers": (100, 200),
+                },
+            )()
+        },
+    )()
+    collector = FusionSolarModbusCollector(
+        client,
+        target_alias="solar-inverter",
+        register_ranges=(ModbusRegisterRange("confirmed_range", 3, 32000, 2),),
+        continuity_id="0123456789abcdef0123456789abcdef",
+        continuity_reason="scheduling_gap",
+    )
+
+    assert collector.collect().metadata == {
+        "target_alias": "solar-inverter",
+        "continuity_id": "0123456789abcdef0123456789abcdef",
+        "continuity_reason": "scheduling_gap",
+    }
