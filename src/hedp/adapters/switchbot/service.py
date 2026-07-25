@@ -127,7 +127,7 @@ class SwitchBotService:
             "online_status": normalized["online_status"],
             "working_status": normalized["working_status"],
             "source": "switchbot_api_v1_1",
-            "source_precision": "snapshot",
+            "source_precision": "collection_time_snapshot",
             "expected_interval_seconds": expected_interval_seconds(
                 str(device.get("deviceType", ""))
             ),

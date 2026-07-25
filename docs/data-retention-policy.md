@@ -76,6 +76,10 @@ Cookie、トークンはこの分類に関係なく保存禁止とする。
 - 現在値だけでよい機器は上書き保存し、変化、異常、欠損、電池低下を別イベントにする。
 - 時刻、値、品質、取得元が同一の重複は増やさず、受信回数だけが必要なら受信証跡を分離する。
 
+SwitchBot OpenAPIのstatus snapshotは、機器発生時刻が確認できないため、保存された時刻を
+取得時刻として扱い`source_precision=collection_time_snapshot`で識別する。これを人感等の
+event発生秒として分析しない。明示時刻を持つimportと将来のdevice eventは別精度として扱う。
+
 ## 可逆圧縮アーカイブ
 
 長期Rawは、原文を変えずに復元できるUTF-8 JSON Linesのgzip圧縮を標準候補とする。

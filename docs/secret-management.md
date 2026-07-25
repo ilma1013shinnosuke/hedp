@@ -13,6 +13,45 @@
 - launchd plistに残る既存の平文秘密は移行対象であり、恒久方式とはしない。
 - 現役`.env`、plist、認証情報は、移行方式と復旧試験が完成するまで削除しない。
 
+## 値を持たない秘密・環境台帳
+
+この台帳は名前と用途だけを正本化する。値、現在設定されているか、長さ、更新日時は
+文書、回答、logへ出さない。`HEDP_`形式は互換aliasであり、installerと配備済みjobが
+canonicalな`SUMICORE_`名を直接使うまで削除しない。
+
+### 秘密
+
+- `SUMICORE_FUSIONSOLAR_USERNAME`、`SUMICORE_FUSIONSOLAR_PASSWORD`
+- `SWITCHBOT_TOKEN`、`SWITCHBOT_SECRET`
+- GAS Script Propertiesの`FUSIONSOLAR_COOKIE`、`FUSIONSOLAR_CSRF_TOKEN`
+- backup runtimeが将来利用する`RESTIC_PASSWORD_COMMAND`
+
+### 家庭固有だが認証秘密ではないもの
+
+- `SUMICORE_FUSIONSOLAR_STATION_DN`
+- `SUMICORE_FUSIONSOLAR_DEVICE_DNS`
+- `SUMICORE_FUSIONSOLAR_BATTERY_DN`、`SUMICORE_FUSIONSOLAR_BATTERY_SIGIDS`
+- `SUMICORE_FUSIONSOLAR_MODBUS_HOST`、`SUMICORE_FUSIONSOLAR_MODBUS_UNIT_ID`
+- `SUMICORE_FUSIONSOLAR_MODBUS_EXPECTED_SERIAL`
+- `SUMICORE_SWITCHBOT_HOUSEHOLD_CONFIG_PATH`
+- GASのqueue folder、通知先、およびGit管理外の機器対応表
+
+### 移植可能な通常設定
+
+- FusionSolar base URL、Modbus port、realtime mode
+- database path、lock directory、backup retention
+- daily、health、equipment、SwitchBot、Modbusのtimeout・再試行上限
+- `XDG_STATE_HOME`
+
+### runtime生成状態
+
+- Modbus continuity ID・reason・state path
+- operational metrics path
+- `.env`読込済みmarker
+- GASの認証状態、最終検出・通知・成功時刻
+
+runtime生成状態を暗号化正本へ戻さない。別端末への移行時は新しいruntimeが再生成する。
+
 ## 将来の正本
 
 OS非依存で、認証付き暗号化、改ざん検出、version固定、複数端末での復旧が可能な
@@ -26,6 +65,10 @@ OS非依存で、認証付き暗号化、改ざん検出、version固定、複�
 ageはruntime用とoffline recovery用の複数recipientを持たせる。暗号化正本、
 runtime復号鍵、offline復旧鍵、bulk backup repositoryは、同じ一台又は同じ障害領域だけに
 置かない。Keychainは補助に使えても、可搬な正本にはしない。
+
+採用時の最小構成候補は、秘密だけの`runtime.sops.env`、家庭固有識別子と対応表の
+`household.sops.json`、recipient policyの`.sops.yaml`である。実際の保存pathとGit利用は、
+recipient、共有範囲、履歴保持を承認するまで作成しない。
 
 ## 実行時注入
 
@@ -49,6 +92,10 @@ runtime復号鍵、offline復旧鍵、bulk backup repositoryは、同じ一台�
 4. 現行jobと新方式を同時に書込み実行せず、停止・復旧手順を確認する。
 5. 新方式の安定確認後、plist等の旧平文を対象ごとに承認して撤去する。
 6. 露出した可能性がある秘密は撤去だけで済ませず、発行元で更新する。
+
+Modbus-only切替後も、日次・equipment・GASがクラウドを必要とする間はFusionSolarの
+cloud設定を削除しない。まず5分cloud realtime用の不要項目を候補化し、その後、
+日次・equipment・GASを個別に廃止できた場合だけ残りを撤去する。
 
 ## Ubuntu移行の位置付け
 

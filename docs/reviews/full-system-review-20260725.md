@@ -11,7 +11,8 @@ SumiCoreを長期間運用しても、利用者、機器、Mac、家庭内ネッ
 この文書の課題は、設計時の所見だけでなく実装状況も併記する。2026-07-25時点で、
 外部エラーの固定語彙化、FusionSolarのconnect/read timeoutと操作全体予算、
 `daily-health`を含む定期jobのwall-clock timeout、Modbus継続性の匿名判定、
-第3層の最小判断、Execution Shadow Mode、検証付き原子的gzip部品まで実装・test済みである。
+第3層の最小判断とread-only表示、Execution Shadow Mode、検証付き原子的gzip・隔離復元部品、
+SwitchBotの匿名archive inspectとAPI取得時刻の明示まで実装・test済みである。
 
 原子的gzip部品は現役日次jobへ未接続であり、別障害領域backup、秘密の暗号化正本、
 Modbus-only切替は未実施である。archiveと別名compact DBの作成・照合toolは実装・test済み

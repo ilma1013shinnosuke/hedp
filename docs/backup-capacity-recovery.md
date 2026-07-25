@@ -109,6 +109,17 @@ log、partialは対象外とする。転送失敗は収集失敗と混同せず�
 実測前に約束しない。転送量が問題になった場合だけ、atomic `.db`完成後にlockを解放して
 restic snapshotを作り、その後local gzipを行う方式と比較する。
 
+2026-07-25時点の既定候補はBackblaze B2である。macOSとUbuntuの両方からresticを利用でき、
+小容量から始められ、Object Lockのcompliance modeと権限を絞ったapplication keyを利用できる。
+通常jobには対象bucketへのbackupに必要な最小権限だけを与え、削除・retention管理credentialは
+offline管理へ分離する。Object Lock期間中はrestic pruneが失敗するため、保持期間中の旧pack増加を
+容量計画へ含める。契約、bucket作成、Object Lock期間、地域、credential作成は未承認である。
+
+代替候補はCloudflare R2とAWS S3である。R2は小容量free枠とegress無料があるが、Bucket Lockは
+S3 Object Lockと同一ではない。AWS S3は強いObject Lockを持つが、地域別費用と運用が複雑である。
+さらにcloudとは別に、暗号化した外付け媒体を2本交互運用し、1本を切離して別場所へ置く方式を
+account lockoutとcloud障害への復旧経路として残す。
+
 ## 導入と復旧の合格条件
 
 保存先を承認した後も、最初の外部copyが成功しただけでは導入完了としない。
@@ -146,3 +157,13 @@ remote pruneは行わない。
 - restic encryption: https://restic.readthedocs.io/en/stable/070_encryption.html
 - SOPS: https://github.com/getsops/sops
 - age: https://github.com/FiloSottile/age
+- Backblaze B2 pricing: https://www.backblaze.com/cloud-storage/pricing
+- Backblaze B2 Object Lock: https://www.backblaze.com/docs/cloud-storage-object-lock
+- Backblaze application key capabilities:
+  https://www.backblaze.com/docs/cloud-storage-application-key-capabilities
+- Cloudflare R2 pricing: https://www.cloudflare.com/products/r2/
+- Cloudflare R2 Bucket Locks:
+  https://developers.cloudflare.com/r2/buckets/bucket-locks/
+- AWS S3 pricing: https://aws.amazon.com/s3/pricing/
+- AWS S3 Object Lock:
+  https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html

@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock
 import zipfile
@@ -162,6 +163,23 @@ def test_profiles_are_read_only_extensible_and_report_unknown_fields():
         {"power": "on", "newFirmwareField": "kept-in-raw"},
         normalized,
     ) == ("unknown_status_fields",)
+
+
+def test_api_snapshot_marks_collection_time_as_not_device_event_time() -> None:
+    collected_at = datetime(2026, 7, 25, 3, 4, 5, tzinfo=timezone.utc)
+
+    observation = SwitchBotService._observation(
+        {"deviceId": "fixture", "deviceType": "Meter"},
+        {
+            "statusCode": 100,
+            "body": {"temperature": 20, "humidity": 50, "battery": 90},
+        },
+        collected_at,
+    )
+
+    assert observation["observed_at_utc"] == collected_at.isoformat()
+    assert observation["source_precision"] == "collection_time_snapshot"
+    assert "device_event_time" not in observation
 
 
 def test_success_raw_policy_omits_normal_copy_but_keeps_schema_evidence():

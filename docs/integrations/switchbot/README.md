@@ -46,6 +46,13 @@ rate limitと、機種別profileを分ける。同型機器の追加は家庭固
 ## 残る改善点
 
 - `observed_at`不明時に収集時刻を機器発生時刻と断定しない。
+
+OpenAPI status応答には、全機種共通で信頼できる機器発生時刻が確認できていない。そのため
+API snapshotの既存`observed_at_utc`/`observed_at_local`列には取得時刻を格納するが、
+`source_precision=collection_time_snapshot`を必須とし、機器event時刻とは解釈しない。
+CSV等に明示時刻があるimportは従来どおりその時刻と精度を使う。将来、機器由来event時刻が
+確認できた場合も、取得時刻を上書きせず`received_at`との分離をschema migrationとして
+別途設計する。既存行の書換えは行わない。
 - OpenAPI、BLE、手動importの由来と精度を分離する。
 - 実測に基づいて機種ごとの取得周期を調整する。
 - 照明、人感、在室fieldは実機schema確認後に正式な保存項目へ昇格する。
