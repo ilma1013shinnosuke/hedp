@@ -1,0 +1,8 @@
+{
+  "protocol": "ECHONET Lite format 1",
+  "fixture_scope": "Anonymous property-map data only; no address, device identifier, or EDT value is included.",
+  "synthetic_inf_property_map_edt_hex": "0380b2c3",
+  "confirmed_he_wu46kq_set_property_map_edt_hex": "0e8193b0e3c0c7caf3f4f5f6f7f8b4",
+  "confirmed_he_wu46kq_get_property_map_edt_hex": "2999e189f388818190911151101102c202",
+  "packet_hex": "10810002026b0105ff0172039d040380b2c39e0f0e8193b0e3c0c7caf3f4f5f6f7f8b49f112999e189f388818190911151101102c202"
+}

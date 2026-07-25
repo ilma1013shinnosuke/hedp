@@ -14,6 +14,17 @@ property mapをread-onlyで取得し、実装項目を確定する。規格上�
 実測では複数のGet/Set propertyが確認され、限定的な沸き増し開始・停止試験の記録がある。
 正式統合はreaderを先に作り、Set能力は公開しない。
 
+## オフラインproperty map解析
+
+`src/hedp/adapters/ecocute/echonet.py` は通信を行わない純粋なframe/property map
+decoderである。`0x9D`（INF）、`0x9E`（Set）、`0x9F`（Get）のlist形式とbitmap形式を
+検証してEPC集合へ復号する。匿名fixtureには2026-07-24に観測したSet map 14件とGet map
+41件だけを保持し、家庭内アドレス、機器ID、通常値EDTは含めない。
+
+read-only capabilityは同一観測のGet mapに存在し、Set mapに存在しないEPCだけを返す。
+Set可能性や未知EPCの意味は推測しない。未知EPCは数値のままproperty mapとcapability結果に
+残り、名称は付与しない。この解析だけではGet要求、UDP、Set、保存、設定を実行しない。
+
 ## 読み取り候補
 
 動作状態、沸き上げ設定・状態、昼間沸き増し許可、給湯中は実装可能性が高い。残湯量、
