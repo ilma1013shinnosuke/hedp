@@ -4,5 +4,6 @@ event: PING
 data: {}
 
 event: IDENT
-data: {"state":{"status":{"value_raw":5},
-data: "ProgramID":{"value_raw":7},"remainingTime":[0,30]}}
+data: {"fixture-device-001":{"ident":{"type":{"value_raw":24}},
+data: "state":{"status":{"value_raw":5},"ProgramID":{"value_raw":7},
+data: "remainingTime":[0,30]}}}

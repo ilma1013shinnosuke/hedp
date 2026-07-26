@@ -92,9 +92,7 @@ class _PrivateUdpTransportBase:
                 "EcoCute target name cannot be resolved"
             ) from error
         if not addresses:
-            raise EchonetTransportError(
-                "EcoCute target name cannot be resolved"
-            )
+            raise EchonetTransportError("EcoCute target name cannot be resolved")
         if any(
             not (
                 ipaddress.ip_address(address).is_private
@@ -102,9 +100,7 @@ class _PrivateUdpTransportBase:
             )
             for address in addresses
         ):
-            raise EchonetTransportError(
-                "EcoCute target must be on a private network"
-            )
+            raise EchonetTransportError("EcoCute target must be on a private network")
         return addresses
 
 
@@ -158,6 +154,7 @@ class EcoCuteReadOnlyUdpTransport(_PrivateUdpTransportBase):
             connection.close()
         raise EchonetResponseError("matching EcoCute Get response was not received")
 
+
 class EcoCuteSetUdpTransport(_PrivateUdpTransportBase):
     """Unicast SetC transport with one attempt and no automatic retry."""
 
@@ -175,6 +172,21 @@ class EcoCuteSetUdpTransport(_PrivateUdpTransportBase):
             data=data,
             instance_code=instance_code,
         )
+        return self._exchange_set(
+            request=request,
+            transaction_id=transaction_id,
+            expected_epcs=(epc,),
+            instance_code=instance_code,
+        )
+
+    def _exchange_set(
+        self,
+        *,
+        request: bytes,
+        transaction_id: int,
+        expected_epcs: tuple[int, ...],
+        instance_code: int,
+    ) -> EcoCuteSetExchange:
         addresses = self._private_target_addresses()
         target = next(iter(sorted(addresses)))
         connection = self._socket_factory(socket.AF_INET, socket.SOCK_DGRAM)
@@ -199,10 +211,8 @@ class EcoCuteSetUdpTransport(_PrivateUdpTransportBase):
                     raise EchonetResponseError("EcoCute rejected the Set request")
                 if frame.service != SET_RESPONSE:
                     continue
-                if (
-                    len(frame.properties) != 1
-                    or frame.properties[0].epc != epc
-                    or frame.properties[0].data
+                if tuple(prop.epc for prop in frame.properties) != expected_epcs or any(
+                    prop.data for prop in frame.properties
                 ):
                     raise EchonetResponseError(
                         "EcoCute returned an invalid Set response"

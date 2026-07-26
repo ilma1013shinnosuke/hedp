@@ -26,6 +26,17 @@ Every API uses one of these current status labels:
 Older GAS workbook evidence is retained as supporting evidence, but is not a
 status label for the current implementation.
 
+### Operation boundary
+
+`stop_generation`、`charge`、`discharge`は通信契約、対象model、符号規約、
+実機read-backが未確立であり、live capabilityではない。
+`src/hedp/adapters/fusionsolar/operation.py`は匿名fixtureとdry-runの証拠を保持するための
+offline contractに限る。非dry-runは`is_fixture=True`を明示するfixture transportだけを
+受け入れ、production transport、HTTP route、認証情報との接続を持たない。
+
+Fixture read-backであっても、送信試行より前の観測、検証時刻より未来の観測、または対象fieldの
+qualityが`good`でない観測は成功根拠にせず、結果を`unknown`として閉じる。
+
 The requested legacy sources `00_Config.js`,
 `01_FusionSolarConnector.js`, `02_DeviceCollector.js`,
 `03_EnergyCollector.js`, `04_StationCollector.js`, and

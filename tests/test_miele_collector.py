@@ -32,7 +32,12 @@ class FakeTransport:
         assert maximum_events == 3
         assert timeout_seconds == 12
         yield SseEvent("PING", {"private": "heartbeat-secret"})
-        state = {"state": self.device["state"]}
+        state = {
+            "fixture-device-001": {
+                "ident": {"type": {"value_raw": 24}},
+                "state": self.device["state"],
+            }
+        }
         yield SseEvent("ACTION", state)
         yield SseEvent("ACTION", state)
 

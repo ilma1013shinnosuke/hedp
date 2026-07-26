@@ -40,6 +40,21 @@ class OperationOutcome(str, Enum):
     UNKNOWN = "unknown"
 
 
+class EcoCuteOperation(str, Enum):
+    BOOST_START = "boost_start"
+    BOOST_STOP = "boost_stop"
+    BATH_AUTO_ON = "bath_auto_on"
+    BATH_AUTO_OFF = "bath_auto_off"
+    DAYTIME_BOOST_ALLOW = "daytime_boost_allow"
+    DAYTIME_BOOST_DENY = "daytime_boost_deny"
+
+
+class OperationQualification(str, Enum):
+    VERIFIED = "verified"
+    OFFLINE_QUALIFIED = "offline_qualified"
+    UNSUPPORTED = "unsupported"
+
+
 @dataclass(frozen=True)
 class RuntimeCapabilitySnapshot:
     """Short-lived property maps observed from this exact safe target alias."""
@@ -96,6 +111,124 @@ class EcoCuteSetCommand:
             self.expected_readback, bytes
         ):
             raise TypeError("expected_readback must be bytes or None")
+
+
+@dataclass(frozen=True)
+class EcoCuteOperationCommand:
+    """Typed two-property offline operation request.
+
+    ``dry_run=False`` is retained only so older callers fail closed with an
+    explicit error.  This adapter has no typed live-dispatch path.
+    """
+
+    target_alias: str
+    operation: EcoCuteOperation
+    dry_run: bool = True
+
+    def __post_init__(self) -> None:
+        _validate_target_alias(self.target_alias)
+        if not isinstance(self.operation, EcoCuteOperation):
+            raise TypeError("operation must be an EcoCuteOperation")
+        if not isinstance(self.dry_run, bool):
+            raise TypeError("dry_run must be a boolean")
+
+
+@dataclass(frozen=True)
+class EcoCuteDryRunReceipt:
+    target_alias: str
+    operation: EcoCuteOperation
+    qualification: OperationQualification
+    required_set_epcs: tuple[int, int]
+    verification_epc: int
+    would_dispatch: bool
+    reason: str
+
+
+@dataclass(frozen=True)
+class EcoCuteOperationSupport:
+    operation: EcoCuteOperation | None
+    qualification: OperationQualification
+    reason: str
+
+
+@dataclass(frozen=True)
+class EcoCuteTypedOperationResult:
+    dry_run: EcoCuteDryRunReceipt
+    operation: EcoCuteOperationResult | None
+
+
+@dataclass(frozen=True)
+class _OperationDescriptor:
+    properties: tuple[EchonetProperty, EchonetProperty]
+    verification_epc: int
+    expected_readback: bytes
+    qualification: OperationQualification
+
+
+_REMOTE_OPERATION = EchonetProperty(0x93, b"\x41")
+_OPERATION_DESCRIPTORS = {
+    EcoCuteOperation.BOOST_START: _OperationDescriptor(
+        (_REMOTE_OPERATION, EchonetProperty(0xB0, b"\x42")),
+        0xB2,
+        b"\x41",
+        OperationQualification.VERIFIED,
+    ),
+    EcoCuteOperation.BOOST_STOP: _OperationDescriptor(
+        (_REMOTE_OPERATION, EchonetProperty(0xB0, b"\x41")),
+        0xB2,
+        b"\x42",
+        OperationQualification.VERIFIED,
+    ),
+    EcoCuteOperation.BATH_AUTO_ON: _OperationDescriptor(
+        (_REMOTE_OPERATION, EchonetProperty(0xE3, b"\x41")),
+        0xE3,
+        b"\x41",
+        OperationQualification.OFFLINE_QUALIFIED,
+    ),
+    EcoCuteOperation.BATH_AUTO_OFF: _OperationDescriptor(
+        (_REMOTE_OPERATION, EchonetProperty(0xE3, b"\x42")),
+        0xE3,
+        b"\x42",
+        OperationQualification.OFFLINE_QUALIFIED,
+    ),
+    EcoCuteOperation.DAYTIME_BOOST_ALLOW: _OperationDescriptor(
+        (_REMOTE_OPERATION, EchonetProperty(0xC0, b"\x41")),
+        0xC0,
+        b"\x41",
+        OperationQualification.OFFLINE_QUALIFIED,
+    ),
+    EcoCuteOperation.DAYTIME_BOOST_DENY: _OperationDescriptor(
+        (_REMOTE_OPERATION, EchonetProperty(0xC0, b"\x42")),
+        0xC0,
+        b"\x42",
+        OperationQualification.OFFLINE_QUALIFIED,
+    ),
+}
+
+
+def classify_operation(value: object) -> EcoCuteOperationSupport:
+    """Classify known typed operations without accepting an unknown string."""
+
+    try:
+        operation = (
+            value if isinstance(value, EcoCuteOperation) else EcoCuteOperation(value)
+        )
+    except (TypeError, ValueError):
+        return EcoCuteOperationSupport(
+            None,
+            OperationQualification.UNSUPPORTED,
+            "operation_not_supported",
+        )
+    descriptor = _OPERATION_DESCRIPTORS[operation]
+    return EcoCuteOperationSupport(
+        operation,
+        descriptor.qualification,
+        (
+            "verified_two_property_setc"
+            if descriptor.qualification is OperationQualification.VERIFIED
+            else "offline_qualified_dry_run_only"
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -190,22 +323,30 @@ class EcoCuteOperationAdapter:
             )
         except EchonetResponseError:
             return self._result(
-                command, attempted_at, DispatchStatus.REJECTED,
+                command,
+                attempted_at,
+                DispatchStatus.REJECTED,
                 VerificationStatus.NOT_SUPPORTED,
             )
         except TimeoutError:
             return self._result(
-                command, attempted_at, DispatchStatus.TIMEOUT,
+                command,
+                attempted_at,
+                DispatchStatus.TIMEOUT,
                 VerificationStatus.UNAVAILABLE,
             )
         except EchonetTransportError:
             return self._result(
-                command, attempted_at, DispatchStatus.TRANSPORT_ERROR,
+                command,
+                attempted_at,
+                DispatchStatus.TRANSPORT_ERROR,
                 VerificationStatus.UNAVAILABLE,
             )
         except OSError:
             return self._result(
-                command, attempted_at, DispatchStatus.TRANSPORT_ERROR,
+                command,
+                attempted_at,
+                DispatchStatus.TRANSPORT_ERROR,
                 VerificationStatus.UNAVAILABLE,
             )
 
@@ -218,6 +359,84 @@ class EcoCuteOperationAdapter:
         return EcoCuteOperationResult(
             dispatch, verification, _outcome(dispatch.status, verification.status)
         )
+
+    def plan(self, command: EcoCuteOperationCommand) -> EcoCuteDryRunReceipt:
+        """Capability-gate a typed operation without sending a packet."""
+
+        descriptor = _OPERATION_DESCRIPTORS[command.operation]
+        self._gate(
+            target_alias=command.target_alias,
+            required_set_epcs=frozenset(prop.epc for prop in descriptor.properties),
+            required_get_epcs=frozenset((descriptor.verification_epc,)),
+        )
+        return EcoCuteDryRunReceipt(
+            target_alias=command.target_alias,
+            operation=command.operation,
+            qualification=descriptor.qualification,
+            required_set_epcs=(
+                descriptor.properties[0].epc,
+                descriptor.properties[1].epc,
+            ),
+            verification_epc=descriptor.verification_epc,
+            would_dispatch=False,
+            reason=(
+                "verified_shape_fixture_only_no_live_dispatch"
+                if descriptor.qualification is OperationQualification.VERIFIED
+                else "offline_qualified_dry_run_only"
+            ),
+        )
+
+    def execute_operation(
+        self, command: EcoCuteOperationCommand
+    ) -> EcoCuteTypedOperationResult:
+        """Evaluate one allowlisted operation without crossing a write port."""
+
+        plan = self.plan(command)
+        if not command.dry_run:
+            raise PermissionError("typed EcoCute live dispatch is disabled")
+        return EcoCuteTypedOperationResult(plan, None)
+
+    def verify_operation_state(
+        self,
+        command: EcoCuteOperationCommand,
+    ) -> EcoCuteVerificationResult:
+        """Read the proven real-state EPC without dispatching an operation."""
+
+        descriptor = _OPERATION_DESCRIPTORS[command.operation]
+        self._gate(
+            target_alias=command.target_alias,
+            required_set_epcs=frozenset(prop.epc for prop in descriptor.properties),
+            required_get_epcs=frozenset((descriptor.verification_epc,)),
+        )
+        return self._verify(
+            EcoCuteSetCommand(
+                command.target_alias,
+                descriptor.verification_epc,
+                descriptor.expected_readback,
+                descriptor.expected_readback,
+            )
+        )
+
+    def _gate(
+        self,
+        *,
+        target_alias: str,
+        required_set_epcs: frozenset[int],
+        required_get_epcs: frozenset[int] = frozenset(),
+    ) -> None:
+        gate_time = self._aware_now()
+        if target_alias != self._capability_snapshot.target_alias:
+            raise PermissionError("capability snapshot belongs to a different target")
+        if not self._capability_snapshot.is_fresh_at(gate_time):
+            raise PermissionError("runtime capability snapshot is stale")
+        if not required_set_epcs <= self._capability_snapshot.set_epcs:
+            raise PermissionError(
+                "operation EPCs were not advertised in the runtime Set map"
+            )
+        if not required_get_epcs <= self._capability_snapshot.get_epcs:
+            raise PermissionError(
+                "verification EPCs were not advertised in the runtime Get map"
+            )
 
     def _verify(self, command: EcoCuteSetCommand) -> EcoCuteVerificationResult:
         checked_at = self._timestamp()
@@ -241,7 +460,12 @@ class EcoCuteOperationAdapter:
             )
             frame = getattr(exchange, "frame")
             prop = _single_property(frame.properties, command.epc)
-        except (AttributeError, FrameError, EchonetResponseError, EchonetTransportError):
+        except (
+            AttributeError,
+            FrameError,
+            EchonetResponseError,
+            EchonetTransportError,
+        ):
             return EcoCuteVerificationResult(
                 checked_at,
                 command.target_alias,
@@ -272,19 +496,21 @@ class EcoCuteOperationAdapter:
         verification_status: VerificationStatus,
     ) -> EcoCuteOperationResult:
         dispatch = EcoCuteDispatchReceipt(
-                attempted_at,
-                command.target_alias,
-                command.epc,
-                dispatch_status,
-            )
+            attempted_at,
+            command.target_alias,
+            command.epc,
+            dispatch_status,
+        )
         verification = EcoCuteVerificationResult(
-                self._timestamp(),
-                command.target_alias,
-                command.epc,
-                verification_status,
-                "echonet_lite_get",
-                "missing" if verification_status is VerificationStatus.UNAVAILABLE else "unknown",
-            )
+            self._timestamp(),
+            command.target_alias,
+            command.epc,
+            verification_status,
+            "echonet_lite_get",
+            "missing"
+            if verification_status is VerificationStatus.UNAVAILABLE
+            else "unknown",
+        )
         return EcoCuteOperationResult(
             dispatch,
             verification,
@@ -330,8 +556,14 @@ def _validate_target_alias(value: str) -> None:
 def _outcome(
     dispatch: DispatchStatus, verification: VerificationStatus
 ) -> OperationOutcome:
-    if dispatch is DispatchStatus.ACCEPTED and verification is VerificationStatus.MATCHED:
+    if (
+        dispatch is DispatchStatus.ACCEPTED
+        and verification is VerificationStatus.MATCHED
+    ):
         return OperationOutcome.COMPLETED
-    if dispatch is DispatchStatus.REJECTED or verification is VerificationStatus.NOT_MATCHED:
+    if (
+        dispatch is DispatchStatus.REJECTED
+        or verification is VerificationStatus.NOT_MATCHED
+    ):
         return OperationOutcome.FAILED
     return OperationOutcome.UNKNOWN

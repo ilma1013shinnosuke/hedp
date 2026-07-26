@@ -48,6 +48,8 @@ def intent(**overrides: object) -> Intent:
 
 def evidence(**overrides: object) -> StateEvidence:
     values = {
+        "target_alias": "test-light",
+        "capability": "set-power",
         "observed_at": NOW - timedelta(seconds=10),
         "quality": EvidenceQuality.GOOD,
         "current_state": True,
@@ -170,7 +172,7 @@ def test_missing_and_old_state_are_indeterminate() -> None:
     assert missing.result == old.result == future.result == ShadowResult.INDETERMINATE
 
 
-def test_manual_override_and_duplicate_are_blocked() -> None:
+def test_manual_override_is_blocked_and_shadow_does_not_consume_operation_id() -> None:
     registry = ShadowOperationRegistry()
     gate = ShadowExecutionGate((capability(),), registry=registry)
     manual = gate.assess(
@@ -185,8 +187,39 @@ def test_manual_override_and_duplicate_are_blocked() -> None:
     assert manual.gate.reason_code == "manual_override_active"
     assert manual.result == ShadowResult.WOULD_BLOCK
     assert first.result == ShadowResult.WOULD_DISPATCH
-    assert duplicate.gate.reason_code == "duplicate_operation_id"
-    assert duplicate.result == ShadowResult.WOULD_BLOCK
+    assert duplicate.result == ShadowResult.WOULD_DISPATCH
+
+
+def test_same_capability_can_be_registered_for_multiple_targets() -> None:
+    other = CapabilityDescriptor(
+        target_alias="other-light",
+        capability="set-power",
+        control_owner="sumicore",
+        allowed_desired_states=(True, False),
+        verification_method="read-back",
+        maximum_state_age=timedelta(seconds=30),
+    )
+    gate = ShadowExecutionGate((capability(), other))
+
+    result = gate.assess(
+        intent(target_alias="other-light"),
+        evidence=evidence(target_alias="other-light"),
+        evaluated_at=NOW,
+    )
+
+    assert result.result is ShadowResult.WOULD_DISPATCH
+
+
+def test_shadow_evidence_scope_must_match_intent() -> None:
+    gate = ShadowExecutionGate((capability(),))
+    result = gate.assess(
+        intent(),
+        evidence=evidence(target_alias="other-light"),
+        evaluated_at=NOW,
+    )
+
+    assert result.gate.reason_code == "state_scope_mismatch"
+    assert result.result is ShadowResult.INDETERMINATE
 
 
 def test_registry_is_not_persisted_or_replayed() -> None:
@@ -224,6 +257,61 @@ def test_audit_output_contains_only_safe_contract_fields() -> None:
     }
     assert "private" not in str(payload)
     assert "must never" not in str(payload)
+    assert "must never" not in repr(intent(reason="must never appear"))
+    assert "not-copied" not in repr(evidence(current_state={"private": "not-copied"}))
+
+
+def test_bounded_value_validator_fails_closed() -> None:
+    bounded = CapabilityDescriptor(
+        target_alias="test-light",
+        capability="set-level",
+        control_owner="sumicore",
+        allowed_desired_states=(),
+        verification_method="read-back",
+        maximum_state_age=timedelta(seconds=30),
+        desired_state_validator=lambda value: type(value) is int and 0 <= value <= 100,
+    )
+    gate = ShadowExecutionGate((bounded,))
+
+    accepted = gate.assess(
+        intent(capability="set-level", desired_state=50),
+        evidence=evidence(capability="set-level"),
+        evaluated_at=NOW,
+    )
+    rejected = gate.assess(
+        intent(
+            operation_id="operation-2",
+            capability="set-level",
+            desired_state=101,
+        ),
+        evidence=evidence(capability="set-level"),
+        evaluated_at=NOW,
+    )
+
+    assert accepted.result is ShadowResult.WOULD_DISPATCH
+    assert rejected.gate.reason_code == "desired_state_invalid"
+
+
+def test_validator_exception_is_blocked() -> None:
+    def broken_validator(_):
+        raise RuntimeError("fixture validator failure")
+
+    bounded = CapabilityDescriptor(
+        target_alias="test-light",
+        capability="set-level",
+        control_owner="sumicore",
+        allowed_desired_states=(),
+        verification_method="read-back",
+        maximum_state_age=timedelta(seconds=30),
+        desired_state_validator=broken_validator,
+    )
+    result = ShadowExecutionGate((bounded,)).assess(
+        intent(capability="set-level", desired_state=50),
+        evidence=evidence(capability="set-level"),
+        evaluated_at=NOW,
+    )
+
+    assert result.gate.reason_code == "desired_state_invalid"
 
 
 def test_contract_rejects_unsafe_aliases_and_naive_timestamps() -> None:

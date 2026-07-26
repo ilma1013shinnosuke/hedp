@@ -68,7 +68,9 @@ _IPV4 = re.compile(
     r"(?:25[0-5]|2[0-4]\d|1?\d?\d)\."
     r"){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d)"
 )
-_MAC_ADDRESS = re.compile(r"(?i)(?<![0-9a-f])(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])")
+_MAC_ADDRESS = re.compile(
+    r"(?i)(?<![0-9a-f])(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])"
+)
 _CREDENTIAL_VALUE = re.compile(
     r"(?i)(?:\b(?:bearer|basic)\s+[a-z0-9._~+/=-]+|"
     r"\b(?:access_token|refresh_token|client_secret|password)\s*[:=])"
@@ -140,13 +142,13 @@ class ReadOnlyOfflineQualificationChecker:
             raw_data.metadata
         ):
             reasons.append("forbidden_key_present")
-        if _contains_network_address(
-            raw_data.payload
-        ) or _contains_network_address(raw_data.metadata):
+        if _contains_network_address(raw_data.payload) or _contains_network_address(
+            raw_data.metadata
+        ):
             reasons.append("network_address_present")
-        if _contains_credential_value(
-            raw_data.payload
-        ) or _contains_credential_value(raw_data.metadata):
+        if _contains_credential_value(raw_data.payload) or _contains_credential_value(
+            raw_data.metadata
+        ):
             reasons.append("credential_value_present")
         if _contains_nonfinite(raw_data.payload) or _contains_nonfinite(
             raw_data.metadata
@@ -236,10 +238,15 @@ def _has_invalid_quality(value: object) -> bool:
 def _validate_evidence(raw_data: RawData) -> tuple[int, bool]:
     evidence = raw_data.payload.get("evidence_sha256")
     if raw_data.source == "ecocute_echonet_lite":
-        values = (
-            raw_data.payload.get("property_map_response_hex"),
-            raw_data.payload.get("state_response_hex"),
-        )
+        property_map = raw_data.payload.get("property_map_response_hex")
+        state_responses = raw_data.payload.get("state_response_hex")
+        if isinstance(state_responses, str):
+            # Backward-compatible acceptance of the original single batch.
+            values = (property_map, state_responses)
+        elif isinstance(state_responses, list) and state_responses:
+            values = (property_map, *state_responses)
+        else:
+            return 0, False
         return len(values), all(
             isinstance(value, str) and _HEX.fullmatch(value) is not None
             for value in values

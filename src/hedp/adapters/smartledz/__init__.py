@@ -36,6 +36,7 @@ from .read_commands import (
 )
 from .state import (
     DeviceReference,
+    DeviceState,
     GroupDetail,
     GroupState,
     IlluminanceReading,
@@ -49,8 +50,15 @@ from .state import (
     normalize_group_detail,
     normalize_group_list,
     normalize_illuminance,
+    normalize_device_state,
     normalize_schedule_detail,
     normalize_sensor_list,
+    unsupported_device_state,
+)
+from .notifications import (
+    NormalizedNotification,
+    NotificationDisposition,
+    SmartLedzNotificationNormalizer,
 )
 from .transport import SmartLedzTcpReadTransport, SmartLedzTransportError
 
@@ -63,6 +71,7 @@ __all__ = [
     "Quality",
     "SENSOR_TYPE_CODES",
     "DeviceReference",
+    "DeviceState",
     "GroupDetail",
     "GroupState",
     "IlluminanceReading",
@@ -85,6 +94,9 @@ __all__ = [
     "ScheduleDetail",
     "ScheduleStep",
     "SensorState",
+    "NormalizedNotification",
+    "NotificationDisposition",
+    "SmartLedzNotificationNormalizer",
     "decode_frame",
     "encode_frames",
     "correlate_read_responses",
@@ -93,6 +105,7 @@ __all__ = [
     "group_get",
     "group_list",
     "normalize_device_response",
+    "normalize_device_state",
     "normalize_group_response",
     "normalize_group_detail",
     "normalize_group_list",
@@ -104,6 +117,7 @@ __all__ = [
     "normalize_schedule_detail",
     "normalize_sensor_list",
     "normalize_sensor_response",
+    "unsupported_device_state",
     "reassemble",
     "schedule_get",
     "sensor_lux",

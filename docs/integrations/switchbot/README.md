@@ -41,7 +41,20 @@ rate limitと、機種別profileを分ける。同型機器の追加は家庭固
 - `working_status`の保存漏れを修正した。
 - 既知profileの正常成功応答はRaw本文を重複保存せず、未知・異常時だけ証拠を残す。
 - profileへ取得周期と成功Raw方針を追加した。
-- 操作APIは追加せず、profile追加だけで操作可能にならない境界を維持した。
+- collectorと`SwitchBotClient`には書き込みrouteを追加せず、profile追加だけで操作可能に
+  ならない境界を維持した。
+
+## 2026-07-27に反映したロボット状態・操作契約
+
+- cleaner statusを型付き`RobotState`へ接続し、既存の生`working_status`を保ったまま、
+  canonicalな`robot_working_status`、`charging_status`、`task_status`、
+  `water_base_battery_percent`、`status_quality`を保存する。
+- 未知のstatus値は正常値へ推測せず、成功Raw保持理由`unknown_status_values`として残す。
+- 公式device type `Mini Robot Vacuum K10+`をK10+ command familyとして認識する。
+- S10 `startClean`の`times`は証拠のある`1`だけを許可し、他の回数は新しいfixtureまたは
+  公式根拠が得られるまで拒否する。
+- 操作contractはcollectorとHTTP clientから分離する。read-backは送信試行以後かつ
+  検証時刻以前で、qualityが`good`の状態だけを成功根拠にする。
 
 ## 残る改善点
 
@@ -56,7 +69,8 @@ CSV等に明示時刻があるimportは従来どおりその時刻と精度を�
 - OpenAPI、BLE、手動importの由来と精度を分離する。
 - 実測に基づいて機種ごとの取得周期を調整する。
 - 照明、人感、在室fieldは実機schema確認後に正式な保存項目へ昇格する。
-- 操作APIは共通Execution実装前に既存collectorへ追加しない。
+- 書き込みrouteは共通Executionとの接続、安全確認、匿名fixtureが揃うまで既存collectorや
+  `SwitchBotClient`へ追加しない。
 
 ## 保存
 

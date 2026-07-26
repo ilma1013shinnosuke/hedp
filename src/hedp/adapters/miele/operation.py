@@ -1,0 +1,260 @@
+"""Offline-only operation contract for Miele scheduled-program start.
+
+This module intentionally contains no HTTP path, request payload, credentials,
+or dispatch implementation.  It can only decide whether a typed request would
+be eligible for a future, separately qualified transport.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+import re
+from typing import Protocol
+
+from hedp.observations import Quality
+
+
+_SAFE_REF = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+
+class MieleCommand(str, Enum):
+    START_SCHEDULED_PROGRAM = "START_SCHEDULED_PROGRAM"
+
+
+class MieleDryRunOutcome(str, Enum):
+    WOULD_DISPATCH = "would_dispatch"
+    WOULD_BLOCK = "would_block"
+    INDETERMINATE = "indeterminate"
+
+
+class MieleReadbackUnavailable(RuntimeError):
+    """Sanitized read-only failure; raw vendor details must not be included."""
+
+
+@dataclass(frozen=True)
+class StartScheduledProgramRequest:
+    """Vendor-neutral request to start the program already scheduled on-device."""
+
+    operation_id: str
+    target_alias: str
+    requested_at: datetime
+    command: MieleCommand = field(
+        default=MieleCommand.START_SCHEDULED_PROGRAM,
+        init=False,
+    )
+
+    def __post_init__(self) -> None:
+        _require_safe_ref("operation_id", self.operation_id)
+        _require_safe_ref("target_alias", self.target_alias)
+        _require_aware("requested_at", self.requested_at)
+
+
+@dataclass(frozen=True)
+class MieleCapabilitySnapshot:
+    """Short-lived, externally observed operation capability.
+
+    ``supported_commands`` records only what a qualified discovery path
+    observed.  It is not derived from model names or documentation guesses.
+    """
+
+    target_alias: str
+    supported_commands: frozenset[MieleCommand]
+    observed_at: datetime
+    max_age: timedelta
+    maximum_readback_age: timedelta
+    startable_status_codes: frozenset[int] = frozenset()
+
+    def __post_init__(self) -> None:
+        _require_safe_ref("target_alias", self.target_alias)
+        if not isinstance(self.supported_commands, frozenset):
+            raise TypeError("supported_commands must be a frozenset")
+        if any(not isinstance(item, MieleCommand) for item in self.supported_commands):
+            raise TypeError("supported_commands must contain MieleCommand values")
+        _require_aware("observed_at", self.observed_at)
+        _require_duration("max_age", self.max_age)
+        _require_duration("maximum_readback_age", self.maximum_readback_age)
+        if not isinstance(self.startable_status_codes, frozenset):
+            raise TypeError("startable_status_codes must be a frozenset")
+        for value in self.startable_status_codes:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError("startable_status_codes must contain integers")
+
+    def is_fresh_at(self, value: datetime) -> bool:
+        _require_aware("evaluated_at", value)
+        age = value.astimezone(timezone.utc) - self.observed_at.astimezone(timezone.utc)
+        return timedelta(0) <= age <= self.max_age
+
+
+@dataclass(frozen=True)
+class MieleProgramReadback:
+    """Sanitized state used only as pre-dispatch evidence."""
+
+    target_alias: str
+    observed_at: datetime
+    quality: Quality
+    status_code: int | None
+    program_id: int | None
+
+    def __post_init__(self) -> None:
+        _require_safe_ref("target_alias", self.target_alias)
+        _require_aware("observed_at", self.observed_at)
+        if not isinstance(self.quality, Quality):
+            raise TypeError("quality must be a Quality value")
+        for name in ("status_code", "program_id"):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int)
+            ):
+                raise TypeError(f"{name} must be an integer or None")
+        if self.quality is Quality.GOOD and self.status_code is None:
+            raise ValueError("good readback must include status_code")
+
+
+class MieleProgramReadbackPort(Protocol):
+    """Read-only port; implementations must not start or modify a program."""
+
+    def read_program_state(self, target_alias: str) -> MieleProgramReadback: ...
+
+
+@dataclass(frozen=True)
+class MieleDryRunResult:
+    request: StartScheduledProgramRequest
+    outcome: MieleDryRunOutcome
+    reason_code: str
+    readback: MieleProgramReadback | None = None
+    dispatch_attempted: bool = False
+
+    def __post_init__(self) -> None:
+        if self.dispatch_attempted:
+            raise ValueError("Miele dry-run cannot dispatch")
+
+
+class MieleOperationGate:
+    """Capability and readback gate with no write transport."""
+
+    def __init__(
+        self,
+        capability_snapshot: MieleCapabilitySnapshot,
+        readback_port: MieleProgramReadbackPort,
+    ) -> None:
+        self._capability_snapshot = capability_snapshot
+        self._readback_port = readback_port
+
+    def assess(
+        self,
+        request: StartScheduledProgramRequest,
+        *,
+        evaluated_at: datetime,
+    ) -> MieleDryRunResult:
+        _require_aware("evaluated_at", evaluated_at)
+        snapshot = self._capability_snapshot
+        if request.target_alias != snapshot.target_alias:
+            return _result(request, MieleDryRunOutcome.WOULD_BLOCK, "target_mismatch")
+        if request.requested_at > evaluated_at:
+            return _result(
+                request,
+                MieleDryRunOutcome.WOULD_BLOCK,
+                "request_time_invalid",
+            )
+        if not snapshot.is_fresh_at(evaluated_at):
+            return _result(
+                request,
+                MieleDryRunOutcome.INDETERMINATE,
+                "capability_snapshot_stale",
+            )
+        if request.command not in snapshot.supported_commands:
+            return _result(
+                request,
+                MieleDryRunOutcome.WOULD_BLOCK,
+                "command_not_advertised",
+            )
+
+        try:
+            readback = self._readback_port.read_program_state(request.target_alias)
+        except MieleReadbackUnavailable:
+            return _result(
+                request,
+                MieleDryRunOutcome.INDETERMINATE,
+                "readback_unavailable",
+            )
+        if readback.target_alias != request.target_alias:
+            return _result(
+                request,
+                MieleDryRunOutcome.INDETERMINATE,
+                "readback_target_mismatch",
+                readback,
+            )
+        if readback.quality is not Quality.GOOD:
+            return _result(
+                request,
+                MieleDryRunOutcome.INDETERMINATE,
+                "readback_quality_insufficient",
+                readback,
+            )
+        if readback.program_id is None:
+            return _result(
+                request,
+                MieleDryRunOutcome.INDETERMINATE,
+                "scheduled_program_missing",
+                readback,
+            )
+        if not snapshot.startable_status_codes:
+            return _result(
+                request,
+                MieleDryRunOutcome.INDETERMINATE,
+                "startable_status_capability_missing",
+                readback,
+            )
+        if readback.status_code not in snapshot.startable_status_codes:
+            return _result(
+                request,
+                MieleDryRunOutcome.WOULD_BLOCK,
+                "status_not_startable",
+                readback,
+            )
+        age = evaluated_at.astimezone(timezone.utc) - readback.observed_at.astimezone(
+            timezone.utc
+        )
+        if not timedelta(0) <= age <= snapshot.maximum_readback_age:
+            return _result(
+                request,
+                MieleDryRunOutcome.INDETERMINATE,
+                "readback_not_fresh",
+                readback,
+            )
+        return _result(
+            request,
+            MieleDryRunOutcome.WOULD_DISPATCH,
+            "conditions_satisfied",
+            readback,
+        )
+
+
+def _result(
+    request: StartScheduledProgramRequest,
+    outcome: MieleDryRunOutcome,
+    reason_code: str,
+    readback: MieleProgramReadback | None = None,
+) -> MieleDryRunResult:
+    return MieleDryRunResult(request, outcome, reason_code, readback)
+
+
+def _require_safe_ref(name: str, value: str) -> None:
+    if not isinstance(value, str) or not _SAFE_REF.fullmatch(value):
+        raise ValueError(f"{name} must be a safe opaque reference")
+
+
+def _require_aware(name: str, value: datetime) -> None:
+    if not isinstance(value, datetime):
+        raise TypeError(f"{name} must be a datetime")
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware")
+
+
+def _require_duration(name: str, value: timedelta) -> None:
+    if not isinstance(value, timedelta):
+        raise TypeError(f"{name} must be a timedelta")
+    if value <= timedelta(0) or value > timedelta(hours=24):
+        raise ValueError(f"{name} must be greater than 0 and at most 24 hours")

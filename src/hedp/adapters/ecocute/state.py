@@ -77,6 +77,55 @@ def normalize_observation(
     )
 
 
+def normalize_requested_observation(
+    frame: EchonetFrame,
+    *,
+    requested_epcs: tuple[int, ...],
+    time: ObservationTime,
+) -> EcoCuteObservation:
+    """Normalize a Get response and make a partial response explicit.
+
+    ECHONET devices may return fewer properties than requested.  The omitted
+    EPCs are represented as missing values rather than being silently dropped
+    or filled from a previous poll.  Extra EPCs are ignored at this boundary:
+    some observed devices return a stable status subset with every Get, and
+    only the properties in the correlated request belong to this batch.
+    """
+
+    if len(requested_epcs) != len(set(requested_epcs)):
+        raise ValueError("requested_epcs must not contain duplicates")
+    observation = normalize_observation(frame, time=time)
+    if observation.source is not ObservationSource.PERIODIC:
+        raise FrameError("requested observation must be a Get response")
+    requested = set(requested_epcs)
+    by_epc = {
+        prop.epc: prop for prop in observation.properties if prop.epc in requested
+    }
+    properties = tuple(
+        by_epc.get(
+            epc,
+            PropertyObservation(
+                epc,
+                confirmed_property_name(epc),
+                ObservedValue(None, Quality.MISSING, "requested_property_missing"),
+            ),
+        )
+        for epc in requested_epcs
+    )
+    quality = (
+        Quality.GOOD
+        if all(prop.reading.quality == Quality.GOOD for prop in properties)
+        else Quality.UNKNOWN
+    )
+    return EcoCuteObservation(
+        observation.source,
+        properties,
+        time,
+        observation.transaction_id,
+        quality,
+    )
+
+
 def _normalize_property(prop: EchonetProperty) -> PropertyObservation:
     name = confirmed_property_name(prop.epc)
     if not prop.data:

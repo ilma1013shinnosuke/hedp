@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import json
-from typing import Protocol
+import time
+from typing import Callable, Protocol
 from urllib.parse import urlparse
 
 import requests
 
 from .sse import SseEvent, parse_sse
+
+
+MIELE_API_ORIGINS = frozenset({"https://api.mcs3.miele.com"})
 
 
 class MieleTransportError(RuntimeError):
@@ -41,9 +45,18 @@ class MieleReadOnlyHttpTransport:
         rest_timeout_seconds: float = 15.0,
         maximum_rest_bytes: int = 2 * 1024 * 1024,
         session: _Session | None = None,
+        allowed_origins: frozenset[str] = MIELE_API_ORIGINS,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         _require_https_url("devices_url", devices_url)
         _require_https_url("events_url", events_url)
+        _require_allowed_origins(allowed_origins)
+        devices_origin = _origin(devices_url)
+        events_origin = _origin(events_url)
+        if devices_origin != events_origin:
+            raise ValueError("Miele devices and events URLs must have the same origin")
+        if devices_origin not in allowed_origins:
+            raise ValueError("Miele API origin is not allowlisted")
         if not access_token:
             raise ValueError("access_token must not be empty")
         if not 0 < rest_timeout_seconds <= 120:
@@ -61,6 +74,7 @@ class MieleReadOnlyHttpTransport:
         self._rest_timeout_seconds = rest_timeout_seconds
         self._maximum_rest_bytes = maximum_rest_bytes
         self._session = session or requests.Session()
+        self._monotonic = monotonic
 
     def devices(self) -> object:
         response = self._get(
@@ -94,9 +108,8 @@ class MieleReadOnlyHttpTransport:
         if not 1 <= maximum_events <= 1_024:
             raise ValueError("maximum_events must be between 1 and 1024")
         if not 0 < timeout_seconds <= 300:
-            raise ValueError(
-                "timeout_seconds must be greater than 0 and at most 300"
-            )
+            raise ValueError("timeout_seconds must be greater than 0 and at most 300")
+        deadline = self._monotonic() + timeout_seconds
         response = self._get(
             self._events_url,
             accept="text/event-stream",
@@ -104,7 +117,16 @@ class MieleReadOnlyHttpTransport:
             stream=True,
         )
         try:
-            for index, event in enumerate(parse_sse(response.iter_lines()), start=1):
+            if self._monotonic() >= deadline:
+                raise MieleTransportError("Miele SSE total timeout exceeded")
+            lines = _deadline_lines(
+                response.iter_lines(),
+                deadline=deadline,
+                monotonic=self._monotonic,
+            )
+            for index, event in enumerate(parse_sse(lines), start=1):
+                if self._monotonic() >= deadline:
+                    raise MieleTransportError("Miele SSE total timeout exceeded")
                 yield event
                 if index >= maximum_events:
                     break
@@ -149,3 +171,33 @@ def _require_https_url(name: str, value: str) -> None:
         or parsed.fragment
     ):
         raise ValueError(f"{name} must be an HTTPS URL without credentials or fragment")
+
+
+def _origin(value: str) -> str:
+    parsed = urlparse(value)
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    return f"{parsed.scheme}://{parsed.hostname}{port}"
+
+
+def _require_allowed_origins(values: frozenset[str]) -> None:
+    if not isinstance(values, frozenset) or not values:
+        raise ValueError("allowed_origins must be a non-empty frozenset")
+    for value in values:
+        _require_https_url("allowed origin", value)
+        parsed = urlparse(value)
+        if parsed.path not in {"", "/"} or parsed.query:
+            raise ValueError("allowed origins must not include a path or query")
+        if value.rstrip("/") != _origin(value):
+            raise ValueError("allowed origins must use canonical origin syntax")
+
+
+def _deadline_lines(
+    lines: Iterator[bytes],
+    *,
+    deadline: float,
+    monotonic: Callable[[], float],
+) -> Iterator[bytes]:
+    for line in lines:
+        if monotonic() >= deadline:
+            raise MieleTransportError("Miele SSE total timeout exceeded")
+        yield line

@@ -81,6 +81,26 @@ class DeviceReference:
 
 
 @dataclass(frozen=True)
+class DeviceState:
+    """Individual-light state with no inferred fields.
+
+    ``DeviceGet`` is a confirmed read command, but no anonymous 2.0.4 fixture
+    currently establishes its state row.  The optional fields therefore stay
+    missing and the support boundary remains explicit.
+    """
+
+    target_ref: str = field(repr=False)
+    power: bool | None
+    brightness_pct: int | None
+    color_temperature_100k: int | None
+    rgb: int | None
+    online: bool | None
+    quality: Quality
+    time: ObservationTime
+    reason: str
+
+
+@dataclass(frozen=True)
 class SensorState:
     target_ref: str = field(repr=False)
     device_type: int
@@ -103,6 +123,77 @@ class GroupDetail:
     scenes: ParsedCollection[SceneDefinition]
     schedules: ParsedCollection[ScheduleDefinition]
     devices: ParsedCollection[DeviceReference]
+
+
+def unsupported_device_state(
+    *,
+    target_ref: str,
+    time: ObservationTime,
+) -> DeviceState:
+    """Return the finite contract used until a device-state fixture exists."""
+
+    if not isinstance(target_ref, str) or not target_ref:
+        raise ValueError("target_ref must not be empty")
+    return DeviceState(
+        target_ref,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Quality.UNKNOWN,
+        time,
+        "device_state_schema_unverified",
+    )
+
+
+def normalize_device_state(
+    response: object,
+    *,
+    target_ref: str,
+    time: ObservationTime,
+) -> DeviceState:
+    """Keep ``DeviceGet`` explicitly unsupported until its schema is proven."""
+
+    state = unsupported_device_state(target_ref=target_ref, time=time)
+    if not isinstance(response, Mapping):
+        return DeviceState(
+            target_ref,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Quality.INVALID,
+            time,
+            "response_not_object",
+        )
+    code = response.get("ErrorCode")
+    if isinstance(code, bool) or not isinstance(code, int):
+        return DeviceState(
+            target_ref,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Quality.MISSING,
+            time,
+            "error_code_missing_or_invalid",
+        )
+    if code != 0:
+        return DeviceState(
+            target_ref,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Quality.UNKNOWN,
+            time,
+            "gateway_rejected_request",
+        )
+    return state
 
 
 def _integer(value: object) -> int | None:

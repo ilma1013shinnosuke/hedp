@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
+
+from hedp.adapters.switchbot.robot_state import normalize_robot_state
 
 
 @dataclass(frozen=True)
@@ -48,7 +51,13 @@ STATUS_PROFILES = (
     SwitchBotStatusProfile(
         "cleaner",
         ("k10", "s10", "s20", "robot vacuum"),
-        ("battery", "onlineStatus", "workingStatus"),
+        (
+            "battery",
+            "onlineStatus",
+            "workingStatus",
+            "taskType",
+            "waterBaseBattery",
+        ),
         3600,
     ),
     SwitchBotStatusProfile(
@@ -117,13 +126,18 @@ def success_raw_retention_reasons(
         reasons.append("empty_body")
     if normalized["unknown_status_fields"]:
         reasons.append("unknown_status_fields")
+    if normalized["unknown_status_values"]:
+        reasons.append("unknown_status_values")
     if normalized["measurement_status"] != "observed":
         reasons.append("abnormal_measurement")
     return tuple(reasons)
 
 
 def normalize_status(
-    device: dict[str, Any], body: dict[str, Any]
+    device: dict[str, Any],
+    body: dict[str, Any],
+    *,
+    observed_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Normalize only fields whose meaning is established in the main schema.
 
@@ -137,6 +151,11 @@ def normalize_status(
     recognized = set(COMMON_FIELDS)
     if profile is not None:
         recognized.update(profile.fields)
+    robot_state = (
+        normalize_robot_state(body, observed_at=observed_at)
+        if profile is not None and profile.name == "cleaner" and observed_at is not None
+        else None
+    )
 
     zero_unavailable = (
         profile is not None
@@ -160,7 +179,30 @@ def normalize_status(
         "power_consumed_daily_w": body.get("weight"),
         "usage_minutes_of_day": body.get("electricityOfDay"),
         "online_status": body.get("onlineStatus"),
+        # Keep the established Raw vocabulary for backward compatibility.
         "working_status": body.get("workingStatus"),
+        "robot_working_status": (
+            robot_state.working_status.value if robot_state is not None else None
+        ),
+        "charging_status": (
+            robot_state.charging_status.value if robot_state is not None else None
+        ),
+        "task_status": (
+            robot_state.task_status.value
+            if robot_state is not None
+            else body.get("taskType")
+        ),
+        "water_base_battery_percent": (
+            robot_state.water_base_battery_percent
+            if robot_state is not None
+            else body.get("waterBaseBattery")
+        ),
+        "status_quality": robot_state.quality.value
+        if robot_state is not None
+        else None,
+        "unknown_status_values": (
+            robot_state.unknown_values if robot_state is not None else ()
+        ),
         "measurement_status": (
             "battery_depleted_or_unavailable" if zero_unavailable else "observed"
         ),

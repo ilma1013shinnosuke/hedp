@@ -11,12 +11,12 @@ from .normalizer import normalize_content, normalize_power, normalize_volume
 class ReadBatch:
     """別のtransportが取得したread-only応答だけを受け取るオフライン境界。"""
 
-    power_response: Mapping[str, Any]
-    volume_response: Mapping[str, Any]
-    content_response: Mapping[str, Any]
+    power_response: Mapping[str, Any] = field(repr=False)
+    volume_response: Mapping[str, Any] = field(repr=False)
+    content_response: Mapping[str, Any] = field(repr=False)
     observed_at: str
     received_at: str
-    unknown: dict[str, Any] = field(default_factory=dict)
+    unknown: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
 def normalize_read_batch(batch: ReadBatch) -> NormalizedState:
@@ -28,5 +28,13 @@ def normalize_read_batch(batch: ReadBatch) -> NormalizedState:
         content=normalize_content(batch.content_response),
         observed_at=batch.observed_at,
         received_at=batch.received_at,
-        unknown=dict(batch.unknown),
+        unknown=_schema_evidence(batch.unknown, frozenset()),
     )
+
+
+def _schema_evidence(
+    value: Mapping[object, object],
+    known_fields: frozenset[str],
+) -> dict[str, int]:
+    count = sum(1 for key in value if key not in known_fields)
+    return {"field_count": count} if count else {}

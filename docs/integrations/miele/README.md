@@ -3,7 +3,7 @@
 - knowledge_status: `offline-implementation-confirmed`
 - reviewed_at: 2026-07-26
 - primary_transport: Miele cloud OAuth REST + SSE候補
-- initial_scope: read-only
+- initial_scope: read-only + offline operation contract
 
 ## 現在の知見
 
@@ -18,9 +18,20 @@ SSE framing、resume、認証失効、429/5xxの契約がないため、推測�
 
 ## 初期Adapter
 
-OAuth、REST、SSE接続をtransportに隔離し、readerだけを公開する。SSEが利用不能な場合の
+OAuth、REST、SSE接続をtransportに隔離し、readerを公開する。SSEが利用不能な場合の
 低頻度poll fallbackは、API負荷とrate limitを確認してから採用する。家電操作executorは
-作らない。
+作らない。例外として、`START_SCHEDULED_PROGRAM`の型付きrequest、短命なcapability
+snapshot、既存状態を再利用するreadback port、dry-run gateだけをオフライン契約として
+持つ。gateの`would_dispatch`は実機成功や受付を意味せず、通信は一切行わない。
+
+operation契約にはメーカーURL、HTTP method、payload、認証、dispatch transportを含めない。
+これらは公式仕様と対象実機で確認されるまで追加しない。capabilityが未広告、古い、対象が
+異なる、またはreadbackが欠損・低品質・古い場合は送信候補にしない。
+readbackが正常でも予約program IDを確認できない場合は、開始可能とは判定せず
+`scheduled_program_missing`として結果不明のまま止める。
+開始可能なstatus codeも短命なcapability snapshotで実測済みの集合として渡す。集合が
+未確認なら`startable_status_capability_missing`、現在statusが集合外なら
+`status_not_startable`とし、program IDだけで開始可能とは判定しない。
 
 正式なオフラインReader契約は`src/hedp/adapters/miele/`へ置く。REST snapshotとSSE stateを
 同じ状態modelへ正規化し、status、program、phase、残時間、経過時間、予約時刻、温度、
@@ -47,6 +58,11 @@ SSE収集は一回に処理するevent数と接続timeoutへ必ず上限を設�
 再接続loopを持たない。切断後の再接続回数、総時間、backoff、RESTによる状態回復は、
 rate limitと実機挙動を確認してから外側の運用部品へ実装する。
 
+SSE eventはpayload内のdevice IDが設定済み`source_device_id`と完全一致し、かつtype 24
+である場合だけ採用する。直接stateだけのeventや別機器のtype-24 stateは帰属不能として
+破棄する。接続timeoutはsocket inactivityだけでなく単調時計による総wall-clock期限として
+各受信lineでも検査するため、heartbeatだけが続いても期限を延長しない。
+
 Reader、GET専用HTTP transport、SSE parser、Collectorは匿名fixtureによるオフライン試験済みで、
 macOS固有APIへ依存しないためLinuxでも利用できる。OAuth token取得・更新、実SSE長時間接続、認証失効、
 429/5xx、現役DB保存、定期実行は未確認であり、本番稼働済みとは扱わない。
@@ -57,6 +73,11 @@ macOS固有APIへ依存しないためLinuxでも利用できる。OAuth token�
 `SUMICORE_MIELE_SSE_TIMEOUT_SECONDS`、`SUMICORE_MIELE_MAXIMUM_EVENTS`である。
 移行期間中は同名の`HEDP_`接頭辞も受け付ける。URL、token、device IDはfixture、文書、
 ログへ値を保存しない。
+
+HTTP transportはdevices/events URLのorigin完全一致を要求し、既定では
+`https://api.mcs3.miele.com`だけを許可する。匿名fixture試験ではconstructorへ明示した
+test originだけを追加できる。環境変数のURLだけでBearer tokenの送信先allowlistを
+拡張することはできない。
 
 ## 秘密
 

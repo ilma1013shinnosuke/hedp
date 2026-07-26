@@ -8,6 +8,7 @@ from .echonet import (
     FrameError,
     ReadOnlyCapability,
     build_get_request,
+    build_setc_request,
     classify_read_only_capabilities,
     confirmed_property_name,
     decode_property_map,
@@ -19,6 +20,7 @@ from .state import (
     ObservationSource,
     PropertyObservation,
     normalize_observation,
+    normalize_requested_observation,
 )
 from .collector import CONFIRMED_STATE_EPCS, EcoCuteReadOnlyCollector
 from .transport import (
@@ -47,10 +49,12 @@ __all__ = [
     "PropertyObservation",
     "ReadOnlyCapability",
     "build_get_request",
+    "build_setc_request",
     "classify_read_only_capabilities",
     "confirmed_property_name",
     "decode_property_map",
     "decode_property_maps",
     "parse_frame",
     "normalize_observation",
+    "normalize_requested_observation",
 ]

@@ -12,6 +12,7 @@ SET_RESPONSE = 0x71
 WATER_HEATER_CLASS = bytes((0x02, 0x6B))
 CONTROLLER_OBJECT = bytes((0x05, 0xFF, 0x01))
 PROPERTY_MAP_EPCS = frozenset((0x9D, 0x9E, 0x9F))
+MAX_GET_PROPERTIES = 4
 
 # Names are labels for values whose semantics were confirmed during the
 # read-only observation.  Unlisted EPCs remain usable as numeric properties
@@ -21,15 +22,24 @@ _CONFIRMED_PROPERTY_NAMES = {
     0x86: "manufacturer_fault_code",
     0x88: "fault_state",
     0x89: "fault_detail",
+    0x93: "remote_operation_setting",
     0x9D: "inf_property_map",
     0x9E: "set_property_map",
     0x9F: "get_property_map",
     0xB0: "heating_mode",
     0xB2: "heating_active",
+    0xC0: "daytime_boost_allowed",
     0xC3: "hot_water_in_use",
+    0xC7: "energy_shift_participation",
+    0xC8: "heating_start_base_time",
+    0xC9: "energy_shift_count",
+    0xCA: "daytime_heating_shift_time_1",
+    0xCB: "predicted_heating_energy_1",
+    0xCC: "hourly_energy_profile_1",
     0xD1: "supply_temperature_setpoint_c",
     0xD3: "bath_temperature_setpoint_c",
     0xE1: "remaining_hot_water_l",
+    0xE3: "bath_auto_enabled",
     0xEA: "bath_operation_state",
 }
 
@@ -54,10 +64,10 @@ class EchonetFrame:
 
     @property
     def is_water_heater_response(self) -> bool:
-        return (
-            self.source_object[:2] == WATER_HEATER_CLASS
-            and self.service in {GET_RESPONSE, INFORMATION}
-        )
+        return self.source_object[:2] == WATER_HEATER_CLASS and self.service in {
+            GET_RESPONSE,
+            INFORMATION,
+        }
 
 
 @dataclass(frozen=True)
@@ -113,8 +123,8 @@ def build_get_request(
         raise ValueError("instance_code must be between 1 and 255")
     if not epcs:
         raise ValueError("epcs must not be empty")
-    if len(epcs) > 0xFF:
-        raise ValueError("at most 255 EPCs may be requested")
+    if len(epcs) > MAX_GET_PROPERTIES:
+        raise ValueError("at most four EPCs may be requested")
     if len(set(epcs)) != len(epcs):
         raise ValueError("epcs must not contain duplicates")
     for epc in epcs:
@@ -179,6 +189,52 @@ def build_set_request(
     )
 
 
+def build_setc_request(
+    *,
+    transaction_id: int,
+    properties: tuple[EchonetProperty, ...],
+    instance_code: int = 1,
+) -> bytes:
+    """Build one finite, multi-property ECHONET Lite SetC request.
+
+    EcoCute operations that were recovered from the verified controller use a
+    remote-operation marker followed by one operation property in the *same*
+    SetC frame.  This builder preserves that ordering while assigning no
+    semantics to either property.
+    """
+
+    if not properties:
+        raise ValueError("properties must not be empty")
+    if len(properties) > 0xFF:
+        raise ValueError("at most 255 properties may be set")
+    if len({prop.epc for prop in properties}) != len(properties):
+        raise ValueError("properties must not contain duplicate EPCs")
+    for prop in properties:
+        if not isinstance(prop, EchonetProperty):
+            raise TypeError("each property must be an EchonetProperty")
+        if isinstance(prop.epc, bool) or not isinstance(prop.epc, int):
+            raise TypeError("each EPC must be an integer")
+        if not 0 <= prop.epc <= 0xFF:
+            raise ValueError("each EPC must be between 0 and 255")
+        if not isinstance(prop.data, bytes) or not prop.data:
+            raise ValueError("each property data must be non-empty bytes")
+        if len(prop.data) > 0xFF:
+            raise ValueError("each property data must contain at most 255 bytes")
+
+    # Reuse the single-property builder for shared transaction and instance
+    # validation, then replace its OPC/property tail deterministically.
+    prefix = build_set_request(
+        transaction_id=transaction_id,
+        epc=properties[0].epc,
+        data=properties[0].data,
+        instance_code=instance_code,
+    )[:11]
+    encoded = b"".join(
+        bytes((prop.epc, len(prop.data))) + prop.data for prop in properties
+    )
+    return prefix + bytes((len(properties),)) + encoded
+
+
 def parse_frame(raw: bytes) -> EchonetFrame:
     if not isinstance(raw, bytes):
         raise TypeError("raw must be bytes")
@@ -228,7 +284,9 @@ def decode_property_map(prop: EchonetProperty) -> EchonetPropertyMap:
         epcs = prop.data[1:]
     else:
         if len(prop.data) != 17:
-            raise FrameError(f"EPC {prop.epc:02X} bitmap property map has invalid length")
+            raise FrameError(
+                f"EPC {prop.epc:02X} bitmap property map has invalid length"
+            )
         epcs = bytes(
             ((high_nibble + 8) << 4) | low_nibble
             for low_nibble, bitmap in enumerate(prop.data[1:])
@@ -236,7 +294,9 @@ def decode_property_map(prop: EchonetProperty) -> EchonetPropertyMap:
             if bitmap & (1 << high_nibble)
         )
         if len(epcs) != count:
-            raise FrameError(f"EPC {prop.epc:02X} bitmap property map has invalid count")
+            raise FrameError(
+                f"EPC {prop.epc:02X} bitmap property map has invalid count"
+            )
 
     if len(set(epcs)) != len(epcs):
         raise FrameError(f"EPC {prop.epc:02X} property map contains duplicate EPCs")
@@ -273,7 +333,7 @@ def classify_read_only_capabilities(
 
 
 def decode_known_property(prop: EchonetProperty) -> object:
-    if prop.epc in {0x80, 0xB2, 0xC0, 0xC3, 0xE3}:
+    if prop.epc in {0x80, 0x93, 0xB2, 0xC0, 0xC3, 0xE3}:
         if len(prop.data) != 1:
             raise FrameError(f"EPC {prop.epc:02X} must contain one byte")
         return {0x30: True, 0x31: False, 0x41: True, 0x42: False}.get(
@@ -291,6 +351,34 @@ def decode_known_property(prop: EchonetProperty) -> object:
             0x42: "manual_boost",
             0x43: "manual_stop",
         }.get(prop.data[0], "unknown")
+    if prop.epc == 0xC7:
+        if len(prop.data) != 1:
+            raise FrameError("EPC C7 must contain one byte")
+        return {
+            0x00: "not_participating",
+            0x01: "participating",
+        }.get(prop.data[0], "unknown")
+    if prop.epc == 0xC8:
+        if len(prop.data) != 1:
+            raise FrameError("EPC C8 must contain one byte")
+        return {
+            0x00: "20:00",
+            0x01: "21:00",
+            0x02: "22:00",
+            0x03: "23:00",
+            0x04: "00:00",
+            0x05: "01:00",
+        }.get(prop.data[0], "unknown")
+    if prop.epc == 0xC9:
+        if len(prop.data) != 1:
+            raise FrameError("EPC C9 must contain one byte")
+        return prop.data[0] if prop.data[0] <= 2 else "unknown"
+    if prop.epc == 0xCA:
+        if len(prop.data) != 1:
+            raise FrameError("EPC CA must contain one byte")
+        return (
+            f"{9 + prop.data[0]:02d}:00" if 0x00 <= prop.data[0] <= 0x08 else "unknown"
+        )
     if prop.epc in {0xD1, 0xD3}:
         if len(prop.data) != 1:
             raise FrameError(f"EPC {prop.epc:02X} must contain one byte")

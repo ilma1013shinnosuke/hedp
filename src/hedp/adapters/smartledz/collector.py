@@ -21,6 +21,7 @@ from .read_commands import (
     sensor_lux,
 )
 from .state import (
+    DeviceState,
     GroupDetail,
     ParsedCollection,
     normalize_group_detail,
@@ -28,6 +29,7 @@ from .state import (
     normalize_illuminance,
     normalize_schedule_detail,
     normalize_sensor_list,
+    unsupported_device_state,
 )
 
 
@@ -194,6 +196,14 @@ class SmartLedzReadOnlyCollector:
                 }
             )
 
+        # DeviceGet itself is confirmed, but its individual-state response row
+        # is not backed by an anonymous fixture.  Do not issue speculative
+        # requests; expose a finite unsupported contract for every safe alias.
+        device_states = [
+            _device_state(unsupported_device_state(target_ref=target_ref, time=time))
+            for target_ref in self._targets.device_aliases.values()
+        ]
+
         return RawData(
             source=self.source,
             timestamp=received_at,
@@ -203,6 +213,7 @@ class SmartLedzReadOnlyCollector:
                 "sensors": sensors,
                 "schedules": schedules,
                 "illuminance": illuminance,
+                "device_states": device_states,
                 "evidence_sha256": evidence,
             },
             metadata={
@@ -211,6 +222,7 @@ class SmartLedzReadOnlyCollector:
                 "group_count": len(self._targets.group_aliases),
                 "sensor_count": len(self._targets.sensor_aliases),
                 "schedule_count": len(self._targets.schedule_groups),
+                "device_state_support": "unsupported_schema_unverified",
             },
         )
 
@@ -282,6 +294,21 @@ def _sensor(value: object) -> dict[str, object]:
         "special_type_code": value.special_type_code,
         "online": value.online,
         "quality": value.quality.value,
+    }
+
+
+def _device_state(value: DeviceState) -> dict[str, object]:
+    return {
+        "target_ref": value.target_ref,
+        "power": value.power,
+        "brightness_pct": value.brightness_pct,
+        "color_temperature_100k": value.color_temperature_100k,
+        "rgb": value.rgb,
+        "online": value.online,
+        "quality": value.quality.value,
+        "reason": value.reason,
+        "observed_at": value.time.observed_at,
+        "received_at": value.time.received_at,
     }
 
 

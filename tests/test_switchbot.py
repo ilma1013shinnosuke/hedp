@@ -1,6 +1,7 @@
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
+import sqlite3
 from unittest.mock import Mock
 import zipfile
 
@@ -35,10 +36,17 @@ def test_refresh_tracks_device_name_and_location_history(tmp_path):
     client = Mock()
     client.devices.return_value = {
         "statusCode": 100,
-        "body": {"deviceList": [{
-            "deviceId": "outdoor-sensor", "deviceName": "外",
-            "deviceType": "WoIOSensor", "future": 1,
-        }], "infraredRemoteList": []},
+        "body": {
+            "deviceList": [
+                {
+                    "deviceId": "outdoor-sensor",
+                    "deviceName": "外",
+                    "deviceType": "WoIOSensor",
+                    "future": 1,
+                }
+            ],
+            "infraredRemoteList": [],
+        },
     }
     try:
         household = SwitchBotHouseholdConfiguration(
@@ -93,14 +101,28 @@ def test_collect_normalizes_types_empty_body_unknown_and_zero_status(tmp_path):
     bodies = {
         "meter": {"temperature": 20, "humidity": 50, "battery": 80},
         "co2": {"temperature": 21, "humidity": 51, "CO2": 700, "battery": 90},
-        "plug": {"power": "on", "electricCurrent": 1, "voltage": 100,
-                 "weight": 50, "electricityOfDay": 2},
-        "vac": {"battery": 70, "onlineStatus": "online", "workingStatus": "run"},
-        "remote": {}, "unknown": {"futureField": {"x": 1}},
+        "plug": {
+            "power": "on",
+            "electricCurrent": 1,
+            "voltage": 100,
+            "weight": 50,
+            "electricityOfDay": 2,
+        },
+        "vac": {
+            "battery": 70,
+            "onlineStatus": "online",
+            "workingStatus": "clearing",
+            "taskType": "cleanRoom",
+            "waterBaseBattery": 60,
+        },
+        "remote": {},
+        "unknown": {"futureField": {"x": 1}},
         "zero": {"temperature": 0, "humidity": 0, "battery": 0},
     }
     client.status.side_effect = lambda device_id: {
-        "statusCode": 100, "body": bodies[device_id], "message": "success"
+        "statusCode": 100,
+        "body": bodies[device_id],
+        "message": "success",
     }
     try:
         report = SwitchBotService(client, storage).collect()
@@ -132,10 +154,18 @@ def test_collect_normalizes_types_empty_body_unknown_and_zero_status(tmp_path):
     assert zero["battery_percent"] == 0
     assert zero["measurement_status"] == "battery_depleted_or_unavailable"
     vacuum = next(row for row in observations if row["device_id"] == "vac")
-    assert vacuum["working_status"] == "run"
-    assert next(item for item in report["results"] if item["device_id"] == "remote")[
-        "status_body_empty"
-    ] is True
+    assert vacuum["working_status"] == "clearing"
+    assert vacuum["robot_working_status"] == "cleaning"
+    assert vacuum["charging_status"] == "not_charging"
+    assert vacuum["task_status"] == "clean_room"
+    assert vacuum["water_base_battery_percent"] == 60
+    assert vacuum["status_quality"] == "good"
+    assert (
+        next(item for item in report["results"] if item["device_id"] == "remote")[
+            "status_body_empty"
+        ]
+        is True
+    )
 
 
 def test_profiles_are_read_only_extensible_and_report_unknown_fields():
@@ -187,11 +217,14 @@ def test_success_raw_policy_omits_normal_copy_but_keeps_schema_evidence():
         {"deviceType": "Meter"},
         {"temperature": 20, "humidity": 50, "battery": 90},
     )
-    assert success_raw_retention_reasons(
-        "Meter",
-        {"temperature": 20, "humidity": 50, "battery": 90},
-        normal,
-    ) == ()
+    assert (
+        success_raw_retention_reasons(
+            "Meter",
+            {"temperature": 20, "humidity": 50, "battery": 90},
+            normal,
+        )
+        == ()
+    )
 
     unknown = normalize_status(
         {"deviceType": "Future Sensor"},
@@ -209,6 +242,60 @@ def test_success_raw_policy_omits_normal_copy_but_keeps_schema_evidence():
         [],
         invalid,
     ) == ("invalid_body_shape",)
+
+    unknown_robot = normalize_status(
+        {"deviceType": "Mini Robot Vacuum K10+"},
+        {
+            "battery": 70,
+            "workingStatus": "newFirmwareState",
+            "taskType": "newTask",
+            "waterBaseBattery": 60,
+        },
+        observed_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+    assert unknown_robot["unknown_status_fields"] == ()
+    assert unknown_robot["unknown_status_values"] == (
+        "workingStatus",
+        "taskType",
+    )
+    assert success_raw_retention_reasons(
+        "Mini Robot Vacuum K10+",
+        {
+            "battery": 70,
+            "workingStatus": "newFirmwareState",
+            "taskType": "newTask",
+            "waterBaseBattery": 60,
+        },
+        unknown_robot,
+    ) == ("unknown_status_values",)
+
+
+def test_schema_v2_observation_table_gains_robot_state_columns(tmp_path):
+    database_path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(database_path)
+    connection.execute(
+        "CREATE TABLE switchbot_observations (device_id TEXT, observed_at_utc TEXT)"
+    )
+    connection.commit()
+    connection.close()
+
+    storage = SwitchBotStorage(str(database_path))
+    try:
+        connection = storage.connect()
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(switchbot_observations)")
+        }
+    finally:
+        storage.close()
+
+    assert {
+        "robot_working_status",
+        "charging_status",
+        "task_status",
+        "water_base_battery_percent",
+        "status_quality",
+    } <= columns
 
 
 def test_failed_switchbot_response_is_kept_only_in_collection_event(tmp_path):
@@ -282,11 +369,14 @@ def test_import_is_streamed_timezone_aware_idempotent_and_conflict_safe(tmp_path
 
 def test_import_blocks_different_value_same_timestamp_and_bad_rows(tmp_path):
     path = tmp_path / "書斎_data分.csv"
-    _write_csv(path, [
-        ["2024-01-01 00:00:00", "20", "50", "10", "9", "1"],
-        ["2024-01-01 00:00:00", "21", "50", "10", "9", "1"],
-        ["broken", "x", "", "", "", ""],
-    ])
+    _write_csv(
+        path,
+        [
+            ["2024-01-01 00:00:00", "20", "50", "10", "9", "1"],
+            ["2024-01-01 00:00:00", "21", "50", "10", "9", "1"],
+            ["broken", "x", "", "", "", ""],
+        ],
+    )
     storage = _storage(tmp_path)
     try:
         report = SwitchBotImporter(storage, FILENAME_DEVICE_IDS).run(path)["files"][0]
@@ -301,9 +391,7 @@ def test_import_filename_mapping_accepts_decomposed_japanese(tmp_path):
     path = tmp_path / "リビング_data分.csv"
     importer = SwitchBotImporter(Mock(), FILENAME_DEVICE_IDS)
     assert importer._device_id(path) == "living-sensor"
-    assert importer._device_id(tmp_path / "洗面_data.csv") == (
-        "washroom-sensor"
-    )
+    assert importer._device_id(tmp_path / "洗面_data.csv") == ("washroom-sensor")
 
 
 def test_canonical_key_treats_negative_and_positive_zero_as_equal():
@@ -318,12 +406,17 @@ def test_canonical_key_treats_negative_and_positive_zero_as_equal():
 def test_exact_observation_conflict_keeps_both(tmp_path):
     storage = _storage(tmp_path)
     base = {
-        "device_id": "device", "observed_at_utc": "2026-01-01T00:00:00+00:00",
+        "device_id": "device",
+        "observed_at_utc": "2026-01-01T00:00:00+00:00",
         "observed_at_local": "2026-01-01T09:00:00+09:00",
-        "timezone": "Asia/Tokyo", "observation_kind": "environment",
-        "temperature_c": 20, "source": "switchbot_csv_export",
-        "source_precision": "second", "expected_interval_seconds": 60,
-        "collection_method": "import", "measurement_status": "observed",
+        "timezone": "Asia/Tokyo",
+        "observation_kind": "environment",
+        "temperature_c": 20,
+        "source": "switchbot_csv_export",
+        "source_precision": "second",
+        "expected_interval_seconds": 60,
+        "collection_method": "import",
+        "measurement_status": "observed",
     }
     try:
         assert storage.insert_observation(base) == "inserted"
@@ -352,7 +445,7 @@ def test_xlsx_rows_map_excel_date_and_columns_without_dependency(tmp_path):
         '<worksheet xmlns="http://schemas.openxmlformats.org/'
         'spreadsheetml/2006/main"><sheetData>'
         f'<row r="1">{header_cells}</row><row r="2">{value_cells}</row>'
-        '</sheetData></worksheet>'
+        "</sheetData></worksheet>"
     )
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("xl/worksheets/sheet1.xml", worksheet)

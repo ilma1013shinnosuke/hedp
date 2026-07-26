@@ -45,6 +45,9 @@ AdapterはPython 3.11以上のOS非依存コードとし、macOS固有機能へ�
 意味を確認済みの状態EPCとの共通部分だけを取得する。mapと状態の応答原文は同じRawDataへ
 可逆なhexとして保持し、正規化値には品質と理由を付ける。未知EPCを推測せず、家庭内IPや
 機器固有識別子をmetadataへ保存しない。
+状態取得はAIFの上限に合わせ4 property以下へ分割し、`state_response_hex`はbatch順の
+hex文字列listとして保存する。read-only qualification checkerはこのlistと、移行前の
+単一hex文字列の両方を検証できる。
 
 この実装は匿名fixtureと偽UDP socketでオフライン検証済みであり、macOS固有APIへ依存しない。
 したがってLinuxでも同じReaderを使用できる。実機疎通、INFの欠落特性、対応EPCの値・単位、
@@ -76,6 +79,12 @@ AdapterはPython 3.11以上のOS非依存コードとし、macOS固有機能へ�
 EPCや、過去の別firmwareで観測したEPCは許可しない。値の意味・範囲が実機で確定するまで、
 上位のCapabilityDescriptorへ登録してはならない。
 
+型付きの沸き増し開始・停止、風呂自動、昼間沸き増し許可はoffline plan専用である。
+`EcoCuteOperationCommand(dry_run=False)`は常に送信前に拒否し、multi-property SetCを
+実UDP transportへ渡すmethodも持たない。沸き増しのcommand shapeが確認済みでも、
+`would_dispatch`とはせずfixture-onlyの証拠として扱う。将来の実送信には共通ExecutionGate、
+期限付き承認、重複抑止、留守・手動操作条件、監査を別途必須とする。
+
 操作はprivate/link-local IPv4へのunicastだけを許可し、自動再送しない。送信受付と結果を
 分離し、受付後は0〜30秒に制限された待機を経て、注入されたread-only transportで同じ
 EPCを読み戻す。待機処理も注入するため、オフライン試験では実時間を待たない。読めない、値が一致
@@ -85,7 +94,7 @@ VerificationResultは確認方法、品質、確認時刻と
 `matched`、`not_matched`、`unavailable`、`not_supported`を分ける。最終Outcomeは
 確認一致だけを`completed`、拒否・不一致を`failed`、それ以外を`unknown`とする。
 
-この実装と試験はオフライン限定であり、ExecutionGate、永続監査台帳、実機Set適格性確認
+型付き操作の実装と試験はオフライン限定であり、ExecutionGate、永続監査台帳、実機Set適格性確認
 にはまだ接続していない。従って本番操作可能を意味しない。実機試験では、property mapを
 同じsessionで再取得し、低リスクな単一EPCについて開始前snapshot、明示承認、1回送信、
 bounded read-back、純正操作による復旧を順番に確認する。
@@ -107,6 +116,10 @@ SumiCoreが直接決められることを意味しない。
 凍結防止、異常停止、最低湯量等の機器制御を置き換えない。SumiCoreは許可されたシフトや
 沸き増しの意図を出し、開始前snapshot、受付、`0xB2`沸き上げ中状態、警報、終了後snapshotで
 結果を確認する。
+
+offline readback契約でも、沸き増し開始は`0xB2=active`、停止は`0xB2=inactive`を実状態と
+して確認する。`0xB0`のモード一致だけでは完了にしない。runtime Get mapに`0xB2`がない
+場合は、送信候補にも確認済みにもしない。
 
 ## 本体自動機能との境界
 

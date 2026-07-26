@@ -52,6 +52,8 @@ def intent(**changes):
 
 def evidence(**changes):
     values = {
+        "target_alias": "fixture-lock",
+        "capability": "lock-position-set",
         "observed_at": NOW - timedelta(seconds=5),
         "quality": EvidenceQuality.GOOD,
         "current_state": "unlock",
@@ -126,6 +128,46 @@ def test_fixture_dispatch_is_called_exactly_once_and_completed():
     ]
 
 
+def test_fixture_mode_rejects_unmarked_port():
+    class UnmarkedPort:
+        def execute(self, _):
+            raise AssertionError("must not be called")
+
+    coordinator = ExecutionCoordinator(
+        (capability(),),
+        {("fixture-lock", "lock-position-set"): UnmarkedPort()},
+    )
+    result = coordinator.execute(
+        intent(),
+        evidence=evidence(),
+        authorization=authorization(),
+        evaluated_at=NOW,
+        mode=ExecutionMode.FIXTURE,
+    )
+
+    assert result.gate.reason_code == "fixture_port_required"
+    assert result.dispatch_attempted is False
+
+
+def test_state_evidence_is_bound_to_target_and_capability():
+    coordinator = ExecutionCoordinator((capability(),))
+    wrong_target = coordinator.execute(
+        intent(),
+        evidence=evidence(target_alias="other-lock"),
+        authorization=authorization(),
+        evaluated_at=NOW,
+    )
+    wrong_capability = coordinator.execute(
+        intent(),
+        evidence=evidence(capability="other-capability"),
+        authorization=authorization(),
+        evaluated_at=NOW,
+    )
+
+    assert wrong_target.gate.reason_code == "state_scope_mismatch"
+    assert wrong_capability.gate.reason_code == "state_scope_mismatch"
+
+
 def test_missing_or_wrong_authorization_blocks_without_dispatch():
     calls = []
     coordinator = ExecutionCoordinator(
@@ -138,7 +180,7 @@ def test_missing_or_wrong_authorization_blocks_without_dispatch():
     )
     missing = coordinator.execute(
         intent(operation_id="missing-auth"),
-        evidence=evidence(),
+        evidence=evidence(capability="temperature-set"),
         authorization=None,
         evaluated_at=NOW,
         mode=ExecutionMode.FIXTURE,
@@ -239,6 +281,49 @@ def test_adapter_exception_is_unknown_and_never_retried():
     assert result.dispatch_attempted is True
 
 
+def test_contradictory_adapter_result_is_unknown():
+    coordinator = ExecutionCoordinator(
+        (capability(),),
+        {
+            ("fixture-lock", "lock-position-set"): function_port(
+                lambda _: AdapterExecutionResult(
+                    "timeout",
+                    "unavailable",
+                    ExecutionOutcome.COMPLETED,
+                )
+            )
+        },
+    )
+    result = coordinator.execute(
+        intent(),
+        evidence=evidence(),
+        authorization=authorization(),
+        evaluated_at=NOW,
+        mode=ExecutionMode.FIXTURE,
+    )
+
+    assert result.outcome is ExecutionOutcome.UNKNOWN
+    assert result.adapter_result is None
+    assert result.audit_events[-1].reason_code == "adapter_result_invalid"
+
+
+def test_malformed_adapter_result_is_unknown():
+    coordinator = ExecutionCoordinator(
+        (capability(),),
+        {("fixture-lock", "lock-position-set"): function_port(lambda _: object())},
+    )
+    result = coordinator.execute(
+        intent(),
+        evidence=evidence(),
+        authorization=authorization(),
+        evaluated_at=NOW,
+        mode=ExecutionMode.FIXTURE,
+    )
+
+    assert result.outcome is ExecutionOutcome.UNKNOWN
+    assert result.adapter_result is None
+
+
 def test_duplicate_fixture_dispatch_is_blocked_after_first_claim():
     coordinator = ExecutionCoordinator(
         (capability(),),
@@ -324,6 +409,81 @@ def test_invalid_execution_mode_fails_closed_without_dispatch():
     )
 
     assert result.gate.reason_code == "execution_mode_invalid"
+    assert result.dispatch_attempted is False
+    assert calls == []
+
+
+def test_capability_validator_accepts_bounded_values_and_rejects_others():
+    bounded = capability(
+        capability="temperature-set",
+        allowed_desired_states=(),
+        desired_state_validator=lambda value: type(value) is int and 16 <= value <= 30,
+    )
+    coordinator = ExecutionCoordinator((bounded,))
+
+    accepted = coordinator.execute(
+        intent(
+            capability="temperature-set",
+            desired_state=24,
+        ),
+        evidence=evidence(capability="temperature-set"),
+        authorization=authorization(
+            capability="temperature-set",
+            desired_state=24,
+        ),
+        evaluated_at=NOW,
+    )
+    rejected = coordinator.execute(
+        intent(
+            operation_id="operation-2",
+            capability="temperature-set",
+            desired_state=31,
+        ),
+        evidence=evidence(capability="temperature-set"),
+        authorization=authorization(
+            operation_id="operation-2",
+            capability="temperature-set",
+            desired_state=31,
+        ),
+        evaluated_at=NOW,
+    )
+
+    assert accepted.outcome is ExecutionOutcome.WOULD_DISPATCH
+    assert rejected.gate.reason_code == "desired_state_invalid"
+
+
+def test_capability_validator_failure_blocks_without_dispatch():
+    calls = []
+
+    def broken_validator(_):
+        raise RuntimeError("fixture validator failure")
+
+    bounded = capability(
+        capability="temperature-set",
+        allowed_desired_states=(),
+        desired_state_validator=broken_validator,
+    )
+    coordinator = ExecutionCoordinator(
+        (bounded,),
+        {
+            ("fixture-lock", "temperature-set"): function_port(
+                lambda value: calls.append(value)
+            )
+        },
+    )
+
+    result = coordinator.execute(
+        intent(capability="temperature-set", desired_state=24),
+        evidence=evidence(),
+        authorization=authorization(
+            capability="temperature-set",
+            desired_state=24,
+        ),
+        evaluated_at=NOW,
+        mode=ExecutionMode.FIXTURE,
+    )
+
+    assert result.gate.reason_code == "desired_state_invalid"
     assert result.dispatch_attempted is False
     assert calls == []
 

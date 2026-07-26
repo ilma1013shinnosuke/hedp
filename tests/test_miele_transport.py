@@ -46,6 +46,7 @@ def _transport(session: FakeSession) -> MieleReadOnlyHttpTransport:
         events_url="https://fixture.invalid/v1/events",
         access_token="fixture-token",
         session=session,
+        allowed_origins=frozenset({"https://fixture.invalid"}),
     )
 
 
@@ -112,6 +113,7 @@ def test_transport_rejects_unsafe_urls(
             devices_url=devices_url,
             events_url=events_url,
             access_token="fixture-token",
+            allowed_origins=frozenset({"https://fixture.invalid"}),
         )
 
 
@@ -126,3 +128,45 @@ def test_errors_do_not_include_url_token_or_response() -> None:
     assert "fixture.invalid" not in rendered
     assert "fixture-token" not in rendered
     assert "response-secret" not in rendered
+
+
+def test_transport_requires_same_explicitly_allowlisted_origin() -> None:
+    with pytest.raises(ValueError, match="same origin"):
+        MieleReadOnlyHttpTransport(
+            devices_url="https://fixture.invalid/v1/devices",
+            events_url="https://events.invalid/v1/events",
+            access_token="fixture-token",
+            allowed_origins=frozenset(
+                {"https://fixture.invalid", "https://events.invalid"}
+            ),
+        )
+
+    with pytest.raises(ValueError, match="not allowlisted"):
+        MieleReadOnlyHttpTransport(
+            devices_url="https://fixture.invalid/v1/devices",
+            events_url="https://fixture.invalid/v1/events",
+            access_token="fixture-token",
+        )
+
+
+def test_sse_timeout_is_a_total_wall_clock_budget() -> None:
+    response = FakeResponse(lines=[b": heartbeat", b": heartbeat", b""])
+    times = iter((0.0, 0.0, 1.0, 8.0))
+    transport = MieleReadOnlyHttpTransport(
+        devices_url="https://fixture.invalid/v1/devices",
+        events_url="https://fixture.invalid/v1/events",
+        access_token="fixture-token",
+        session=FakeSession([response]),
+        allowed_origins=frozenset({"https://fixture.invalid"}),
+        monotonic=lambda: next(times),
+    )
+
+    with pytest.raises(MieleTransportError, match="total timeout"):
+        list(
+            transport.events(
+                "fixture-device",
+                maximum_events=2,
+                timeout_seconds=7,
+            )
+        )
+    assert response.closed

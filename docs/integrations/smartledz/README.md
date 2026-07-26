@@ -40,6 +40,16 @@ Scene/Scheduleの定義、active、現在選択、実行中状態は同じ意味
 fragmented frame実機値、MQTT、認証token lifecycle、Sensor lux実値、個別照明の状態rowは
 未確認である。未確認項目を推測で正規化しない。
 
+Scene実行とSchedule選択にはoffline dry-run型だけを置く。Scene command shapeが既知でも、
+対象Gatewayのfreshなruntime snapshot、good品質、readback対応、GroupとSceneの観測済み
+対応関係がすべて揃わなければ`verified`または`would_dispatch`にしない。Schedule選択は
+schemaとreadbackが未確認のため明示的にunsupportedとする。どちらにも送信transportはない。
+
+未確認notificationはevent意味へ変換せず、read-only resyncを要求する。正規化前にpayload
+byte数、nesting深さ、field数を上限検査し、fingerprint履歴も有限にする。保持可能な
+top-level field名は`event`、`status`、`timestamp`、`type`の固定allowlistだけであり、
+未知field名や値は保存しない。
+
 `SmartLedzReadOnlyCollector`は確認済みの`GroupList`、`GroupGet`、`DeviceList`、
 `GroupScheduleGet`、照度取得だけを一回の収集単位へ束ねる。transport interfaceは
 `ReadCommand`を受ける`read`だけを公開し、Scene適用、点消灯、Schedule変更などの操作methodを

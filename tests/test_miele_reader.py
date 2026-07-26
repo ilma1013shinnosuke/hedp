@@ -74,8 +74,11 @@ def test_parses_bounded_sse_transcript_and_ignores_ping_state() -> None:
     )
 
     assert [event.name for event in events] == ["PING", "IDENT"]
-    assert state_from_event(events[0]) is None
-    state = state_from_event(events[1])
+    assert state_from_event(events[0], source_device_id="fixture-device-001") is None
+    state = state_from_event(
+        events[1],
+        source_device_id="fixture-device-001",
+    )
     assert state is not None
     observation = normalize_observation(
         state,
@@ -109,11 +112,32 @@ def test_type_24_nested_event_is_selected_without_retaining_device_id() -> None:
         },
     )
 
-    state = state_from_event(event)
+    state = state_from_event(event, source_device_id=private_id)
 
     assert state == {"state": {"status": {"value_raw": 4}}}
     assert private_id not in repr(state)
     assert private_id not in repr(event)
+
+
+def test_sse_event_for_another_type_24_device_is_not_misattributed() -> None:
+    event = SseEvent(
+        "ACTION",
+        {
+            "configured-device": {
+                "ident": {"type": {"value_raw": 24}},
+                "state": {"status": {"value_raw": 4}},
+            },
+            "other-device": {
+                "ident": {"type": {"value_raw": 24}},
+                "state": {"status": {"value_raw": 5}},
+            },
+        },
+    )
+
+    state = state_from_event(event, source_device_id="configured-device")
+
+    assert state == {"state": {"status": {"value_raw": 4}}}
+    assert state_from_event(event, source_device_id="missing-device") is None
 
 
 def test_reader_interface_has_no_appliance_action() -> None:
@@ -135,9 +159,10 @@ def test_reader_interface_has_no_appliance_action() -> None:
     reader = MieleReader(FakeTransport())
 
     assert reader.devices() == {}
-    assert next(
-        reader.events("fixture", maximum_events=1, timeout_seconds=2)
-    ).name == "PING"
+    assert (
+        next(reader.events("fixture", maximum_events=1, timeout_seconds=2)).name
+        == "PING"
+    )
     assert not hasattr(reader, "start")
     assert not hasattr(reader, "stop")
 

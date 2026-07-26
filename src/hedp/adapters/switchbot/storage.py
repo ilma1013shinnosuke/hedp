@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class SwitchBotStorage:
@@ -96,6 +96,11 @@ class SwitchBotStorage:
                 usage_minutes_of_day REAL,
                 online_status TEXT,
                 working_status TEXT,
+                robot_working_status TEXT,
+                charging_status TEXT,
+                task_status TEXT,
+                water_base_battery_percent REAL,
+                status_quality TEXT,
                 source TEXT NOT NULL,
                 source_file TEXT,
                 source_row_number INTEGER,
@@ -187,7 +192,8 @@ class SwitchBotStorage:
             (SCHEMA_VERSION, datetime.now(timezone.utc).isoformat()),
         )
         event_columns = {
-            row[1] for row in connection.execute(
+            row[1]
+            for row in connection.execute(
                 "PRAGMA table_info(switchbot_collection_events)"
             )
         }
@@ -196,6 +202,21 @@ class SwitchBotStorage:
                 "ALTER TABLE switchbot_collection_events "
                 "ADD COLUMN raw_payload_json TEXT"
             )
+        observation_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(switchbot_observations)")
+        }
+        for name, sql_type in (
+            ("robot_working_status", "TEXT"),
+            ("charging_status", "TEXT"),
+            ("task_status", "TEXT"),
+            ("water_base_battery_percent", "REAL"),
+            ("status_quality", "TEXT"),
+        ):
+            if name not in observation_columns:
+                connection.execute(
+                    f"ALTER TABLE switchbot_observations ADD COLUMN {name} {sql_type}"
+                )
         connection.commit()
 
     def upsert_device(self, device: dict[str, Any], seen_at: datetime) -> None:
@@ -226,8 +247,15 @@ class SwitchBotStorage:
               last_seen_at=excluded.last_seen_at,
               current_status=excluded.current_status
             """,
-            (device_id, name, str(device.get("deviceType", "")),
-             device.get("hubDeviceId"), timestamp, timestamp, "present"),
+            (
+                device_id,
+                name,
+                str(device.get("deviceType", "")),
+                device.get("hubDeviceId"),
+                timestamp,
+                timestamp,
+                "present",
+            ),
         )
         if not existing or existing[0] != name:
             connection.execute(
@@ -238,22 +266,42 @@ class SwitchBotStorage:
         connection.commit()
 
     def set_location(
-        self, device_id: str, location: str, purpose: str, valid_from: str,
-        *, valid_to: str | None = None, precision: str = "day",
-        source: str = "user", notes: str | None = None,
+        self,
+        device_id: str,
+        location: str,
+        purpose: str,
+        valid_from: str,
+        *,
+        valid_to: str | None = None,
+        precision: str = "day",
+        source: str = "user",
+        notes: str | None = None,
     ) -> None:
         self._connection().execute(
             """INSERT OR IGNORE INTO switchbot_device_locations
             (device_id,location,purpose,valid_from,valid_to,
              effective_time_precision,source,notes) VALUES (?,?,?,?,?,?,?,?)""",
-            (device_id, location, purpose, valid_from, valid_to, precision,
-             source, notes),
+            (
+                device_id,
+                location,
+                purpose,
+                valid_from,
+                valid_to,
+                precision,
+                source,
+                notes,
+            ),
         )
         self._connection().commit()
 
     def set_name_history(
-        self, device_id: str, api_name: str, valid_from: str,
-        *, valid_to: str | None = None, source: str = "user",
+        self,
+        device_id: str,
+        api_name: str,
+        valid_from: str,
+        *,
+        valid_to: str | None = None,
+        source: str = "user",
     ) -> None:
         self._connection().execute(
             """INSERT OR IGNORE INTO switchbot_device_names
@@ -271,21 +319,33 @@ class SwitchBotStorage:
             if row[0] not in present_ids:
                 connection.execute(
                     "UPDATE switchbot_devices SET current_status='missing' "
-                    "WHERE device_id=?", (row[0],)
+                    "WHERE device_id=?",
+                    (row[0],),
                 )
         connection.commit()
 
     def record_collection_event(
-        self, device_id: str, collected_at: datetime, *, success: bool,
-        status_body_empty: bool, error_type: str | None,
+        self,
+        device_id: str,
+        collected_at: datetime,
+        *,
+        success: bool,
+        status_body_empty: bool,
+        error_type: str | None,
         raw_payload_json: str | None,
     ) -> None:
         self._connection().execute(
             """INSERT OR IGNORE INTO switchbot_collection_events
             (device_id,collected_at,success,status_body_empty,error_type,
              raw_payload_json) VALUES (?,?,?,?,?,?)""",
-            (device_id, collected_at.isoformat(), int(success),
-             int(status_body_empty), error_type, raw_payload_json),
+            (
+                device_id,
+                collected_at.isoformat(),
+                int(success),
+                int(status_body_empty),
+                error_type,
+                raw_payload_json,
+            ),
         )
         self._connection().commit()
 
@@ -299,12 +359,29 @@ class SwitchBotStorage:
         identity = {
             key: normalize(observation.get(key))
             for key in (
-                "device_id", "observed_at_utc", "observation_kind",
-                "temperature_c", "relative_humidity_percent", "co2_ppm",
-                "battery_percent", "absolute_humidity_g_m3", "dew_point_c",
-                "vpd_kpa", "power_state", "electric_current_ma", "voltage_v",
-                "power_consumed_daily_w", "usage_minutes_of_day", "online_status",
-                "working_status", "source_precision",
+                "device_id",
+                "observed_at_utc",
+                "observation_kind",
+                "temperature_c",
+                "relative_humidity_percent",
+                "co2_ppm",
+                "battery_percent",
+                "absolute_humidity_g_m3",
+                "dew_point_c",
+                "vpd_kpa",
+                "power_state",
+                "electric_current_ma",
+                "voltage_v",
+                "power_consumed_daily_w",
+                "usage_minutes_of_day",
+                "online_status",
+                "working_status",
+                "charging_status",
+                "task_status",
+                "robot_working_status",
+                "water_base_battery_percent",
+                "status_quality",
+                "source_precision",
             )
         }
         return hashlib.sha256(
@@ -322,8 +399,11 @@ class SwitchBotStorage:
         conflict = connection.execute(
             "SELECT * FROM switchbot_observations WHERE device_id=? "
             "AND observed_at_utc=? AND observation_kind=? LIMIT 1",
-            (observation["device_id"], observation["observed_at_utc"],
-             observation["observation_kind"]),
+            (
+                observation["device_id"],
+                observation["observed_at_utc"],
+                observation["observation_kind"],
+            ),
         ).fetchone()
         if conflict:
             connection.execute(
@@ -331,23 +411,56 @@ class SwitchBotStorage:
                 (device_id,observed_at,existing_payload,incoming_payload,
                  existing_source,incoming_source,resolution,detected_at)
                 VALUES (?,?,?,?,?,?,?,?)""",
-                (observation["device_id"], observation["observed_at_utc"],
-                 json.dumps(dict(conflict), ensure_ascii=False),
-                 json.dumps(observation, ensure_ascii=False), conflict["source"],
-                 observation["source"], "kept_both", self._now()),
+                (
+                    observation["device_id"],
+                    observation["observed_at_utc"],
+                    json.dumps(dict(conflict), ensure_ascii=False),
+                    json.dumps(observation, ensure_ascii=False),
+                    conflict["source"],
+                    observation["source"],
+                    "kept_both",
+                    self._now(),
+                ),
             )
         columns = [
-            "canonical_key", "device_id", "observed_at_utc",
-            "observed_at_local", "timezone", "observation_kind",
-            "temperature_c", "relative_humidity_percent", "co2_ppm",
-            "battery_percent", "absolute_humidity_g_m3", "dew_point_c",
-            "vpd_kpa", "power_state", "electric_current_ma", "voltage_v",
-            "power_consumed_daily_w", "usage_minutes_of_day", "online_status",
-            "working_status", "source", "source_file", "source_row_number",
+            "canonical_key",
+            "device_id",
+            "observed_at_utc",
+            "observed_at_local",
+            "timezone",
+            "observation_kind",
+            "temperature_c",
+            "relative_humidity_percent",
+            "co2_ppm",
+            "battery_percent",
+            "absolute_humidity_g_m3",
+            "dew_point_c",
+            "vpd_kpa",
+            "power_state",
+            "electric_current_ma",
+            "voltage_v",
+            "power_consumed_daily_w",
+            "usage_minutes_of_day",
+            "online_status",
+            "working_status",
+            "robot_working_status",
+            "charging_status",
+            "task_status",
+            "water_base_battery_percent",
+            "status_quality",
+            "source",
+            "source_file",
+            "source_row_number",
             "source_precision",
-            "expected_interval_seconds", "collection_method",
-            "measurement_status", "raw_payload_json", "calculation_method",
-            "calculation_version", "calculated_from", "imported_at", "created_at",
+            "expected_interval_seconds",
+            "collection_method",
+            "measurement_status",
+            "raw_payload_json",
+            "calculation_method",
+            "calculation_version",
+            "calculated_from",
+            "imported_at",
+            "created_at",
         ]
         values = {**observation, "canonical_key": canonical}
         now = self._now()
@@ -364,9 +477,12 @@ class SwitchBotStorage:
         self._connection().commit()
 
     def devices(self) -> list[dict[str, Any]]:
-        return [dict(row) for row in self._connection().execute(
-            "SELECT * FROM switchbot_devices ORDER BY current_api_name, device_id"
-        )]
+        return [
+            dict(row)
+            for row in self._connection().execute(
+                "SELECT * FROM switchbot_devices ORDER BY current_api_name, device_id"
+            )
+        ]
 
     def set_enabled(self, device_id: str, enabled: bool) -> None:
         self._connection().execute(
@@ -394,9 +510,11 @@ class SwitchBotStorage:
             GROUP BY device_id, substr(observed_at_utc,1,13)"""
         )
         connection.commit()
-        return int(connection.execute(
-            "SELECT count(*) FROM switchbot_hourly_summary"
-        ).fetchone()[0])
+        return int(
+            connection.execute(
+                "SELECT count(*) FROM switchbot_hourly_summary"
+            ).fetchone()[0]
+        )
 
     def rebuild_gaps(self) -> int:
         connection = self._connection()
@@ -422,9 +540,9 @@ class SwitchBotStorage:
             (self._now(),),
         )
         connection.commit()
-        return int(connection.execute(
-            "SELECT count(*) FROM switchbot_data_gaps"
-        ).fetchone()[0])
+        return int(
+            connection.execute("SELECT count(*) FROM switchbot_data_gaps").fetchone()[0]
+        )
 
     def _connection(self) -> sqlite3.Connection:
         if self.connection is None:

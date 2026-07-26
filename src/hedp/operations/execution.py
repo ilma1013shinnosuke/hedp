@@ -45,12 +45,19 @@ class ExecutionCapability:
     control_owner: str
     allowed_desired_states: tuple[Any, ...]
     maximum_state_age: timedelta
+    desired_state_validator: Callable[[Any], bool] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
     accepted_qualities: tuple[EvidenceQuality, ...] = (EvidenceQuality.GOOD,)
     approval_required: bool = True
 
     def __post_init__(self) -> None:
-        if not self.allowed_desired_states:
-            raise ValueError("allowed_desired_states must not be empty")
+        if not self.allowed_desired_states and self.desired_state_validator is None:
+            raise ValueError(
+                "allowed_desired_states or desired_state_validator is required"
+            )
         if self.maximum_state_age <= timedelta(0):
             raise ValueError("maximum_state_age must be positive")
         if not self.accepted_qualities:
@@ -65,7 +72,7 @@ class Authorization:
     requester: str
     target_alias: str
     capability: str
-    desired_state: Any
+    desired_state: Any = field(repr=False)
     granted_at: datetime
     expires_at: datetime
 
@@ -83,6 +90,17 @@ class AdapterExecutionResult:
     dispatch_status: str
     verification_status: str
     outcome: ExecutionOutcome
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.dispatch_status, str) or not self.dispatch_status:
+            raise ValueError("dispatch_status must be a non-empty string")
+        if (
+            not isinstance(self.verification_status, str)
+            or not self.verification_status
+        ):
+            raise ValueError("verification_status must be a non-empty string")
+        if not isinstance(self.outcome, ExecutionOutcome):
+            raise TypeError("outcome must be an ExecutionOutcome")
 
 
 class ExecutionPort(Protocol):
@@ -227,6 +245,12 @@ class ExecutionCoordinator:
                 GateDecision(GateStatus.UNAVAILABLE, "dispatch_port_unavailable"),
                 events,
             )
+        if getattr(port, "fixture_only", False) is not True:
+            return _stopped(
+                intent,
+                GateDecision(GateStatus.BLOCKED, "fixture_port_required"),
+                events,
+            )
         if not self._registry.claim(intent.operation_id):
             return _stopped(
                 intent,
@@ -244,6 +268,23 @@ class ExecutionCoordinator:
                     "finished",
                     intent,
                     reason_code="adapter_result_unknown",
+                    dispatch_attempted=True,
+                )
+            )
+            return ExecutionResult(
+                gate,
+                ExecutionOutcome.UNKNOWN,
+                None,
+                tuple(events),
+                True,
+            )
+
+        if not _adapter_result_is_consistent(adapter_result):
+            events.append(
+                _event(
+                    "finished",
+                    intent,
+                    reason_code="adapter_result_invalid",
                     dispatch_attempted=True,
                 )
             )
@@ -281,18 +322,27 @@ class ExecutionCoordinator:
         evaluated_at: datetime,
         manual_override_cooldown: timedelta,
     ) -> GateDecision:
-        capability = self._capabilities.get(
-            (intent.target_alias, intent.capability)
-        )
+        capability = self._capabilities.get((intent.target_alias, intent.capability))
         if capability is None:
             return GateDecision(GateStatus.BLOCKED, "capability_not_registered")
         if capability.control_owner != intent.control_owner:
             return GateDecision(GateStatus.BLOCKED, "owner_mismatch")
-        if not any(
+        fixed_state_allowed = any(
             type(intent.desired_state) is type(allowed)
             and intent.desired_state == allowed
             for allowed in capability.allowed_desired_states
-        ):
+        )
+        validated_state_allowed = False
+        if capability.desired_state_validator is not None:
+            try:
+                validated_state_allowed = (
+                    capability.desired_state_validator(intent.desired_state) is True
+                )
+            except Exception:
+                # A validator is part of the safety boundary.  Its failure must
+                # fail closed and must never reach a vendor adapter.
+                validated_state_allowed = False
+        if not fixed_state_allowed and not validated_state_allowed:
             return GateDecision(GateStatus.BLOCKED, "desired_state_invalid")
         if intent.requested_at > evaluated_at:
             return GateDecision(GateStatus.BLOCKED, "request_time_invalid")
@@ -316,6 +366,11 @@ class ExecutionCoordinator:
                 return GateDecision(GateStatus.EXPIRED, "authorization_expired")
         if evidence is None:
             return GateDecision(GateStatus.UNAVAILABLE, "state_missing")
+        if (
+            evidence.target_alias != intent.target_alias
+            or evidence.capability != intent.capability
+        ):
+            return GateDecision(GateStatus.UNAVAILABLE, "state_scope_mismatch")
         if evidence.quality not in capability.accepted_qualities:
             return GateDecision(GateStatus.UNAVAILABLE, "state_quality_insufficient")
         if evidence.observed_at > evaluated_at:
@@ -336,10 +391,39 @@ def function_port(
     """Make a small fixture or vendor bridge satisfy the execution port."""
 
     class _FunctionPort:
+        fixture_only = True
+
         def execute(self, intent: Intent) -> AdapterExecutionResult:
             return function(intent)
 
     return _FunctionPort()
+
+
+def _adapter_result_is_consistent(result: object) -> bool:
+    """Reject contradictory or malformed adapter results after one dispatch."""
+
+    if not isinstance(result, AdapterExecutionResult):
+        return False
+    if result.outcome is ExecutionOutcome.COMPLETED:
+        return (
+            result.dispatch_status == "accepted"
+            and result.verification_status == "matched"
+        )
+    if result.outcome is ExecutionOutcome.FAILED:
+        return result.dispatch_status in {
+            "accepted",
+            "rejected",
+        } and result.verification_status in {
+            "not_matched",
+            "not_supported",
+            "unavailable",
+        }
+    if result.outcome is ExecutionOutcome.UNKNOWN:
+        return (
+            result.dispatch_status in {"timeout", "transport_error", "unknown"}
+            or result.verification_status == "unavailable"
+        )
+    return False
 
 
 def _stopped(

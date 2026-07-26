@@ -122,27 +122,26 @@ def normalize_observation(
     )
 
 
-def state_from_event(event: SseEvent) -> dict[str, object] | None:
-    """Extract only a type-24 state and discard IDs and other event fields."""
+def state_from_event(
+    event: SseEvent,
+    *,
+    source_device_id: str,
+) -> dict[str, object] | None:
+    """Extract state only when it belongs to the configured type-24 device."""
 
+    if not isinstance(source_device_id, str) or not source_device_id:
+        raise ValueError("source_device_id must not be empty")
     if event.name.upper() == "PING":
         return None
-    direct = event.payload.get("state")
-    if isinstance(direct, dict):
-        return {"state": direct}
-    for candidate in event.payload.values():
-        if not isinstance(candidate, dict):
-            continue
-        state = candidate.get("state")
-        if not isinstance(state, dict):
-            continue
-        ident = candidate.get("ident")
-        if not isinstance(ident, dict):
-            continue
-        device_type = _number(ident.get("type"))
-        if device_type == 24:
-            return {"state": state}
-    return None
+    candidate = event.payload.get(source_device_id)
+    if not isinstance(candidate, dict):
+        return None
+    state = candidate.get("state")
+    ident = candidate.get("ident")
+    if not isinstance(state, dict) or not isinstance(ident, dict):
+        return None
+    device_type = _number(ident.get("type"))
+    return {"state": state} if device_type == 24 else None
 
 
 def _raw_value(value: object) -> object:

@@ -164,6 +164,12 @@ ExecutionGateは価値判断を行わず、③が決めたIntentを変更した�
 結果には、適用した実行条件、通過または停止した理由、確認した状態の時刻と品質を残す。
 `blocked`、`expired`、`unavailable`の場合は操作内容を作り替えず、結果を③へ返す。
 
+能力が取り得る値は、電源のような列挙値なら許可値を完全一致で登録する。温度、音量、
+充放電量のような範囲値は、能力ごとに型と上下限を検査する純粋なvalidatorを登録する。
+列挙値にもvalidatorにも合格しない値、またはvalidator自身が失敗した場合は
+`desired_state_invalid`として送信前に停止する。Adapter内で値を丸めたり、安全そうな
+値へ置き換えたりしてはならない。
+
 ### 5.4 DispatchReceipt：送信の記録
 
 Adapterへ何を送り、通信上どう見えたかを表す。
@@ -221,7 +227,10 @@ process-local registryは同一process内の重複dispatchを原子的に止め�
 自動再送せず`unknown`とする。Shadow評価はdispatchではないためoperation IDを消費しない。
 承認は対象と能力だけでなく、operation ID、requester、具体的なdesired stateへ結び付け、
 別操作へ流用できないようにする。実行モードは明示した`fixture`だけを送信可能とし、不明な
-値は必ず停止する。永続registryを導入するまでは、本番経路を有効にしない。
+値は必ず停止する。`fixture`で呼べるPortは、匿名fixture用として型・実装上明示されたもの
+だけとし、任意の実transportを注入して送信できないようにする。状態証拠も対象別名と能力へ
+結び付け、別機器・別能力の状態を流用しない。Adapterの結果が受付・確認・最終結果の間で
+矛盾する場合は`unknown`として扱う。永続registryを導入するまでは、本番経路を有効にしない。
 
 ## 7. タイムアウトと再試行
 

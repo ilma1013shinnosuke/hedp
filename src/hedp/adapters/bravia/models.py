@@ -27,8 +27,8 @@ class PowerReading:
     value: PowerState = PowerState.UNKNOWN
     quality: Quality = Quality.UNKNOWN
     reason: str | None = None
-    raw_value: Any = None
-    unknown: dict[str, Any] = field(default_factory=dict)
+    raw_value: Any = field(default=None, repr=False)
+    unknown: dict[str, Any] = field(default_factory=dict, repr=False)
     error: ApiError | None = None
 
 
@@ -41,7 +41,7 @@ class AudioOutput:
     maximum: int | None = None
     quality: Quality = Quality.GOOD
     reasons: tuple[str, ...] = ()
-    unknown: dict[str, Any] = field(default_factory=dict)
+    unknown: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ class AudioReading:
     outputs: tuple[AudioOutput, ...] = ()
     quality: Quality = Quality.UNKNOWN
     reason: str | None = None
-    unknown: dict[str, Any] = field(default_factory=dict)
+    unknown: dict[str, Any] = field(default_factory=dict, repr=False)
     error: ApiError | None = None
 
 
@@ -61,7 +61,7 @@ class ContentState:
     quality: Quality = Quality.UNKNOWN
     reason: str | None = None
     omitted_private_fields: tuple[str, ...] = ()
-    unknown: dict[str, Any] = field(default_factory=dict)
+    unknown: dict[str, Any] = field(default_factory=dict, repr=False)
     error: ApiError | None = None
 
 
@@ -72,4 +72,4 @@ class NormalizedState:
     content: ContentState
     observed_at: str
     received_at: str
-    unknown: dict[str, Any] = field(default_factory=dict)
+    unknown: dict[str, Any] = field(default_factory=dict, repr=False)

@@ -31,7 +31,17 @@ _SAFE_CONTENT_SOURCES = frozenset({"tv", "extInput"})
 
 
 def _envelope_unknown(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in payload.items() if key not in _ENVELOPE_FIELDS}
+    return _schema_evidence(payload, _ENVELOPE_FIELDS)
+
+
+def _schema_evidence(
+    payload: Mapping[object, object],
+    known_fields: frozenset[str] | set[str],
+) -> dict[str, int]:
+    """Retain only a count; unknown keys and values may be identifiers."""
+
+    count = sum(1 for key in payload if key not in known_fields)
+    return {"field_count": count} if count else {}
 
 
 def _first_result_object(
@@ -46,7 +56,11 @@ def _first_result_object(
     if not result:
         return None, None, "result_empty"
     if not isinstance(result[0], dict):
-        return None, ApiError(ErrorCategory.MALFORMED_RESPONSE), "result_item_not_object"
+        return (
+            None,
+            ApiError(ErrorCategory.MALFORMED_RESPONSE),
+            "result_item_not_object",
+        )
     return dict(result[0]), None, None
 
 
@@ -69,7 +83,9 @@ def normalize_power(payload: Mapping[str, Any]) -> PowerReading:
     envelope_unknown = _envelope_unknown(payload)
     if error is not None:
         return PowerReading(
-            quality=Quality.MISSING if error.category != ErrorCategory.MALFORMED_RESPONSE else Quality.INVALID,
+            quality=Quality.MISSING
+            if error.category != ErrorCategory.MALFORMED_RESPONSE
+            else Quality.INVALID,
             reason=reason,
             unknown=envelope_unknown,
             error=error,
@@ -82,8 +98,10 @@ def normalize_power(payload: Mapping[str, Any]) -> PowerReading:
         )
 
     raw_value = row.get("status")
-    row_unknown = {key: value for key, value in row.items() if key != "status"}
-    unknown = {**envelope_unknown, "result_fields": row_unknown} if row_unknown else envelope_unknown
+    row_unknown = _schema_evidence(row, {"status"})
+    unknown = dict(envelope_unknown)
+    if row_unknown:
+        unknown["result_field_count"] = row_unknown["field_count"]
     if raw_value == PowerState.ACTIVE.value:
         return PowerReading(PowerState.ACTIVE, Quality.GOOD, unknown=unknown)
     if raw_value == PowerState.STANDBY.value:
@@ -96,8 +114,10 @@ def normalize_power(payload: Mapping[str, Any]) -> PowerReading:
         )
     return PowerReading(
         quality=Quality.UNKNOWN if isinstance(raw_value, str) else Quality.INVALID,
-        reason="status_unknown" if isinstance(raw_value, str) else "status_invalid_type",
-        raw_value=raw_value,
+        reason="status_unknown"
+        if isinstance(raw_value, str)
+        else "status_invalid_type",
+        raw_value=None,
         unknown=unknown,
     )
 
@@ -117,7 +137,9 @@ def normalize_volume(payload: Mapping[str, Any]) -> AudioReading:
             if error.category == ErrorCategory.MALFORMED_RESPONSE
             else Quality.MISSING
         )
-        return AudioReading(quality=quality, reason="api_error", unknown=envelope_unknown, error=error)
+        return AudioReading(
+            quality=quality, reason="api_error", unknown=envelope_unknown, error=error
+        )
 
     result = payload.get("result")
     if not isinstance(result, list):
@@ -170,7 +192,7 @@ def normalize_volume(payload: Mapping[str, Any]) -> AudioReading:
                 maximum=maximum,
                 quality=Quality.GOOD if not reasons else Quality.INVALID,
                 reasons=tuple(reasons),
-                unknown={key: value for key, value in row.items() if key not in known},
+                unknown=_schema_evidence(row, known),
             )
         )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -10,7 +11,7 @@ from typing import Any
 
 
 _SAFE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 
 class GateStatus(str, Enum):
@@ -45,6 +46,11 @@ class CapabilityDescriptor:
     allowed_desired_states: tuple[Any, ...]
     verification_method: str
     maximum_state_age: timedelta
+    desired_state_validator: Callable[[Any], bool] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
     accepted_qualities: tuple[EvidenceQuality, ...] = (EvidenceQuality.GOOD,)
     shadow_only: bool = True
 
@@ -55,8 +61,10 @@ class CapabilityDescriptor:
         _require_safe_name("verification_method", self.verification_method)
         if not self.shadow_only:
             raise ValueError("Shadow capability must remain shadow_only")
-        if not self.allowed_desired_states:
-            raise ValueError("allowed_desired_states must not be empty")
+        if not self.allowed_desired_states and self.desired_state_validator is None:
+            raise ValueError(
+                "allowed_desired_states or desired_state_validator is required"
+            )
         if self.maximum_state_age <= timedelta(0):
             raise ValueError("maximum_state_age must be positive")
         if not self.accepted_qualities:
@@ -71,10 +79,10 @@ class Intent:
     requested_at: datetime
     expires_at: datetime
     requester: str
-    reason: str
+    reason: str = field(repr=False)
     target_alias: str
     capability: str
-    desired_state: Any
+    desired_state: Any = field(repr=False)
     priority: int
     control_owner: str
     correlation_id: str
@@ -103,12 +111,16 @@ class Intent:
 class StateEvidence:
     """Already-normalized state injected by a fixture or future reader."""
 
+    target_alias: str
+    capability: str
     observed_at: datetime
     quality: EvidenceQuality
-    current_state: Any
+    current_state: Any = field(repr=False)
     manual_override_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        _require_safe_name("target_alias", self.target_alias)
+        _require_safe_name("capability", self.capability)
         _require_aware("observed_at", self.observed_at)
         if self.manual_override_at is not None:
             _require_aware("manual_override_at", self.manual_override_at)
@@ -191,9 +203,11 @@ class ShadowExecutionGate:
         *,
         registry: ShadowOperationRegistry | None = None,
     ) -> None:
-        self._capabilities = {item.capability: item for item in capabilities}
+        self._capabilities = {
+            (item.target_alias, item.capability): item for item in capabilities
+        }
         if len(self._capabilities) != len(capabilities):
-            raise ValueError("capability names must be unique")
+            raise ValueError("target/capability pairs must be unique")
         self._registry = registry or ShadowOperationRegistry()
 
     def assess(
@@ -208,7 +222,11 @@ class ShadowExecutionGate:
         if manual_override_cooldown < timedelta(0):
             raise ValueError("manual_override_cooldown must not be negative")
 
-        capability = self._capabilities.get(intent.capability)
+        capability = self._capabilities.get((intent.target_alias, intent.capability))
+        same_capability = any(
+            registered_capability == intent.capability
+            for _, registered_capability in self._capabilities
+        )
         verification = capability.verification_method if capability else None
         events = [
             self._event("received", intent, verification),
@@ -216,22 +234,40 @@ class ShadowExecutionGate:
         ]
 
         if capability is None:
+            reason_code = "target_mismatch" if same_capability else "unknown_capability"
             return self._finish(
-                intent, verification, events, GateStatus.BLOCKED, "unknown_capability"
+                intent, verification, events, GateStatus.BLOCKED, reason_code
             )
-        if capability.target_alias != intent.target_alias:
+        if evidence is not None and (
+            evidence.target_alias != intent.target_alias
+            or evidence.capability != intent.capability
+        ):
             return self._finish(
-                intent, verification, events, GateStatus.BLOCKED, "target_mismatch"
+                intent,
+                verification,
+                events,
+                GateStatus.UNAVAILABLE,
+                "state_scope_mismatch",
+                evidence,
             )
         if capability.control_owner != intent.control_owner:
             return self._finish(
                 intent, verification, events, GateStatus.BLOCKED, "owner_mismatch"
             )
-        if not any(
+        fixed_state_allowed = any(
             type(intent.desired_state) is type(allowed)
             and intent.desired_state == allowed
             for allowed in capability.allowed_desired_states
-        ):
+        )
+        validated_state_allowed = False
+        if capability.desired_state_validator is not None:
+            try:
+                validated_state_allowed = (
+                    capability.desired_state_validator(intent.desired_state) is True
+                )
+            except Exception:
+                validated_state_allowed = False
+        if not fixed_state_allowed and not validated_state_allowed:
             return self._finish(
                 intent,
                 verification,
@@ -294,18 +330,13 @@ class ShadowExecutionGate:
                 "manual_override_active",
                 evidence,
             )
-        if self._registry.contains(intent.operation_id):
-            return self._finish(
-                intent,
-                verification,
-                events,
-                GateStatus.BLOCKED,
-                "duplicate_operation_id",
-                evidence,
-                record=False,
-            )
         return self._finish(
-            intent, verification, events, GateStatus.PASS, "conditions_satisfied", evidence
+            intent,
+            verification,
+            events,
+            GateStatus.PASS,
+            "conditions_satisfied",
+            evidence,
         )
 
     @staticmethod
@@ -338,8 +369,6 @@ class ShadowExecutionGate:
         status: GateStatus,
         reason_code: str,
         evidence: StateEvidence | None = None,
-        *,
-        record: bool = True,
     ) -> ShadowAssessment:
         if status == GateStatus.PASS:
             result = ShadowResult.WOULD_DISPATCH
@@ -347,8 +376,8 @@ class ShadowExecutionGate:
             result = ShadowResult.INDETERMINATE
         else:
             result = ShadowResult.WOULD_BLOCK
-        if record:
-            self._registry.record(intent.operation_id)
+        # Shadow evaluation has no side effect and therefore never consumes an
+        # operation ID. Replay protection belongs to the dispatch coordinator.
         events.append(
             self._event(
                 "finished",

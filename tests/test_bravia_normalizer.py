@@ -39,14 +39,14 @@ def test_active_snapshot_normalizes_zero_safe_values_and_unknown_fields() -> Non
     assert state.power.value == PowerState.ACTIVE
     assert state.power.quality == Quality.GOOD
     assert state.power.unknown == {
-        "apiGeneration": "fixture",
-        "result_fields": {"futurePowerField": "example"},
+        "field_count": 1,
+        "result_field_count": 1,
     }
     assert state.audio.quality == Quality.GOOD
     assert state.audio.outputs[0].volume == 0
     assert state.audio.outputs[0].muted is False
     assert state.audio.outputs[0].minimum == 0
-    assert state.audio.outputs[0].unknown == {"futureAudioField": "example"}
+    assert state.audio.outputs[0].unknown == {"field_count": 1}
     assert state.content.source == "extInput"
     assert state.content.unknown == {}
     assert state.content.omitted_private_fields == ("uri",)
@@ -68,7 +68,7 @@ def test_unknown_and_invalid_values_are_not_coerced() -> None:
     state = normalize_read_batch(_batch("unknown_schema_anonymous.json"))
 
     assert state.power.value == PowerState.UNKNOWN
-    assert state.power.raw_value == "future-state"
+    assert state.power.raw_value is None
     assert state.power.quality == Quality.UNKNOWN
     assert state.audio.outputs[0].volume is None
     assert state.audio.outputs[0].muted is None
@@ -164,6 +164,48 @@ def test_content_safe_output_never_retains_viewing_text_or_identifiers() -> None
     )
     assert private_text not in repr(content)
     assert private_identifier not in repr(content)
+
+
+def test_unknown_power_audio_and_batch_values_keep_counts_only() -> None:
+    batch = ReadBatch(
+        power_response={
+            "Authorization": "token-secret",
+            "result": [{"status": "active", "serial": "serial-secret"}],
+        },
+        volume_response={
+            "result": [
+                [
+                    {
+                        "target": "speaker",
+                        "volume": 10,
+                        "mute": False,
+                        "mac": "mac-secret",
+                    }
+                ]
+            ]
+        },
+        content_response={"result": [{"source": "tv"}]},
+        observed_at="2026-07-25T00:00:00Z",
+        received_at="2026-07-25T00:00:01Z",
+        unknown={"cookie": "cookie-secret"},
+    )
+    state = normalize_read_batch(batch)
+
+    assert state.power.unknown == {
+        "field_count": 1,
+        "result_field_count": 1,
+    }
+    assert state.audio.outputs[0].unknown == {"field_count": 1}
+    assert state.unknown == {"field_count": 1}
+    rendered = repr(state)
+    for private in (
+        "token-secret",
+        "serial-secret",
+        "mac-secret",
+        "cookie-secret",
+    ):
+        assert private not in repr(batch)
+        assert private not in rendered
 
 
 def test_malformed_batch_member_does_not_discard_successful_siblings() -> None:

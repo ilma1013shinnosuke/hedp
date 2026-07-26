@@ -43,11 +43,13 @@ class SwitchBotService:
             for device in physical:
                 if isinstance(device, dict) and device.get("deviceId"):
                     self.storage.upsert_device(device, now)
-            self.storage.reconcile_devices({
-                str(device["deviceId"])
-                for device in physical
-                if isinstance(device, dict) and device.get("deviceId")
-            })
+            self.storage.reconcile_devices(
+                {
+                    str(device["deviceId"])
+                    for device in physical
+                    if isinstance(device, dict) and device.get("deviceId")
+                }
+            )
             self._ensure_household_history()
         return {"physical": physical, "infrared": infrared}
 
@@ -77,18 +79,19 @@ class SwitchBotService:
                 result["raw_retention_reasons"] = observation.pop(
                     "_raw_retention_reasons"
                 )
-                result["storage_result"] = self.storage.insert_observation(
-                    observation
-                )
+                result["storage_result"] = self.storage.insert_observation(observation)
                 self.storage.commit()
             if not dry_run:
                 self.storage.record_collection_event(
-                    device_id, collected_at, success=success,
+                    device_id,
+                    collected_at,
+                    success=success,
                     status_body_empty=result["status_body_empty"],
                     error_type=error,
                     raw_payload_json=(
                         json.dumps(response, ensure_ascii=False)
-                        if response is not None and not success else None
+                        if response is not None and not success
+                        else None
                     ),
                 )
             results.append(result)
@@ -100,7 +103,9 @@ class SwitchBotService:
     ) -> dict[str, Any]:
         body = response.get("body")
         normalized = normalize_status(
-            device, body if isinstance(body, dict) else {}
+            device,
+            body if isinstance(body, dict) else {},
+            observed_at=collected_at,
         )
         raw_retention_reasons = success_raw_retention_reasons(
             str(device.get("deviceType", "")),
@@ -114,9 +119,7 @@ class SwitchBotService:
             "timezone": "Asia/Tokyo",
             "observation_kind": "status_snapshot",
             "temperature_c": normalized["temperature_c"],
-            "relative_humidity_percent": normalized[
-                "relative_humidity_percent"
-            ],
+            "relative_humidity_percent": normalized["relative_humidity_percent"],
             "co2_ppm": normalized["co2_ppm"],
             "battery_percent": normalized["battery_percent"],
             "power_state": normalized["power_state"],
@@ -126,6 +129,11 @@ class SwitchBotService:
             "usage_minutes_of_day": normalized["usage_minutes_of_day"],
             "online_status": normalized["online_status"],
             "working_status": normalized["working_status"],
+            "robot_working_status": normalized["robot_working_status"],
+            "charging_status": normalized["charging_status"],
+            "task_status": normalized["task_status"],
+            "water_base_battery_percent": normalized["water_base_battery_percent"],
+            "status_quality": normalized["status_quality"],
             "source": "switchbot_api_v1_1",
             "source_precision": "collection_time_snapshot",
             "expected_interval_seconds": expected_interval_seconds(

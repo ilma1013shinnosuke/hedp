@@ -66,9 +66,7 @@ class MieleReadOnlyCollector:
         if not 1 <= maximum_events <= 1_024:
             raise ValueError("maximum_events must be between 1 and 1024")
         if not 0 < timeout_seconds <= 300:
-            raise ValueError(
-                "timeout_seconds must be greater than 0 and at most 300"
-            )
+            raise ValueError("timeout_seconds must be greater than 0 and at most 300")
         observations: list[dict[str, object]] = []
         fingerprints: list[str] = []
         seen: set[str] = set()
@@ -82,7 +80,10 @@ class MieleReadOnlyCollector:
         ):
             input_count += 1
             last_received_at = self._now()
-            state = state_from_event(event)
+            state = state_from_event(
+                event,
+                source_device_id=self._source_device_id,
+            )
             if state is None:
                 discarded_count += 1
             else:

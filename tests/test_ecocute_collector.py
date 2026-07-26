@@ -11,6 +11,9 @@ from hedp.adapters.ecocute import (
     FrameError,
     parse_frame,
 )
+from hedp.adapters.read_only_qualification import (
+    ReadOnlyOfflineQualificationChecker,
+)
 
 
 FIXTURE = Path(__file__).parent / "fixtures/ecocute/property_maps_v1.json"
@@ -48,24 +51,21 @@ def test_collector_reads_maps_first_and_preserves_complete_raw() -> None:
     raw = collector.collect()
 
     assert transport.requests[0] == (0x9D, 0x9E, 0x9F)
-    assert transport.requests[1] == (
-        0x80,
-        0x86,
-        0x88,
-        0x89,
-        0xB0,
-        0xB2,
-        0xC3,
-        0xD1,
-        0xD3,
-        0xE1,
-        0xEA,
-    )
+    assert all(len(batch) <= 4 for batch in transport.requests)
+    requested = tuple(epc for batch in transport.requests[1:] for epc in batch)
+    assert requested == tuple(sorted(set(requested)))
+    assert {0xC0, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xE3} <= set(requested)
     assert raw.source == "ecocute_echonet_lite"
     assert raw.payload["property_map_response_hex"] == map_raw.hex()
-    assert raw.payload["state_response_hex"] == STATE.hex()
+    assert raw.payload["state_response_hex"] == [STATE.hex()] * (
+        len(transport.requests) - 1
+    )
+    assert raw.metadata["partial_property_count"] > 0
     assert raw.metadata["target_alias"] == "ecocute_main"
     assert "host" not in raw.metadata
+    qualification = ReadOnlyOfflineQualificationChecker().evaluate(raw)
+    assert qualification.status == "qualified"
+    assert qualification.evidence_count == len(raw.payload["state_response_hex"]) + 1
 
 
 def test_collector_rejects_a_response_without_get_map() -> None:
