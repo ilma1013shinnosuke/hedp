@@ -1,5 +1,18 @@
-"""Read-only operational checks for HEDP/SumiCore."""
+"""Vendor-neutral operational contracts for HEDP/SumiCore."""
 
+from .execution import (
+    AdapterExecutionResult,
+    Authorization,
+    ExecutionAuditEvent,
+    ExecutionCapability,
+    ExecutionCoordinator,
+    ExecutionMode,
+    ExecutionOutcome,
+    ExecutionResult,
+    GateDecision,
+    OperationRegistry,
+    function_port,
+)
 from .shadow_execution import (
     AuditEvent,
     CapabilityDescriptor,
@@ -15,15 +28,26 @@ from .shadow_execution import (
 )
 
 __all__ = [
+    "AdapterExecutionResult",
     "AuditEvent",
+    "Authorization",
     "CapabilityDescriptor",
     "EvidenceQuality",
+    "ExecutionAuditEvent",
+    "ExecutionCapability",
+    "ExecutionCoordinator",
+    "ExecutionMode",
+    "ExecutionOutcome",
+    "ExecutionResult",
+    "GateDecision",
     "GateResult",
     "GateStatus",
     "Intent",
+    "OperationRegistry",
     "ShadowAssessment",
     "ShadowExecutionGate",
     "ShadowOperationRegistry",
     "ShadowResult",
     "StateEvidence",
+    "function_port",
 ]

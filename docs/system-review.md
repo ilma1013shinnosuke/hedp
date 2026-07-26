@@ -165,6 +165,12 @@ read-back callableを注入する。vendor job参照も公開結果へ残さず�
 Readerの実機適格性、Shadow Mode、対象・操作・回数を限定した単発試験の順で進める。
 実機、現役DB、launchd、認証設定、Gitはこの実装作業では変更していない。
 
+その後、共通ExecutionGateと単発送信Coordinatorを追加した。承認範囲、Intent期限、
+対象・能力、状態鮮度・品質、手動操作後の停止、process内重複を送信前に検査する。
+Shadow ModeはPortを呼ばず、fixture modeでもAdapterは最大一回だけ呼ぶ。Adapter例外は
+`unknown`とし、自動再送しない。Qrioとエコキュートには共通Intentを既存操作Adapterへ
+変換する薄いPortを追加したが、現役DB、CLI、定期job、実機とは未接続である。
+
 ## 完了条件
 
 - 通常運用で同じ失敗通知の対応を繰り返さない。

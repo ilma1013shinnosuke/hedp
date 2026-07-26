@@ -211,10 +211,17 @@ CapabilityDescriptorに明記する。
 Shadow Modeでは実機へ送信せず、`would_dispatch`、`would_block`、
 `indeterminate`を評価結果として残す。Shadowを`completed`とは記録しない。
 
-最初のfixture専用実装は`src/hedp/operations/shadow_execution.py`に置く。
-`src/hedp/execution/`、DB表、CLI、Adapter接続を作らず、注入した匿名Intentと状態だけを
-評価する。process-local registryは同一試験内の重複を止めるためのものであり、
-再起動後の冪等性や未完了操作の再開を保証しない。
+最初のShadow専用実装は`src/hedp/operations/shadow_execution.py`に置く。共通Gateと
+単発送信のオフライン検証は`src/hedp/operations/execution.py`、メーカー別の薄い接続は
+`src/hedp/operations/adapter_ports.py`に置く。後者も匿名fixtureだけで検証し、CLI、
+現役DB、定期job、実機へは接続しない。
+
+process-local registryは同一process内の重複dispatchを原子的に止めるためのものであり、
+再起動後の冪等性や未完了操作の再開を保証しない。Adapterが例外を返した場合も同じIntentを
+自動再送せず`unknown`とする。Shadow評価はdispatchではないためoperation IDを消費しない。
+承認は対象と能力だけでなく、operation ID、requester、具体的なdesired stateへ結び付け、
+別操作へ流用できないようにする。実行モードは明示した`fixture`だけを送信可能とし、不明な
+値は必ず停止する。永続registryを導入するまでは、本番経路を有効にしない。
 
 ## 7. タイムアウトと再試行
 

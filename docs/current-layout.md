@@ -58,11 +58,13 @@ Drive受け渡しキューへ保存し、ダウンロード後にMac側で検査
 | 現在のファイル | 主な役割 | 状態 |
 |---|---|---|
 | `intelligence/solar_self_consumption_opportunity.py` | 前日電力収支の限定的な説明 | read-only表示まで。Intent・通知・操作なし |
-| `operations/shadow_execution.py` | 匿名fixtureのExecutionGate評価 | fixture限定。dispatch・DB・Adapter接続なし |
+| `operations/shadow_execution.py` | 匿名fixtureのShadow Gate評価 | fixture限定。dispatchなし |
+| `operations/execution.py` | 承認・期限・鮮度・重複を検査する共通Gateと単発送信 | offline fixture限定。DB・CLI・実機未接続 |
+| `operations/adapter_ports.py` | Qrio・エコキュート操作Adapterへの薄い変換Port | offline fixture限定 |
 
-本番Execution package、共通ExecutionGateへのAdapter接続、永続監査はまだ存在しない。
-Qrioとエコキュートには操作専用のオフラインAdapterとread-back試験があるが、共通Gateを
-通る本番経路ではない。試作の存在を本番運用や自動化の完成とみなさない。
+共通ExecutionGateとQrio・エコキュートAdapterへの接続Portはオフライン検証まで存在する。
+本番CLI、永続重複台帳、永続監査、実機dispatch経路はまだ存在しない。試作の存在を
+本番運用や自動化の完成とみなさない。
 
 ## 未配備の機器Adapter
 
