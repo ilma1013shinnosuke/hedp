@@ -44,6 +44,8 @@ cache、build生成物は正本にしない。必要な知識、実装、匿名f
 
 詳細は[Adapterのライフサイクル](../adapter-lifecycle.md)、
 [共通Execution契約](../execution-contract.md)、
+[読み取り専用Adapter適格性確認](read-only-qualification-plan.md)、
+[操作用Adapter適格性確認](operation-qualification-plan.md)、
 [保存方針](../data-retention-policy.md)、
 [秘密情報方針](../security-policy.md)を正とする。
 
@@ -51,12 +53,12 @@ cache、build生成物は正本にしない。必要な知識、実装、匿名f
 
 | 連携 | 現在の知識状態 | 初期統合方針 |
 |---|---|---|
-| FusionSolar | observation / 移行検証中 | Modbus TCPを主経路候補として監視 |
+| FusionSolar | observation / Modbus実観測中 | Modbus TCPを主経路候補として24時間の連続性を監視 |
 | SwitchBot | observation、機種追加継続中 | 既存収集を保ち、機種profileを拡張 |
-| Smart LEDZ | observation、限定操作実績あり | readerを先に正式化 |
-| Qrio | observation、限定操作実績あり | reader先行。指紋・暗証番号の自作連携は対象外 |
-| エコキュート | observation、能力確認中 | ECHONET Lite reader先行 |
-| Miele@home | research | OAuth/SSE readerを有界化して検証 |
+| Smart LEDZ | observation、Readerはオフライン検証済み | 実機read-only適格性確認を段階実施 |
+| Qrio | observation、Reader/操作Adapterはオフライン検証済み | 実機適格性確認までは常駐・自動操作しない。指紋・暗証番号の自作連携は対象外 |
+| エコキュート | observation、Reader/操作Adapterはオフライン検証済み | 実機property map確認と段階試験までは常駐・自動操作しない |
+| Miele@home | observation、Readerはオフライン検証済み | 実OAuth/SSEを有限時間だけ適格性確認 |
 | WAREMA | research | Stick到着後に段階検証 |
 | BRAVIA | research | Sony REST能力照会から開始 |
 | 日産サクラ | research | 規約と公式経路を確認するまで実装保留 |

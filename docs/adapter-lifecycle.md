@@ -155,23 +155,24 @@ src/hedp/adapters/<vendor>/
 
 ## 9. 操作Adapter
 
-操作が必要になった時点でだけ`executor.py`を追加する。
+操作が必要になった時点でだけ`operation.py`を追加する。ここはメーカー固有commandの
+送信と応答整理を行うportであり、共通ExecutionGateや最終Outcome集約を置かない。
 
 ```text
 src/hedp/adapters/<vendor>/
 ├── transport.py
 ├── reader.py
 ├── normalizer.py
-├── executor.py        操作送信とメーカー応答の整理
+├── operation.py       操作送信とメーカー応答・read-back証拠の整理
 ├── capabilities.py
 └── errors.py
 ```
 
-- `reader.py`と`executor.py`は互いを呼ばない。
+- `reader.py`と`operation.py`は互いを直接呼ばない。read-backは④がReader portを注入する。
 - 共有するのは認証、接続、通信、エラー定義などに限定する。
-- ①は`reader.py`だけ、④は`executor.py`だけを使う。
-- `executor.py`を定期収集や本番自動化から直接呼ばない。
-- `executor.py`は操作結果をDBへ直接書かず、④へ返す。
+- ①は`reader.py`だけ、④は`operation.py`だけを使う。
+- `operation.py`を定期収集や本番自動化から直接呼ばない。
+- `operation.py`は操作結果をDBへ直接書かず、受付と確認証拠を④へ返す。
 - ④がExecutionGate、重複抑止、送信記録、結果確認、監査を担当する。
 - メーカーが権限分離に対応する場合は、読み取りと操作の認証情報も分ける。
 

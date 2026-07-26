@@ -60,19 +60,20 @@ Drive受け渡しキューへ保存し、ダウンロード後にMac側で検査
 | `intelligence/solar_self_consumption_opportunity.py` | 前日電力収支の限定的な説明 | read-only表示まで。Intent・通知・操作なし |
 | `operations/shadow_execution.py` | 匿名fixtureのExecutionGate評価 | fixture限定。dispatch・DB・Adapter接続なし |
 
-本番Execution package、dispatch、永続監査、read-backはまだ存在しない。試作の存在を
-本番運用や自動化の完成とみなさない。
+本番Execution package、共通ExecutionGateへのAdapter接続、永続監査はまだ存在しない。
+Qrioとエコキュートには操作専用のオフラインAdapterとread-back試験があるが、共通Gateを
+通る本番経路ではない。試作の存在を本番運用や自動化の完成とみなさない。
 
 ## 未配備の機器Adapter
 
 | Adapter | repository内の範囲 | runtime状態 |
 |---|---|---|
 | BRAVIA | 安全な正規化と取得済みbatch reader | fixture限定 |
-| エコキュート | ECHONET property map decode | fixture限定 |
-| Miele@home | 洗濯乾燥機状態の純粋な正規化 | fixture限定 |
-| Smart LEDZ | frame、correlation、状態正規化 | offline試作 |
+| エコキュート | Reader、Collector、ECHONET transport、操作専用Adapter | offline検証済み。実機・共通Gate未接続 |
+| Miele@home | Reader、Collector、HTTP transport、設定 | offline検証済み。実機未適格 |
+| Smart LEDZ | Reader、Collector、TCP transport、frame、状態正規化 | offline検証済み。実機未適格 |
 | WAREMA | frame codecとstream parser | hardware待ち |
-| Qrio | 正式知識のみ | 実装なし |
+| Qrio | Reader、Collector、HTTP transport、操作専用Adapter | offline検証済み。実機・共通Gate未接続 |
 
 詳細な知識状態と昇格条件は`docs/integrations/README.md`を正本とする。これらを
 現役収集jobや操作経路として扱わない。

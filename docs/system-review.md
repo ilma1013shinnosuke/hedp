@@ -147,6 +147,24 @@ Git履歴で保持し、同じコードや文書を別archiveへ複製しない�
 7. security reviewを実施し、秘密保管、権限、ネットワーク、backupを修正する。
    初回reviewと安全な`.env`読込は完了し、暗号化した別障害領域backupは未完了。
 
+## 2026-07-26 操作Adapter進捗
+
+Qrioとエコキュートは、読み取り経路と分離した操作専用Adapterを追加し、匿名fixtureによる
+オフライン検証まで完了した。いずれも一つの依頼につき書き込みは最大一回であり、timeout、
+通信異常、結果確認不能では操作を自動再送しない。送信受付と状態確認を分離し、一致を確認
+できない結果を成功へ変換しない。
+
+Qrioは、家庭固有のlock IDをRequest、Receipt、通常ログへ渡さず、秘密IDを閉じ込めた
+read-back callableを注入する。vendor job参照も公開結果へ残さず、必要な確認中だけメモリ内で
+使用する。エコキュートは、対象、観測時刻、有効期限を持つ実機由来property mapだけを許可し、
+別機器、期限切れ、未確認EPCを送信前に遮断する。現在の最小実装では0〜30秒の待機後に
+一度だけread-backし、Set command自体は再送しない。
+
+全体回帰試験は607件成功した。これは実機適格性や本番利用の承認を意味しない。次段階は
+[`operation-qualification-plan.md`](integrations/operation-qualification-plan.md)に従い、
+Readerの実機適格性、Shadow Mode、対象・操作・回数を限定した単発試験の順で進める。
+実機、現役DB、launchd、認証設定、Gitはこの実装作業では変更していない。
+
 ## 完了条件
 
 - 通常運用で同じ失敗通知の対応を繰り返さない。
