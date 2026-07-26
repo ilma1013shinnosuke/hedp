@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from hedp.operations.execution import (
     AdapterExecutionResult,
     Authorization,
@@ -78,7 +80,10 @@ def authorization(**changes):
 
 def test_shadow_mode_never_calls_port():
     calls = []
-    port = function_port(lambda value: calls.append(value))
+    port = function_port(
+        lambda value: calls.append(value),
+        test_fixture=True,
+    )
     coordinator = ExecutionCoordinator(
         (capability(),),
         {("fixture-lock", "lock-position-set"): port},
@@ -105,7 +110,12 @@ def test_fixture_dispatch_is_called_exactly_once_and_completed():
 
     coordinator = ExecutionCoordinator(
         (capability(),),
-        {("fixture-lock", "lock-position-set"): function_port(dispatch)},
+        {
+            ("fixture-lock", "lock-position-set"): function_port(
+                dispatch,
+                test_fixture=True,
+            )
+        },
     )
     result = coordinator.execute(
         intent(),
@@ -149,6 +159,17 @@ def test_fixture_mode_rejects_unmarked_port():
     assert result.dispatch_attempted is False
 
 
+def test_callable_port_requires_explicit_test_fixture_acknowledgement():
+    with pytest.raises(PermissionError, match="test-fixture-only"):
+        function_port(
+            lambda _: AdapterExecutionResult(
+                "accepted",
+                "matched",
+                ExecutionOutcome.COMPLETED,
+            )
+        )
+
+
 def test_state_evidence_is_bound_to_target_and_capability():
     coordinator = ExecutionCoordinator((capability(),))
     wrong_target = coordinator.execute(
@@ -174,7 +195,8 @@ def test_missing_or_wrong_authorization_blocks_without_dispatch():
         (capability(),),
         {
             ("fixture-lock", "lock-position-set"): function_port(
-                lambda value: calls.append(value)
+                lambda value: calls.append(value),
+                test_fixture=True,
             )
         },
     )
@@ -266,7 +288,12 @@ def test_adapter_exception_is_unknown_and_never_retried():
 
     coordinator = ExecutionCoordinator(
         (capability(),),
-        {("fixture-lock", "lock-position-set"): function_port(fail)},
+        {
+            ("fixture-lock", "lock-position-set"): function_port(
+                fail,
+                test_fixture=True,
+            )
+        },
     )
     result = coordinator.execute(
         intent(),
@@ -290,7 +317,8 @@ def test_contradictory_adapter_result_is_unknown():
                     "timeout",
                     "unavailable",
                     ExecutionOutcome.COMPLETED,
-                )
+                ),
+                test_fixture=True,
             )
         },
     )
@@ -310,7 +338,12 @@ def test_contradictory_adapter_result_is_unknown():
 def test_malformed_adapter_result_is_unknown():
     coordinator = ExecutionCoordinator(
         (capability(),),
-        {("fixture-lock", "lock-position-set"): function_port(lambda _: object())},
+        {
+            ("fixture-lock", "lock-position-set"): function_port(
+                lambda _: object(),
+                test_fixture=True,
+            )
+        },
     )
     result = coordinator.execute(
         intent(),
@@ -331,7 +364,8 @@ def test_duplicate_fixture_dispatch_is_blocked_after_first_claim():
             ("fixture-lock", "lock-position-set"): function_port(
                 lambda _: AdapterExecutionResult(
                     "accepted", "matched", ExecutionOutcome.COMPLETED
-                )
+                ),
+                test_fixture=True,
             )
         },
     )
@@ -365,7 +399,8 @@ def test_shadow_assessment_does_not_consume_dispatch_operation_id():
                     or AdapterExecutionResult(
                         "accepted", "matched", ExecutionOutcome.COMPLETED
                     )
-                )
+                ),
+                test_fixture=True,
             )
         },
     )
@@ -395,7 +430,8 @@ def test_invalid_execution_mode_fails_closed_without_dispatch():
         (capability(),),
         {
             ("fixture-lock", "lock-position-set"): function_port(
-                lambda value: calls.append(value)
+                lambda value: calls.append(value),
+                test_fixture=True,
             )
         },
     )
@@ -467,7 +503,8 @@ def test_capability_validator_failure_blocks_without_dispatch():
         (bounded,),
         {
             ("fixture-lock", "temperature-set"): function_port(
-                lambda value: calls.append(value)
+                lambda value: calls.append(value),
+                test_fixture=True,
             )
         },
     )

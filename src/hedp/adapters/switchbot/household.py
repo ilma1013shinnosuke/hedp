@@ -7,6 +7,12 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from hedp.adapters.switchbot.secondary_state import (
+    RegistrationStatus,
+    SecondaryDeviceKind,
+    SecondaryDeviceRegistration,
+    SecondaryDeviceRegistry,
+)
 from hedp.environment import get_compatible_environment
 
 
@@ -15,6 +21,14 @@ class SwitchBotHouseholdConfiguration:
     filename_device_ids: dict[str, str] = field(default_factory=dict)
     location_history: tuple[dict[str, str], ...] = ()
     name_history: tuple[dict[str, str], ...] = ()
+    secondary_devices: tuple[SecondaryDeviceRegistration, ...] = field(
+        default=(),
+        repr=False,
+    )
+
+    @property
+    def secondary_registry(self) -> SecondaryDeviceRegistry:
+        return SecondaryDeviceRegistry(self.secondary_devices)
 
     @classmethod
     def from_environment(cls) -> "SwitchBotHouseholdConfiguration":
@@ -56,6 +70,7 @@ class SwitchBotHouseholdConfiguration:
                 "name_history",
                 required=("device_id", "name", "valid_from"),
             ),
+            cls._secondary_devices(payload.get("secondary_devices", [])),
         )
 
     @staticmethod
@@ -107,3 +122,57 @@ class SwitchBotHouseholdConfiguration:
                         ) from error
             result.append(normalized)
         return tuple(result)
+
+    @staticmethod
+    def _secondary_devices(value: Any) -> tuple[SecondaryDeviceRegistration, ...]:
+        if not isinstance(value, list):
+            raise RuntimeError("secondary_devices must be a JSON array")
+        registrations = []
+        allowed = {
+            "target_alias",
+            "kind",
+            "registration_status",
+            "vendor_device_id",
+        }
+        for index, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise RuntimeError(
+                    f"secondary_devices[{index}] must be a JSON object"
+                )
+            unknown = set(item) - allowed
+            if unknown:
+                names = ", ".join(sorted(unknown))
+                raise RuntimeError(
+                    f"secondary_devices[{index}] has unknown fields: {names}"
+                )
+            try:
+                alias = item["target_alias"]
+                kind = SecondaryDeviceKind(item["kind"])
+                status = RegistrationStatus(item["registration_status"])
+            except KeyError as error:
+                raise RuntimeError(
+                    f"secondary_devices[{index}] is missing: {error.args[0]}"
+                ) from error
+            except (TypeError, ValueError) as error:
+                raise RuntimeError(
+                    f"secondary_devices[{index}] has an invalid kind or status"
+                ) from error
+            vendor_device_id = item.get("vendor_device_id")
+            try:
+                registrations.append(
+                    SecondaryDeviceRegistration(
+                        alias,
+                        kind,
+                        status,
+                        vendor_device_id,
+                    )
+                )
+            except (TypeError, ValueError) as error:
+                raise RuntimeError(
+                    f"secondary_devices[{index}] is invalid"
+                ) from error
+        try:
+            SecondaryDeviceRegistry(tuple(registrations))
+        except ValueError as error:
+            raise RuntimeError("secondary_devices contains duplicate registrations") from error
+        return tuple(registrations)

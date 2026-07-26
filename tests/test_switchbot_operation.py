@@ -5,6 +5,13 @@ import pytest
 from hedp.observations import Quality
 from hedp.adapters.switchbot.operation import (
     DispatchStatus,
+    LIGHT_EXECUTION_CAPABILITY,
+    LightCapabilitySnapshot,
+    LightCommand,
+    LightDesiredState,
+    LightOperationAdapter,
+    LightOperationRequest,
+    LightVendorReceipt,
     OperationOutcome,
     RobotCommand,
     RobotOperationAdapter,
@@ -23,11 +30,25 @@ from hedp.adapters.switchbot.robot_state import (
     RobotWorkingStatus,
     normalize_robot_state,
 )
+from hedp.adapters.switchbot.secondary_state import (
+    LightPower,
+    RegistrationStatus,
+    SecondaryDeviceKind,
+    SecondaryDeviceRegistration,
+    SecondarySource,
+    normalize_secondary_observation,
+)
 from hedp.adapters.switchbot.support import (
     FeatureDisposition,
     SwitchBotFeature,
     feature_support,
 )
+from hedp.operations.execution import (
+    Authorization,
+    ExecutionCoordinator,
+    ExecutionOutcome,
+)
+from hedp.operations.shadow_execution import EvidenceQuality, Intent, StateEvidence
 
 
 NOW = datetime(2026, 7, 27, 0, 0, tzinfo=timezone.utc)
@@ -35,6 +56,8 @@ K10_COMMANDS = frozenset({RobotCommand.START, RobotCommand.STOP, RobotCommand.DO
 
 
 class FakeTransport:
+    is_fixture = True
+
     def __init__(self, response=None):
         self.response = response or RobotVendorReceipt(DispatchStatus.ACCEPTED)
         self.calls = []
@@ -190,6 +213,26 @@ def test_capability_gated_dry_run_never_dispatches_or_reads():
     assert reader.calls == []
 
 
+def test_unmarked_transport_is_rejected_before_any_request_can_execute():
+    class UnmarkedTransport:
+        def dispatch(self, *, target_alias, command):
+            raise AssertionError("unmarked transport must not be called")
+
+    with pytest.raises(ValueError, match="fixture-only"):
+        RobotOperationAdapter(
+            snapshot(),
+            transport=UnmarkedTransport(),
+            clock=lambda: NOW,
+        )
+
+
+def test_non_dry_run_without_fixture_transport_fails_closed():
+    with pytest.raises(PermissionError, match="dry-run or fixture-only"):
+        RobotOperationAdapter(snapshot(), clock=lambda: NOW).execute(
+            request(RobotCommand.DOCK, dry_run=False)
+        )
+
+
 def test_qualified_dispatch_and_readback_each_happen_once():
     transport = FakeTransport()
     reader = FakeReader(
@@ -279,3 +322,198 @@ def test_non_device_features_have_explicit_safe_boundaries():
         feature_support(SwitchBotFeature.REMOTE_CONTROL).disposition
         is FeatureDisposition.UNSUPPORTED
     )
+
+
+class FakeLightTransport:
+    is_fixture = True
+
+    def __init__(self, status=DispatchStatus.ACCEPTED):
+        self.status = status
+        self.calls = []
+
+    def dispatch(self, request):
+        self.calls.append(request)
+        return LightVendorReceipt(self.status)
+
+
+class FakeLightReader:
+    def __init__(self, state):
+        self.state = state
+        self.calls = []
+
+    def read_state(self, target_alias):
+        self.calls.append(target_alias)
+        return self.state
+
+
+def light_snapshot(commands=None):
+    return LightCapabilitySnapshot(
+        "light-zone-a",
+        SecondaryDeviceKind.STRIP_LIGHT_3,
+        commands
+        or frozenset(
+            {
+                LightCommand.SET_POWER,
+                LightCommand.SET_BRIGHTNESS,
+                LightCommand.SET_COLOR,
+            }
+        ),
+        NOW,
+        timedelta(minutes=5),
+    )
+
+
+def light_request(desired_state, *, dry_run=True):
+    return LightOperationRequest(
+        "light-operation-1",
+        "light-zone-a",
+        desired_state,
+        NOW,
+        dry_run,
+    )
+
+
+def light_state(body, *, observed_at=NOW, evaluated_at=NOW):
+    registration = SecondaryDeviceRegistration(
+        "light-zone-a",
+        SecondaryDeviceKind.STRIP_LIGHT_3,
+        RegistrationStatus.OBSERVABLE,
+        "fixture-light",
+    )
+    return normalize_secondary_observation(
+        registration,
+        body,
+        source=SecondarySource.OPENAPI_SNAPSHOT,
+        observed_at=observed_at,
+        received_at=max(observed_at, NOW),
+        evaluated_at=evaluated_at,
+        stale_after=timedelta(minutes=5),
+    )
+
+
+def test_light_dry_run_is_capability_gated_and_never_dispatches():
+    transport = FakeLightTransport()
+    desired = LightDesiredState(LightCommand.SET_BRIGHTNESS, 40)
+
+    result = LightOperationAdapter(
+        light_snapshot(),
+        transport=transport,
+        clock=lambda: NOW,
+    ).execute(light_request(desired))
+
+    assert result.dispatch.status is DispatchStatus.DRY_RUN
+    assert result.dispatch.attempt_number == 0
+    assert result.outcome is OperationOutcome.PLANNED
+    assert transport.calls == []
+
+
+def test_light_capability_builds_common_execution_gate_descriptor():
+    snapshot_value = light_snapshot(frozenset({LightCommand.SET_POWER}))
+    desired = LightDesiredState(LightCommand.SET_POWER, LightPower.OFF)
+    coordinator = ExecutionCoordinator(
+        (snapshot_value.execution_capability(control_owner="sumicore"),)
+    )
+    intent = Intent(
+        operation_id="light-operation-1",
+        requested_at=NOW,
+        expires_at=NOW + timedelta(minutes=1),
+        requester="fixture-user",
+        reason="anonymous fixture",
+        target_alias="light-zone-a",
+        capability=LIGHT_EXECUTION_CAPABILITY,
+        desired_state=desired,
+        priority=1,
+        control_owner="sumicore",
+        correlation_id="fixture-decision",
+    )
+    authorization = Authorization(
+        operation_id="light-operation-1",
+        requester="fixture-user",
+        target_alias="light-zone-a",
+        capability=LIGHT_EXECUTION_CAPABILITY,
+        desired_state=desired,
+        granted_at=NOW - timedelta(seconds=1),
+        expires_at=NOW + timedelta(minutes=1),
+    )
+    evidence = StateEvidence(
+        target_alias="light-zone-a",
+        capability=LIGHT_EXECUTION_CAPABILITY,
+        observed_at=NOW,
+        quality=EvidenceQuality.GOOD,
+        current_state=LightPower.ON,
+    )
+
+    result = coordinator.execute(
+        intent,
+        evidence=evidence,
+        authorization=authorization,
+        evaluated_at=NOW,
+    )
+
+    assert result.outcome is ExecutionOutcome.WOULD_DISPATCH
+    assert result.dispatch_attempted is False
+
+
+def test_light_fixture_dispatch_and_fresh_good_readback_happen_once():
+    transport = FakeLightTransport()
+    reader = FakeLightReader(
+        light_state({"power": "on", "brightness": 40, "color": "1:2:3"})
+    )
+    desired = LightDesiredState(LightCommand.SET_BRIGHTNESS, 40)
+
+    result = LightOperationAdapter(
+        light_snapshot(),
+        transport=transport,
+        state_reader=reader,
+        clock=lambda: NOW,
+    ).execute(light_request(desired, dry_run=False))
+
+    assert len(transport.calls) == 1
+    assert reader.calls == ["light-zone-a"]
+    assert result.verification.status is VerificationStatus.MATCHED
+    assert result.outcome is OperationOutcome.COMPLETED
+
+
+def test_light_unmarked_transport_and_unqualified_command_fail_closed():
+    class UnmarkedTransport:
+        def dispatch(self, request):
+            raise AssertionError("must not dispatch")
+
+    with pytest.raises(ValueError, match="fixture-only"):
+        LightOperationAdapter(light_snapshot(), transport=UnmarkedTransport())
+
+    adapter = LightOperationAdapter(
+        light_snapshot(frozenset({LightCommand.SET_POWER})),
+        clock=lambda: NOW,
+    )
+    with pytest.raises(PermissionError, match="absent"):
+        adapter.execute(
+            light_request(LightDesiredState(LightCommand.SET_BRIGHTNESS, 20))
+        )
+
+
+@pytest.mark.parametrize(
+    "state",
+    (
+        light_state(
+            {"power": "on", "brightness": 40, "color": "1:2:3"},
+            observed_at=NOW - timedelta(seconds=1),
+        ),
+        light_state({"power": "on", "brightness": 101, "color": "1:2:3"}),
+    ),
+)
+def test_light_stale_or_invalid_readback_never_completes(state):
+    result = LightOperationAdapter(
+        light_snapshot(),
+        transport=FakeLightTransport(),
+        state_reader=FakeLightReader(state),
+        clock=lambda: NOW,
+    ).execute(
+        light_request(
+            LightDesiredState(LightCommand.SET_BRIGHTNESS, 40),
+            dry_run=False,
+        )
+    )
+
+    assert result.verification.status is VerificationStatus.UNAVAILABLE
+    assert result.outcome is OperationOutcome.UNKNOWN

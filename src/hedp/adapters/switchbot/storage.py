@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class SwitchBotStorage:
@@ -101,6 +101,11 @@ class SwitchBotStorage:
                 task_status TEXT,
                 water_base_battery_percent REAL,
                 status_quality TEXT,
+                device_alias TEXT,
+                secondary_device_kind TEXT,
+                secondary_source TEXT,
+                secondary_quality TEXT,
+                secondary_state_json TEXT,
                 source TEXT NOT NULL,
                 source_file TEXT,
                 source_row_number INTEGER,
@@ -212,6 +217,11 @@ class SwitchBotStorage:
             ("task_status", "TEXT"),
             ("water_base_battery_percent", "REAL"),
             ("status_quality", "TEXT"),
+            ("device_alias", "TEXT"),
+            ("secondary_device_kind", "TEXT"),
+            ("secondary_source", "TEXT"),
+            ("secondary_quality", "TEXT"),
+            ("secondary_state_json", "TEXT"),
         ):
             if name not in observation_columns:
                 connection.execute(
@@ -381,6 +391,11 @@ class SwitchBotStorage:
                 "robot_working_status",
                 "water_base_battery_percent",
                 "status_quality",
+                "device_alias",
+                "secondary_device_kind",
+                "secondary_source",
+                "secondary_quality",
+                "secondary_state_json",
                 "source_precision",
             )
         }
@@ -448,6 +463,11 @@ class SwitchBotStorage:
             "task_status",
             "water_base_battery_percent",
             "status_quality",
+            "device_alias",
+            "secondary_device_kind",
+            "secondary_source",
+            "secondary_quality",
+            "secondary_state_json",
             "source",
             "source_file",
             "source_row_number",

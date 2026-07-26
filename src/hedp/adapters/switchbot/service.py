@@ -9,8 +9,13 @@ from hedp.adapters.switchbot.client import SwitchBotClient
 from hedp.adapters.switchbot.household import SwitchBotHouseholdConfiguration
 from hedp.adapters.switchbot.profiles import (
     expected_interval_seconds,
+    normalize_registered_secondary_status,
     normalize_status,
     success_raw_retention_reasons,
+)
+from hedp.adapters.switchbot.secondary_state import (
+    RegistrationStatus,
+    SecondaryDeviceRegistration,
 )
 from hedp.adapters.switchbot.storage import SwitchBotStorage
 
@@ -57,8 +62,30 @@ class SwitchBotService:
         listing = self.refresh_devices(dry_run=dry_run)
         collected_at = datetime.now(timezone.utc)
         results = []
+        registry = self.household.secondary_registry
+        seen_secondary_aliases = set()
         for device in listing["physical"]:
             device_id = str(device.get("deviceId", ""))
+            registration = registry.resolve_vendor_id(device_id)
+            if registration is not None:
+                seen_secondary_aliases.add(registration.target_alias)
+                if (
+                    registration.registration_status
+                    is not RegistrationStatus.OBSERVABLE
+                ):
+                    results.append(
+                        {
+                            "target_alias": registration.target_alias,
+                            "secondary_device_kind": registration.kind.value,
+                            "registration_status": (
+                                registration.registration_status.value
+                            ),
+                            "success": None,
+                            "status_body_empty": None,
+                            "error": None,
+                        }
+                    )
+                    continue
             try:
                 response = self.client.status(device_id)
                 success = response.get("statusCode") == 100
@@ -75,7 +102,15 @@ class SwitchBotService:
                 "error": error,
             }
             if success and response is not None and not dry_run:
-                observation = self._observation(device, response, collected_at)
+                observation = (
+                    self._secondary_observation(
+                        registration,
+                        response,
+                        collected_at,
+                    )
+                    if registration is not None
+                    else self._observation(device, response, collected_at)
+                )
                 result["raw_retention_reasons"] = observation.pop(
                     "_raw_retention_reasons"
                 )
@@ -95,6 +130,22 @@ class SwitchBotService:
                     ),
                 )
             results.append(result)
+        for registration in registry.registrations:
+            if (
+                registration.registration_status is RegistrationStatus.OBSERVABLE
+                or registration.target_alias in seen_secondary_aliases
+            ):
+                continue
+            results.append(
+                {
+                    "target_alias": registration.target_alias,
+                    "secondary_device_kind": registration.kind.value,
+                    "registration_status": registration.registration_status.value,
+                    "success": None,
+                    "status_body_empty": None,
+                    "error": None,
+                }
+            )
         return {"devices": len(listing["physical"]), "results": results}
 
     @staticmethod
@@ -149,6 +200,55 @@ class SwitchBotService:
             "_raw_retention_reasons": raw_retention_reasons,
         }
 
+    @staticmethod
+    def _secondary_observation(
+        registration: SecondaryDeviceRegistration,
+        response: dict[str, Any],
+        collected_at: datetime,
+    ) -> dict[str, Any]:
+        body = response.get("body")
+        normalized, observation, raw_retention_reasons = (
+            normalize_registered_secondary_status(
+                registration,
+                body if isinstance(body, dict) else None,
+                observed_at=collected_at,
+                received_at=collected_at,
+                evaluated_at=collected_at,
+                stale_after_seconds=normalized_secondary_stale_after_seconds(
+                    registration
+                ),
+            )
+        )
+        return {
+            "device_id": registration.vendor_device_id,
+            "device_alias": registration.target_alias,
+            "secondary_device_kind": registration.kind.value,
+            "secondary_source": observation.source.value,
+            "secondary_quality": observation.quality.value,
+            "secondary_state_json": json.dumps(
+                observation.to_storage_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            "observed_at_utc": collected_at.isoformat(),
+            "observed_at_local": collected_at.astimezone(TOKYO).isoformat(),
+            "timezone": "Asia/Tokyo",
+            "observation_kind": "secondary_status_snapshot",
+            "power_state": normalized["power_state"],
+            "status_quality": normalized["status_quality"],
+            "source": "switchbot_api_v1_1",
+            "source_precision": "collection_time_snapshot",
+            "expected_interval_seconds": normalized["expected_interval_seconds"],
+            "collection_method": "open_api_v1_1",
+            "measurement_status": normalized["measurement_status"],
+            "raw_payload_json": (
+                json.dumps(response, ensure_ascii=False)
+                if raw_retention_reasons
+                else None
+            ),
+            "_raw_retention_reasons": raw_retention_reasons,
+        }
+
     def _ensure_household_history(self) -> None:
         for item in self.household.location_history:
             self.storage.set_location(
@@ -169,3 +269,12 @@ class SwitchBotService:
                 valid_to=item.get("valid_to"),
                 source=item.get("source", "local_household_config"),
             )
+
+
+def normalized_secondary_stale_after_seconds(
+    registration: SecondaryDeviceRegistration,
+) -> int:
+    """Keep stale policy explicit and independent from a guessed deviceType."""
+
+    del registration
+    return 7200

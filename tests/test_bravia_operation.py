@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from hedp.adapters.bravia import (
+from hedp.adapters.bravia.operation import (
     BraviaAppRequest,
     BraviaCapability,
     BraviaCapabilitySnapshot,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from hedp.adapters.miele import (
+from hedp.adapters.miele.operation import (
     MieleCapabilitySnapshot,
     MieleCommand,
     MieleDryRunOutcome,

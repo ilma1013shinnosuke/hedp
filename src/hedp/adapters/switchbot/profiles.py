@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from hedp.adapters.switchbot.robot_state import normalize_robot_state
+from hedp.adapters.switchbot.secondary_state import (
+    RegistrationStatus,
+    SecondaryDeviceObservation,
+    SecondaryDeviceRegistration,
+    SecondaryField,
+    SecondarySource,
+    expected_secondary_interval_seconds,
+    normalize_secondary_observation,
+    secondary_raw_retention_reasons,
+)
 
 
 @dataclass(frozen=True)
@@ -207,3 +217,71 @@ def normalize_status(
             "battery_depleted_or_unavailable" if zero_unavailable else "observed"
         ),
     }
+
+
+def normalize_registered_secondary_status(
+    registration: SecondaryDeviceRegistration,
+    body: dict[str, Any] | None,
+    *,
+    observed_at: datetime,
+    received_at: datetime,
+    evaluated_at: datetime,
+    stale_after_seconds: int,
+    source: SecondarySource = SecondarySource.OPENAPI_SNAPSHOT,
+) -> tuple[dict[str, Any], SecondaryDeviceObservation, tuple[str, ...]]:
+    """Normalize a locally registered second-stage device without deviceType guessing.
+
+    This path intentionally does not read or produce environmental measurement
+    fields.  Legacy environment profiles continue through ``normalize_status``.
+    """
+
+    observation = normalize_secondary_observation(
+        registration,
+        body,
+        source=source,
+        observed_at=observed_at,
+        received_at=received_at,
+        evaluated_at=evaluated_at,
+        stale_after=timedelta(seconds=stale_after_seconds),
+    )
+    retention_reasons = secondary_raw_retention_reasons(observation)
+    power = observation.field(SecondaryField.POWER)
+    normalized = {
+        "status_profile": f"secondary_{registration.kind.value}",
+        "unknown_status_fields": observation.unknown_fields,
+        "unknown_status_values": tuple(
+            item.field.value
+            for item in observation.fields
+            if item.observation.quality.value == "unknown"
+        ),
+        "battery_percent": None,
+        "power_state": (
+            power.observation.value.value
+            if power is not None
+            and power.observation.value is not None
+            and hasattr(power.observation.value, "value")
+            else None
+        ),
+        "electric_current_ma": None,
+        "voltage_v": None,
+        "power_consumed_daily_w": None,
+        "usage_minutes_of_day": None,
+        "online_status": None,
+        "working_status": None,
+        "robot_working_status": None,
+        "charging_status": None,
+        "task_status": None,
+        "water_base_battery_percent": None,
+        "status_quality": observation.quality.value,
+        "measurement_status": (
+            registration.registration_status.value
+            if registration.registration_status is not RegistrationStatus.OBSERVABLE
+            else "observed"
+            if observation.quality.value == "good"
+            else f"secondary_{observation.quality.value}"
+        ),
+        "expected_interval_seconds": expected_secondary_interval_seconds(
+            registration.kind
+        ),
+    }
+    return normalized, observation, retention_reasons

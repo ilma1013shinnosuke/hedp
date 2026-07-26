@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from hedp.adapters.ecocute.operation import (
     DispatchStatus as EcoDispatchStatus,
+    EcoCuteOperationAdapter,
     EcoCuteSetCommand,
     OperationOutcome as EcoOutcome,
     VerificationStatus as EcoVerificationStatus,
@@ -11,6 +14,7 @@ from hedp.adapters.qrio.operation import (
     DispatchStatus as QrioDispatchStatus,
     OperationOutcome as QrioOutcome,
     QrioCommand,
+    QrioOperationAdapter,
     VerificationStatus as QrioVerificationStatus,
 )
 from hedp.operations.adapter_ports import EcoCuteExecutionPort, QrioExecutionPort
@@ -41,6 +45,8 @@ def intent(**changes):
 
 def test_qrio_port_translates_intent_and_sanitized_result():
     class Adapter:
+        fixture_only = True
+
         def __init__(self):
             self.requests = []
 
@@ -67,6 +73,8 @@ def test_qrio_port_translates_intent_and_sanitized_result():
 
 def test_ecocute_port_uses_explicit_command_builder_once():
     class Adapter:
+        fixture_only = True
+
         def __init__(self):
             self.commands = []
 
@@ -102,3 +110,45 @@ def test_ecocute_port_uses_explicit_command_builder_once():
     assert result.dispatch_status == "accepted"
     assert result.verification_status == "matched"
     assert result.outcome is ExecutionOutcome.COMPLETED
+
+
+@pytest.mark.parametrize(
+    "port_factory",
+    (
+        lambda adapter: QrioExecutionPort(adapter),
+        lambda adapter: EcoCuteExecutionPort(
+            adapter,
+            lambda value: EcoCuteSetCommand(
+                target_alias=value.target_alias,
+                epc=0xB0,
+                data=b"\x41",
+                expected_readback=b"\x41",
+            ),
+        ),
+    ),
+)
+def test_vendor_bridge_rejects_unmarked_direct_adapter(port_factory):
+    class UnmarkedAdapter:
+        def execute(self, _):
+            raise AssertionError("unmarked direct adapter must not be called")
+
+    with pytest.raises(ValueError, match="fixture-only adapter"):
+        port_factory(UnmarkedAdapter())
+
+
+def test_existing_direct_operation_adapters_are_not_fixture_bridges():
+    qrio_adapter = object.__new__(QrioOperationAdapter)
+    ecocute_adapter = object.__new__(EcoCuteOperationAdapter)
+
+    with pytest.raises(ValueError, match="Qrio.*fixture-only"):
+        QrioExecutionPort(qrio_adapter)
+    with pytest.raises(ValueError, match="EcoCute.*fixture-only"):
+        EcoCuteExecutionPort(
+            ecocute_adapter,
+            lambda value: EcoCuteSetCommand(
+                target_alias=value.target_alias,
+                epc=0xB0,
+                data=b"\x41",
+                expected_readback=b"\x41",
+            ),
+        )

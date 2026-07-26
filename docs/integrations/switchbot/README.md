@@ -56,6 +56,54 @@ rate limitと、機種別profileを分ける。同型機器の追加は家庭固
 - 操作contractはcollectorとHTTP clientから分離する。read-backは送信試行以後かつ
   検証時刻以前で、qualityが`good`の状態だけを成功根拠にする。
 
+## 2026-07-27 第二段階: 人感・在室・照明
+
+到着・ローカル登録対象は、人感センサー、人感センサーPro、E26スマート電球、
+テープライト3の4 familyである。vendorの正確な`deviceType`文字列は実際の一覧で確認するまで
+推測しない。今回の正規化入口は、Git管理外の家庭設定に置く安全な`target_alias`、
+明示family、登録状態であり、`deviceType`の部分一致ではない。
+
+登録状態は`pending_registration`、`registered_unverified`、`observable`を区別する。
+手動登録中のE26が一覧にまだ現れなくても、観測欠損や取得失敗にはしない。
+`pending_registration`のまま保持し、値を補完せず、状態APIも呼ばない。
+
+型付きObservationは次だけを扱う。環境センサーのCO2、温度、湿度の既存正本には変更を加えない。
+
+- 人感: 検知、明暗
+- 人感センサーPro: 検知、在室、検知継続、明暗
+- E26／テープライト3: 電源、0〜100の明るさ、RGB色
+- OpenAPI snapshotと将来のBLE partial eventのsourceを分離
+- field単位の`good`、`missing`、`stale`、`invalid`、`unknown`
+- BLE partial eventに含まれないfieldは`missing`へ変換せず、eventから省略
+- 未知field／未知enum／不正型は正常値へ推測せずRaw保持理由にする
+
+保存は`secondary_state_json`を再構築可能な型付き正本とし、匿名alias、family、source、全体qualityを
+検索列へ持つ。OpenAPI snapshotの取得時刻は引き続き
+`source_precision=collection_time_snapshot`であり、機器event発生時刻とは断定しない。
+
+照明操作は、型付きdesired state、観測済みcapability、共通ExecutionGate用descriptor、
+dry-run、匿名fixture transport、送信後のfresh/good read-backだけを実装する。
+vendor endpoint、HTTP POST payload、本番Portは実装しない。fixtureでないTransportは構築時に
+拒否し、将来の実操作は永続registryを備えた共通Executionだけを入口にする。
+
+### E26の最終read-only確認
+
+通常のService／inspect CLIはこの確認には使わない。専用probeは次を強制する。
+
+- 一覧GETは未登録でも必ず1回だけ、状態GETは最大1回、retryなし、応答は最大1 MiB
+- timeoutは1 request最大10秒、probe全体のwall-clock deadlineは最大20秒（既定12秒）
+- 既知の登録IDとの差集合だけをin-memoryで作り、正確な`deviceType`別の匿名件数を返す
+- E26 aliasへの候補紐付けは、差分が一意で呼び出し側が明示許可した場合だけ。永続化はしない
+- 一覧件数とstatus field数にも上限を持つ
+- DB、Raw、fileへ永続化しない
+- safe summaryは匿名alias、観測した正確な`deviceType`、状態field名、品質、取得時刻、
+  `persisted: false`だけ
+- device ID、name、hub、状態値、認証値、Raw本文を表示しない
+- 対象が未表示なら`pending_registration`とし、missing／failedにしない
+
+probeのlive実行はコードレビュー後の明示された単発確認に限る。登録変更、削除、reset、
+firmware更新、校正、Webhook登録、照明操作は行わない。
+
 ## 残る改善点
 
 - `observed_at`不明時に収集時刻を機器発生時刻と断定しない。
@@ -68,7 +116,7 @@ CSV等に明示時刻があるimportは従来どおりその時刻と精度を�
 別途設計する。既存行の書換えは行わない。
 - OpenAPI、BLE、手動importの由来と精度を分離する。
 - 実測に基づいて機種ごとの取得周期を調整する。
-- 照明、人感、在室fieldは実機schema確認後に正式な保存項目へ昇格する。
+- 新しいdeviceType／fieldは専用probeと匿名fixtureで確認してからprofileへ昇格する。
 - 書き込みrouteは共通Executionとの接続、安全確認、匿名fixtureが揃うまで既存collectorや
   `SwitchBotClient`へ追加しない。
 

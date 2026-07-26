@@ -387,11 +387,24 @@ class ExecutionCoordinator:
 
 def function_port(
     function: Callable[[Intent], AdapterExecutionResult],
+    *,
+    test_fixture: bool = False,
 ) -> ExecutionPort:
-    """Make a small fixture or vendor bridge satisfy the execution port."""
+    """Wrap a callable for tests and anonymous fixtures only.
+
+    This is not a vendor or production extension point.  The explicit keyword
+    prevents an arbitrary callable from looking like an approved dispatch port
+    at a call site.  Vendor bridges must use a dedicated, fixture-marked class.
+    """
+
+    if test_fixture is not True:
+        raise PermissionError(
+            "function_port is test-fixture-only; pass test_fixture=True explicitly"
+        )
 
     class _FunctionPort:
         fixture_only = True
+        production_execution_enabled = False
 
         def execute(self, intent: Intent) -> AdapterExecutionResult:
             return function(intent)

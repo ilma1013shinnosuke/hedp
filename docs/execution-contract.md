@@ -232,6 +232,12 @@ process-local registryは同一process内の重複dispatchを原子的に止め�
 結び付け、別機器・別能力の状態を流用しない。Adapterの結果が受付・確認・最終結果の間で
 矛盾する場合は`unknown`として扱う。永続registryを導入するまでは、本番経路を有効にしない。
 
+`function_port`は匿名fixture test専用であり、呼出し側が`test_fixture=True`を明示しなければ
+生成できない。メーカー別bridgeも`fixture_only=True`のAdapterだけを受け付ける。
+Qrio、EcoCute、FusionSolar、SwitchBotを含む各`operation.py`の直接呼出しは、本番入口ではなく
+未配線のoffline/fixture検証部品である。将来の実Transportは、永続registryを備えた共通
+Executionからだけ到達可能にし、Adapterや定期job、CLIから直接呼ばない。
+
 ## 7. タイムアウトと再試行
 
 共通化するのは秒数ではなく、必ず上限を持つという原則である。秒数、回数、待機間隔、

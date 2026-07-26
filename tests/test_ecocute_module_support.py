@@ -8,11 +8,10 @@ from hedp.adapters.ecocute import (
     EchonetProperty,
     ObservationSource,
     build_get_request,
-    build_setc_request,
     confirmed_property_name,
     normalize_requested_observation,
 )
-from hedp.adapters.ecocute.echonet import decode_known_property
+from hedp.adapters.ecocute.echonet import build_setc_request, decode_known_property
 from hedp.adapters.ecocute.operation import (
     EcoCuteOperation,
     EcoCuteOperationAdapter,

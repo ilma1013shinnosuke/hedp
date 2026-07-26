@@ -54,6 +54,49 @@ Smart LEDZ、エコキュート、Qrio、Miele、FusionSolarのReaderを、実�
 24時間の成功率、鮮度、API負荷、データ量、機器への影響から、必要な鮮度を満たす最も低い
 頻度を採用する。周期は設定値とし、Readerへ埋め込まない。
 
+## 共通qualification harness
+
+`src/hedp/adapters/read_only_qualification_harness.py`は、既存の
+`ReadOnlyOfflineQualificationChecker`を各sampleへ適用する共通の有限runnerである。
+このmodule自身はtransport、認証、機器探索、scheduler、現役DBを所有しない。呼出側が
+`collect() -> RawData`だけのread-only probeを注入する。probeの実機利用はこのharnessの
+実装とは別に、対象と時間を示した利用者承認を必要とする。
+
+`QualificationPlan.single()`、`.short()`、`.day_24()`は同じ保存・要約契約を使う。
+
+- singleは1 sample、最大5分で終了する。
+- shortは10〜30分、intervalから算出した有限sample数で終了する。
+- day_24は24時間ちょうど、最大2,000 sampleで終了する。
+- 1 sampleのtimeoutは300秒以下かつsample間隔以下、sleep確認間隔は60秒以下とする。
+- 失敗数、DB容量、要約に含める失敗証拠数にも上限を持つ。
+- 未来の開始時刻は拒否し、timeoutしたprobeの完了を待たずに次のprobeを重ねない。
+
+保存先は利用者が明示した`*.qualification.sqlite3`だけである。既存ファイルを再利用する
+場合はtest-only marker、schema版、table列、foreign keyが一致しなければ開かない。新規作成は
+排他的に行い、regular fileの同一性をSQLite接続の前後で確認してsymlink置換を拒否する。
+POSIXでは新規DBを`0600`で作成し、再開時も保持descriptorが`0600`でなければ変更せず拒否する。
+WindowsにはPOSIX modeの意味がないため、同じ排他作成と
+file同一性確認を行い、保存directoryのWindows ACLを引き継ぐ。SQLite接続ごとに
+`foreign_keys=ON`を確認する。`hedp.db`、環境設定のDB、
+launchd/systemd、通常収集jobは参照しない。DBへ保存するのはsource、stage、予定・記録時刻、
+固定reason code、payload byte数、evidence件数、処理時間だけで、Raw payload、metadata、
+例外本文、target alias、IP、MAC、tokenは保存しない。checkerから未知reason codeが返っても
+その文字列は保存・表示せず、固定の`qualification_reason_unrecognized`へ置き換える。
+
+各sampleをcommitしてから次へ進む。明示中断は`interrupted`とし、同じplanとrun IDで再開
+すると完了済みindexを再取得しない。停止中に過ぎたslotは即時catch-upせず`missed`として
+匿名失敗証拠へ残す。planが変わった再開、期限超過、timeout、probe例外、source不一致、
+qualification不合格、DB容量超過はfail closedとする。summaryは件数と固定reason codeだけを
+返し、失敗Rawを表示しない。sample中に期限へ達した場合も、その結果を採用せず終了する。
+DB容量はpathを再参照せず、接続中保持するguard file descriptorから判定する。
+
+Python threadは安全に強制停止できない。harnessのtimeoutはrunをfail closedにして後続probeを
+開始しないための上限であり、実行中の`collect()`を取り消す機構ではない。各probeは必ず自身の
+transport timeoutをharnessのsample timeoutより短く設定し、有限時間で戻る必要がある。
+
+テストでは注入clock、sleeper、匿名RawData、一時DBだけを使ってsingle、short、24時間相当を
+即時再現する。これは実機24時間の合格を代替せず、runnerの時間・再開・保存契約だけを確認する。
+
 ## 初期周期候補
 
 以下は実測開始用の候補であり、本番値ではない。

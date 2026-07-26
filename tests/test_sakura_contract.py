@@ -9,6 +9,9 @@ from hedp.adapters.sakura import (
     ClimateState,
     DoorLockState,
     PlugState,
+    SakuraVehicleState,
+)
+from hedp.adapters.sakura.operation import (
     SakuraCapability,
     SakuraCapabilitySnapshot,
     SakuraClimateRequest,
@@ -18,7 +21,6 @@ from hedp.adapters.sakura import (
     SakuraOperation,
     SakuraSetCabinTemperatureRequest,
     SakuraStartChargingRequest,
-    SakuraVehicleState,
     is_supported_operation_name,
 )
 from hedp.observations import ObservationTime, ObservedValue, Quality

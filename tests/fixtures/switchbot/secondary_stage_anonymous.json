@@ -1,0 +1,76 @@
+{
+  "schema": "sumicore.switchbot.secondary-stage-fixture.v1",
+  "observed_at": "2026-07-27T00:00:00+00:00",
+  "received_at": "2026-07-27T00:00:01+00:00",
+  "devices": [
+    {
+      "target_alias": "motion-zone-a",
+      "kind": "motion_sensor",
+      "registration_status": "observable",
+      "body": {
+        "moveDetected": true,
+        "brightness": "dim"
+      }
+    },
+    {
+      "target_alias": "presence-zone-b",
+      "kind": "presence_sensor_pro",
+      "registration_status": "observable",
+      "body": {
+        "moveDetected": false,
+        "presenceState": true,
+        "pirMotion": true,
+        "brightness": "bright"
+      }
+    },
+    {
+      "target_alias": "strip-zone-c",
+      "kind": "strip_light_3",
+      "registration_status": "observable",
+      "body": {
+        "power": "on",
+        "brightness": 35,
+        "color": "12:34:56"
+      }
+    },
+    {
+      "target_alias": "bulb-zone-d",
+      "kind": "e26_smart_bulb",
+      "registration_status": "pending_registration",
+      "body": null
+    }
+  ],
+  "quality_cases": {
+    "missing": {
+      "kind": "motion_sensor",
+      "body": {
+        "moveDetected": true
+      }
+    },
+    "stale": {
+      "kind": "strip_light_3",
+      "body": {
+        "power": "off",
+        "brightness": 0,
+        "color": "0:0:0"
+      }
+    },
+    "invalid": {
+      "kind": "e26_smart_bulb",
+      "body": {
+        "power": 1,
+        "brightness": 101,
+        "color": "300:0:0"
+      }
+    },
+    "unknown": {
+      "kind": "presence_sensor_pro",
+      "body": {
+        "moveDetected": false,
+        "presenceState": true,
+        "pirMotion": false,
+        "brightness": "new-level"
+      }
+    }
+  }
+}
