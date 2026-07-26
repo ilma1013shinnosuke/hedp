@@ -1,0 +1,135 @@
+"""Small standard-library server for the local HESTIA dashboard.
+
+The first interface milestone is intentionally isolated from the live database,
+device adapters, and ExecutionGate.  It serves only packaged static assets and
+an anonymous demonstration snapshot.
+"""
+
+from __future__ import annotations
+
+import json
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib.resources import files
+from typing import Any
+
+
+_ASSET_TYPES = {
+    "index.html": "text/html; charset=utf-8",
+    "app.css": "text/css; charset=utf-8",
+    "app.js": "text/javascript; charset=utf-8",
+}
+
+
+def demonstration_snapshot() -> dict[str, Any]:
+    """Return value-free sample data for the first visual interface."""
+
+    return {
+        "schema": "hestia.interface.demo.v1",
+        "mode": "shadow",
+        "home": {"status": "comfortable", "alerts": 0},
+        "energy": {
+            "solar_kw": 4.8,
+            "home_kw": 2.1,
+            "battery_percent": 78,
+            "grid_kw": -1.4,
+            "today_kwh": 18.6,
+            "self_consumption_percent": 91,
+            "history": [
+                {"time": "05:00", "solar_kw": 0.0},
+                {"time": "06:00", "solar_kw": 0.2},
+                {"time": "07:00", "solar_kw": 1.1},
+                {"time": "08:00", "solar_kw": 2.8},
+                {"time": "09:00", "solar_kw": 4.1},
+                {"time": "10:00", "solar_kw": 5.8},
+                {"time": "11:00", "solar_kw": 6.7},
+                {"time": "12:00", "solar_kw": 7.2},
+                {"time": "13:00", "solar_kw": 6.4},
+                {"time": "14:00", "solar_kw": 5.1},
+                {"time": "15:00", "solar_kw": 3.8},
+                {"time": "16:00", "solar_kw": 2.3},
+                {"time": "17:00", "solar_kw": 1.0},
+                {"time": "18:00", "solar_kw": 0.2},
+            ],
+        },
+        "climate": {
+            "temperature_c": 23.8,
+            "humidity_percent": 48,
+            "co2_ppm": 612,
+        },
+        "devices": [
+            {"kind": "light", "label": "照明", "state": "12 / 18"},
+            {"kind": "lock", "label": "玄関", "state": "施錠"},
+            {"kind": "bath", "label": "給湯", "state": "420 L"},
+            {"kind": "washer", "label": "家電", "state": "待機"},
+        ],
+    }
+
+
+def _asset(name: str) -> bytes:
+    if name not in _ASSET_TYPES:
+        raise FileNotFoundError(name)
+    return files("hedp.web.static").joinpath(name).read_bytes()
+
+
+class _DashboardHandler(BaseHTTPRequestHandler):
+    server_version = "HESTIA"
+
+    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        path = self.path.split("?", 1)[0]
+        if path == "/api/summary":
+            self._send_json(demonstration_snapshot())
+            return
+        asset_name = "index.html" if path in {"/", "/index.html"} else path[1:]
+        try:
+            payload = _asset(asset_name)
+            content_type = _ASSET_TYPES[asset_name]
+        except (FileNotFoundError, KeyError):
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self'")
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format: str, *args: object) -> None:
+        """Avoid retaining household access details in ordinary logs."""
+
+    def _send_json(self, value: dict[str, Any]) -> None:
+        payload = json.dumps(
+            value, ensure_ascii=False, separators=(",", ":")
+        ).encode()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(payload)
+
+
+def create_dashboard_server(
+    host: str = "127.0.0.1", port: int = 8765
+) -> ThreadingHTTPServer:
+    """Create, but do not start, the local dashboard server."""
+
+    if not 0 <= port <= 65535:
+        raise ValueError("port must be between 0 and 65535")
+    return ThreadingHTTPServer((host, port), _DashboardHandler)
+
+
+def serve_dashboard(host: str = "127.0.0.1", port: int = 8765) -> None:
+    """Serve until interrupted; no device or database connection is opened."""
+
+    server = create_dashboard_server(host, port)
+    try:
+        print(f"HESTIA interface: http://{host}:{server.server_port}")
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()

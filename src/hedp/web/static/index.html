@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f3f5f7">
+    <title>HESTIA</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <main class="shell" aria-label="HESTIA ホーム">
+      <nav class="rail glass" aria-label="主要ナビゲーション">
+        <button class="brand icon-button" aria-label="HESTIA ホーム" title="ホーム">
+          <span aria-hidden="true">⌂</span>
+        </button>
+        <div class="nav-stack">
+          <button class="icon-button active" data-section="home" aria-label="ホーム" title="ホーム">
+            <span aria-hidden="true">⌂</span>
+          </button>
+          <button class="icon-button" data-section="energy" aria-label="エネルギー" title="エネルギー">
+            <span aria-hidden="true">ϟ</span>
+          </button>
+          <button class="icon-button" data-section="climate" aria-label="環境" title="環境">
+            <span aria-hidden="true">◌</span>
+          </button>
+          <button class="icon-button" data-section="devices" aria-label="機器" title="機器">
+            <span aria-hidden="true">◫</span>
+          </button>
+          <button class="icon-button" data-section="automation" aria-label="自動化" title="自動化">
+            <span aria-hidden="true">⌁</span>
+          </button>
+        </div>
+        <button class="icon-button" id="theme-toggle" aria-label="表示を切り替える" title="表示">
+          <span aria-hidden="true">◐</span>
+        </button>
+      </nav>
+
+      <section class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">SUNDAY · 26 JULY</p>
+            <h1>おはようございます</h1>
+          </div>
+          <div class="top-actions">
+            <div class="status-pill glass">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span>快適</span>
+            </div>
+            <button class="avatar" aria-label="プロフィール" title="プロフィール">S</button>
+          </div>
+        </header>
+
+        <section class="hero glass" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <div class="hero-icon" aria-hidden="true">⌂</div>
+            <div>
+              <p class="eyebrow">HOME OVERVIEW</p>
+              <h2 id="hero-title">家は穏やかです</h2>
+              <p class="muted">すべての主要機器が応答しています</p>
+            </div>
+          </div>
+          <div class="hero-metric">
+            <span class="metric-value">0</span>
+            <span class="metric-label">要確認</span>
+          </div>
+        </section>
+
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">LIVE</p>
+            <h2>いまの家</h2>
+          </div>
+          <button class="icon-button compact" aria-label="詳細を表示" title="詳細">
+            <span aria-hidden="true">•••</span>
+          </button>
+        </div>
+
+        <section class="metric-grid" aria-label="現在の主要指標">
+          <article class="metric-card glass energy-card">
+            <div class="card-head">
+              <span class="card-icon energy" aria-hidden="true">ϟ</span>
+              <span class="trend positive">自給中</span>
+            </div>
+            <p class="card-label">太陽光</p>
+            <p class="card-value"><span id="solar">—</span><small>kW</small></p>
+            <div class="sparkline solar-line" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+          </article>
+
+          <article class="metric-card glass">
+            <div class="card-head">
+              <span class="card-icon battery" aria-hidden="true">▰</span>
+              <span class="trend">充電中</span>
+            </div>
+            <p class="card-label">蓄電池</p>
+            <p class="card-value"><span id="battery">—</span><small>%</small></p>
+            <div class="progress" aria-label="蓄電池残量"><i id="battery-bar"></i></div>
+          </article>
+
+          <article class="metric-card glass">
+            <div class="card-head">
+              <span class="card-icon climate" aria-hidden="true">◌</span>
+              <span class="trend positive">快適</span>
+            </div>
+            <p class="card-label">リビング</p>
+            <p class="card-value"><span id="temperature">—</span><small>°C</small></p>
+            <p class="detail"><span id="humidity">—</span>% · CO₂ <span id="co2">—</span></p>
+          </article>
+        </section>
+
+        <section class="solar-chart-card glass" aria-labelledby="solar-chart-title">
+          <div class="chart-heading">
+            <div>
+              <p class="eyebrow">SOLAR · TODAY</p>
+              <h2 id="solar-chart-title">太陽光の発電推移</h2>
+            </div>
+            <div class="chart-summary" aria-label="本日の発電概要">
+              <span><strong id="today-energy">—</strong> kWh</span>
+              <small>自家消費 <strong id="self-consumption">—</strong>%</small>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <span><i class="legend-solar"></i>発電電力</span>
+            <span class="chart-note">匿名の表示用データ</span>
+          </div>
+          <div class="chart-frame">
+            <canvas
+              id="solar-chart"
+              role="img"
+              aria-label="5時から18時までの太陽光発電電力の推移"
+            ></canvas>
+          </div>
+          <div class="chart-axis" aria-hidden="true">
+            <span>05:00</span><span>08:00</span><span>11:00</span>
+            <span>14:00</span><span>18:00</span>
+          </div>
+        </section>
+
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">SCENES</p>
+            <h2>クイック操作</h2>
+          </div>
+          <span class="shadow-badge">SHADOW</span>
+        </div>
+
+        <section class="quick-grid" id="device-grid" aria-label="クイック操作">
+          <button class="quick-control glass" data-action="light" aria-label="照明を確認">
+            <span class="quick-icon light" aria-hidden="true">☀︎</span>
+            <span class="quick-state">照明</span>
+            <small>—</small>
+          </button>
+          <button class="quick-control glass" data-action="lock" aria-label="玄関の状態を確認">
+            <span class="quick-icon lock" aria-hidden="true">▣</span>
+            <span class="quick-state">玄関</span>
+            <small>—</small>
+          </button>
+          <button class="quick-control glass" data-action="bath" aria-label="給湯の状態を確認">
+            <span class="quick-icon bath" aria-hidden="true">≈</span>
+            <span class="quick-state">給湯</span>
+            <small>—</small>
+          </button>
+          <button class="quick-control glass" data-action="washer" aria-label="家電の状態を確認">
+            <span class="quick-icon washer" aria-hidden="true">◎</span>
+            <span class="quick-state">家電</span>
+            <small>—</small>
+          </button>
+        </section>
+      </section>
+    </main>
+
+    <div class="toast glass" id="toast" role="status" aria-live="polite">
+      <span aria-hidden="true">◇</span>
+      <span>Shadow Mode — 実機へは送信しません</span>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

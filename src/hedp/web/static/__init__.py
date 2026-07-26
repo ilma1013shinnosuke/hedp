@@ -1,0 +1,1 @@
+"""Packaged HESTIA interface assets."""

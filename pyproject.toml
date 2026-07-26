@@ -22,6 +22,9 @@ hedp = "hedp.main:cli"
 where = ["src"]
 include = ["hedp*", "sumicore*"]
 
+[tool.setuptools.package-data]
+"hedp.web.static" = ["*.html", "*.css", "*.js"]
+
 [dependency-groups]
 dev = [
     "pytest>=8",

@@ -54,6 +54,7 @@ from hedp.adapters.fusionsolar.optimizer_file import (
 from hedp.storage import RawData
 from hedp.storage import Storage
 from hedp.adapters.switchbot.cli import add_switchbot_parser, run_switchbot
+from hedp.web import serve_dashboard
 
 
 def _create_application() -> tuple[Application, sqlite3.Connection]:
@@ -601,8 +602,15 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     )
     solar_explanation_parser.add_argument("--at", type=_datetime_argument)
     solar_explanation_parser.add_argument("--json", action="store_true")
+    interface_parser = subparsers.add_parser("interface")
+    interface_parser.add_argument("--host", default="127.0.0.1")
+    interface_parser.add_argument("--port", type=int, default=8765)
     add_switchbot_parser(subparsers)
     arguments = parser.parse_args(argv)
+
+    if arguments.command == "interface":
+        serve_dashboard(arguments.host, arguments.port)
+        return 0
 
     if arguments.command == "switchbot":
         return run_switchbot(arguments)

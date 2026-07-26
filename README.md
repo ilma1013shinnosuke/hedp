@@ -61,6 +61,7 @@ from the Git-ignored JSON file named by
 ## Main commands
 
 ```bash
+hedp interface
 hedp collect
 hedp collect --start 2026-07-01 --end 2026-07-03
 hedp collect-energy-balance --start 2026-07-19 --end 2026-07-19
@@ -97,6 +98,10 @@ hedp import-fusionsolar-reports runtime/import2 --dry-run
 hedp import-fusionsolar-gas-queue runtime/import/fusionsolar-gas --inspect
 hedp import-fusionsolar-gas-queue runtime/import/fusionsolar-gas --dry-run
 ```
+
+`hedp interface`は、最初のHESTIAローカルWeb画面を
+`http://127.0.0.1:8765`で開く。現在は匿名デモ値だけを表示するShadow版であり、
+現役DB、実機Adapter、ExecutionGateへ接続せず、操作ボタンも実機へ送信しない。
 
 `daily-health --safe-json`は定期ログ向けで、家庭固有ID、path、正確な時刻を
 出さず、状態、件数、鮮度区分だけを返します。SwitchBotの一覧・観測・gap・
