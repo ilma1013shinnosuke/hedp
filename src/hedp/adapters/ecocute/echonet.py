@@ -7,6 +7,8 @@ FORMAT_1 = bytes((0x10, 0x81))
 GET_REQUEST = 0x62
 GET_RESPONSE = 0x72
 INFORMATION = 0x73
+SET_REQUEST = 0x61
+SET_RESPONSE = 0x71
 WATER_HEATER_CLASS = bytes((0x02, 0x6B))
 CONTROLLER_OBJECT = bytes((0x05, 0xFF, 0x01))
 PROPERTY_MAP_EPCS = frozenset((0x9D, 0x9E, 0x9F))
@@ -130,6 +132,50 @@ def build_get_request(
         + destination
         + bytes((GET_REQUEST, len(epcs)))
         + properties
+    )
+
+
+def build_set_request(
+    *,
+    transaction_id: int,
+    epc: int,
+    data: bytes,
+    instance_code: int = 1,
+) -> bytes:
+    """Build one ECHONET Lite SetC request without assigning EPC semantics.
+
+    Callers must separately prove that the target advertised ``epc`` in its
+    runtime-observed Set property map.  Keeping that gate outside this byte
+    builder prevents a specification-only capability from becoming executable.
+    """
+
+    if isinstance(transaction_id, bool) or not isinstance(transaction_id, int):
+        raise TypeError("transaction_id must be an integer")
+    if not 0 <= transaction_id <= 0xFFFF:
+        raise ValueError("transaction_id must be between 0 and 65535")
+    if isinstance(instance_code, bool) or not isinstance(instance_code, int):
+        raise TypeError("instance_code must be an integer")
+    if not 1 <= instance_code <= 0xFF:
+        raise ValueError("instance_code must be between 1 and 255")
+    if isinstance(epc, bool) or not isinstance(epc, int):
+        raise TypeError("epc must be an integer")
+    if not 0 <= epc <= 0xFF:
+        raise ValueError("epc must be between 0 and 255")
+    if not isinstance(data, bytes):
+        raise TypeError("data must be bytes")
+    if not data:
+        raise ValueError("data must not be empty")
+    if len(data) > 0xFF:
+        raise ValueError("data must contain at most 255 bytes")
+
+    destination = WATER_HEATER_CLASS + bytes((instance_code,))
+    return (
+        FORMAT_1
+        + transaction_id.to_bytes(2, "big")
+        + CONTROLLER_OBJECT
+        + destination
+        + bytes((SET_REQUEST, 1, epc, len(data)))
+        + data
     )
 
 

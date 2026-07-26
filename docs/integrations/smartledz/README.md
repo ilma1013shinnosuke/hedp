@@ -1,7 +1,7 @@
 # Smart LEDZ Base 2.0.4連携
 
-- knowledge_status: `observation`
-- reviewed_at: 2026-07-25
+- knowledge_status: `offline-implementation-confirmed`
+- reviewed_at: 2026-07-26
 - observed_versions: Smart LEDZ Base 2.0.4、同型Gateway複数台
 - primary_transport: LAN SSDP + local TCP
 
@@ -40,6 +40,24 @@ Scene/Scheduleの定義、active、現在選択、実行中状態は同じ意味
 fragmented frame実機値、MQTT、認証token lifecycle、Sensor lux実値、個別照明の状態rowは
 未確認である。未確認項目を推測で正規化しない。
 
+`SmartLedzReadOnlyCollector`は確認済みの`GroupList`、`GroupGet`、`DeviceList`、
+`GroupScheduleGet`、照度取得だけを一回の収集単位へ束ねる。transport interfaceは
+`ReadCommand`を受ける`read`だけを公開し、Scene適用、点消灯、Schedule変更などの操作methodを
+持たない。Gateway・Group・Scene・Schedule・Device・Sensorの家庭固有IDは実行時設定で
+安全なaliasへ置換し、未対応の参照関係は`unknown`として件数を残す。
+
+保存対象はGroupの点灯・明るさ、Scene定義、Schedule定義・step、Device参照、Sensor状態、
+照度、品質、理由、取得時刻である。名称、元ID、IP、MAC、UDN、auth、設定blob、応答原文は
+保存せず、各応答のSHA-256 fingerprintだけを証拠として残す。Group・Scene・Scheduleの
+関係はaliasで維持し、定義、active、選択中、実行中を同じ状態として扱わない。
+
+frame、request相関、read command、正規化、Collectorは匿名fixtureでオフライン試験済みで、
+macOS固有APIへ依存しないためLinuxでも利用できる。`SmartLedzTcpReadTransport`は確認済みの
+`ReadCommand`だけを受け、接続・読取timeoutを最大30秒、request ID相関を必須とする。
+接続先と対象aliasは呼出側から注入する。環境変数による設定入口は用意済みだが、実TCP疎通、
+認証、複数Gateway、
+個別照明状態、push通知、現役DB保存、定期実行は未確認であり、本番稼働済みとは扱わない。
+
 ## 公開しない能力
 
 backup、restore、OTA、Wi-Fi、cloud、Gateway初期化、機器kickout/import、認証変更を
@@ -56,3 +74,7 @@ short/fragmented frame、最小Group/Scene/Schedule/Device/Sensor responseだけ
 
 Baseアプリ、Gateway firmware、frame/schema、認証方式、Gateway交換、複数Gateway構成、
 未知command/error、応答遅延の変化を検出したとき。旧・新fixtureを併存させる。
+実通信設定はコードへ埋め込まず、`SUMICORE_SMARTLEDZ_HOST`と
+`SUMICORE_SMARTLEDZ_PORT`を実行環境から読む。任意の
+`SUMICORE_SMARTLEDZ_TIMEOUT_SECONDS`は30秒以下に制限する。移行期間中は同名の
+`HEDP_`接頭辞も利用できる。家庭内アドレスは通常ログ、fixture、報告へ出さない。

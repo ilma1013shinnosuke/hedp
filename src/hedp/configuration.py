@@ -15,6 +15,14 @@ class ModbusConfiguration:
 
 
 @dataclass(frozen=True)
+class EcoCuteConfiguration:
+    host: str
+    port: int = 3610
+    instance_code: int = 1
+    target_alias: str = "ecocute_main"
+
+
+@dataclass(frozen=True)
 class Configuration:
     base_url: str
     station_dn: str
@@ -45,6 +53,41 @@ class Configuration:
     @staticmethod
     def database_path_from_environment() -> str:
         return require_compatible_environment("DATABASE_PATH").strip()
+
+    @staticmethod
+    def ecocute_from_environment() -> EcoCuteConfiguration:
+        host = require_compatible_environment("ECOCUTE_HOST").strip()
+        values = {
+            name: os.environ.get(
+                f"SUMICORE_ECOCUTE_{name}",
+                os.environ.get(f"HEDP_ECOCUTE_{name}", default),
+            )
+            for name, default in {
+                "PORT": "3610",
+                "INSTANCE_CODE": "1",
+                "TARGET_ALIAS": "ecocute_main",
+            }.items()
+        }
+        try:
+            port = int(values["PORT"])
+            instance_code = int(values["INSTANCE_CODE"])
+        except (TypeError, ValueError) as error:
+            raise RuntimeError(
+                "EcoCute port and instance code must be integers"
+            ) from error
+        target_alias = values["TARGET_ALIAS"]
+        if not 1 <= port <= 65535:
+            raise RuntimeError("EcoCute port is out of range")
+        if not 1 <= instance_code <= 255:
+            raise RuntimeError("EcoCute instance code is out of range")
+        if not target_alias or not target_alias.strip():
+            raise RuntimeError("EcoCute target alias must not be empty")
+        return EcoCuteConfiguration(
+            host=host,
+            port=port,
+            instance_code=instance_code,
+            target_alias=target_alias.strip(),
+        )
 
     @staticmethod
     def battery_dc_from_environment() -> tuple[str, str]:

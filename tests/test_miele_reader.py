@@ -121,15 +121,50 @@ def test_reader_interface_has_no_appliance_action() -> None:
         def devices(self) -> object:
             return {}
 
-        def events(self, source_device_id: str):
+        def events(
+            self,
+            source_device_id: str,
+            *,
+            maximum_events: int,
+            timeout_seconds: float,
+        ):
+            assert maximum_events == 1
+            assert timeout_seconds == 2
             yield SseEvent("PING", {})
 
     reader = MieleReader(FakeTransport())
 
     assert reader.devices() == {}
-    assert next(reader.events("fixture")).name == "PING"
+    assert next(
+        reader.events("fixture", maximum_events=1, timeout_seconds=2)
+    ).name == "PING"
     assert not hasattr(reader, "start")
     assert not hasattr(reader, "stop")
+
+
+def test_reader_requires_finite_sse_bounds() -> None:
+    class FakeTransport:
+        def devices(self) -> object:
+            return {}
+
+        def events(
+            self,
+            source_device_id: str,
+            *,
+            maximum_events: int,
+            timeout_seconds: float,
+        ):
+            yield SseEvent("PING", {})
+
+    reader = MieleReader(FakeTransport())
+
+    for kwargs in (
+        {"maximum_events": 0, "timeout_seconds": 1},
+        {"maximum_events": 1, "timeout_seconds": 0},
+        {"maximum_events": 1, "timeout_seconds": 301},
+    ):
+        with pytest.raises(ValueError):
+            reader.events("fixture", **kwargs)
 
 
 def test_sse_rejects_non_object_and_excessive_lines() -> None:

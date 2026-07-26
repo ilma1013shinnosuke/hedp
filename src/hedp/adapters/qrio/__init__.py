@@ -1,5 +1,7 @@
 """Qrio read-only contracts and privacy-safe normalizers."""
 
+from .collector import QrioReadOnlyCollector
+from .configuration import QrioConfiguration
 from .models import (
     BatteryState,
     LockAction,
@@ -12,6 +14,7 @@ from .models import (
 )
 from .normalizer import normalize_health, normalize_history, normalize_status
 from .reader import QrioReader, QrioReadPort
+from .transport import QrioHttpsReadTransport, QrioTransportError
 
 __all__ = [
     "BatteryState",
@@ -23,7 +26,11 @@ __all__ = [
     "LockPosition",
     "LockStatus",
     "QrioReadPort",
+    "QrioReadOnlyCollector",
+    "QrioConfiguration",
     "QrioReader",
+    "QrioHttpsReadTransport",
+    "QrioTransportError",
     "normalize_health",
     "normalize_history",
     "normalize_status",

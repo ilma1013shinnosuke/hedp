@@ -1,15 +1,15 @@
 # Miele@home連携
 
-- knowledge_status: `research`
-- reviewed_at: 2026-07-25
+- knowledge_status: `offline-implementation-confirmed`
+- reviewed_at: 2026-07-26
 - primary_transport: Miele cloud OAuth REST + SSE候補
 - initial_scope: read-only
 
 ## 現在の知見
 
 洗濯乾燥機の状態、program、phase、残時間、EcoFeedback等をcloudから取得する候補実装と
-実Rawがある。候補実装はSumiCoreの正式Adapterではなく、実SSEの長時間確認、offline test、
-lintの最終証明が不足している。
+実Rawがある。read-only Reader、有限SSE parser、Collectorは正式なオフラインAdapterとして
+test・lint済みである。一方、実OAuth transportと実SSEの長時間確認は未完了である。
 
 既存候補には無制限の再接続loopがあり、そのまま移植しない。現時点では正式なtransport、
 SSE framing、resume、認証失効、429/5xxの契約がないため、推測で再接続policyを実装しない。
@@ -34,6 +34,29 @@ SSE parserはPING、IDENT、ACTIONを含む有限transcriptを扱い、event byt
 ReaderはPython 3.11以上のOS非依存コードであり、Keychain、launchd、固定パスへ依存しない。
 実OAuth transport、単一SSE接続、poll fallbackは、秘密情報の再発行と実機read-only検証後に
 追加する。
+
+`MieleReadOnlyCollector`はREST snapshotと有限SSE eventを同じ安全なObservation形式へ
+まとめる。保存対象はallowlist済みのstatus、program、phase、残時間、経過時間、予約時刻、
+温度、回転数、乾燥段階と各値の品質・理由だけである。実device ID、名称、localized text、
+account、token、未知field、API response原文は保存せず、応答のSHA-256 fingerprintだけを
+証拠として残す。
+
+SSE収集は一回に処理するevent数と接続timeoutへ必ず上限を設け、transportは一接続を
+その両方の早い方で終了し、再接続しない。PINGを状態として保存しない。同一状態が
+連続した場合は時刻を除いた正規化状態で重複判定し、一件だけ残す。ReaderやCollectorは
+再接続loopを持たない。切断後の再接続回数、総時間、backoff、RESTによる状態回復は、
+rate limitと実機挙動を確認してから外側の運用部品へ実装する。
+
+Reader、GET専用HTTP transport、SSE parser、Collectorは匿名fixtureによるオフライン試験済みで、
+macOS固有APIへ依存しないためLinuxでも利用できる。OAuth token取得・更新、実SSE長時間接続、認証失効、
+429/5xx、現役DB保存、定期実行は未確認であり、本番稼働済みとは扱わない。
+
+実通信設定は`SUMICORE_MIELE_DEVICES_URL`、`SUMICORE_MIELE_EVENTS_URL`、
+`SUMICORE_MIELE_ACCESS_TOKEN`、`SUMICORE_MIELE_DEVICE_ID`を必須とする。任意設定は
+`SUMICORE_MIELE_TARGET_REF`、`SUMICORE_MIELE_REST_TIMEOUT_SECONDS`、
+`SUMICORE_MIELE_SSE_TIMEOUT_SECONDS`、`SUMICORE_MIELE_MAXIMUM_EVENTS`である。
+移行期間中は同名の`HEDP_`接頭辞も受け付ける。URL、token、device IDはfixture、文書、
+ログへ値を保存しない。
 
 ## 秘密
 

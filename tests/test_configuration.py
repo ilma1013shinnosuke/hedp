@@ -1,6 +1,6 @@
 import pytest
 
-from hedp.configuration import Configuration
+from hedp.configuration import Configuration, EcoCuteConfiguration
 
 
 def test_device_dns_are_trimmed_deduplicated_and_ordered(monkeypatch):
@@ -106,3 +106,22 @@ def test_from_environment_rejects_empty_value() -> None:
 
         with pytest.raises(RuntimeError, match="HEDP_FUSIONSOLAR_USERNAME"):
             Configuration.from_environment()
+
+
+def test_ecocute_configuration_is_portable_and_has_safe_defaults(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SUMICORE_ECOCUTE_HOST", "water-heater.local")
+    monkeypatch.delenv("HEDP_ECOCUTE_HOST", raising=False)
+
+    assert Configuration.ecocute_from_environment() == EcoCuteConfiguration(
+        host="water-heater.local",
+    )
+
+
+def test_ecocute_configuration_validates_network_fields(monkeypatch) -> None:
+    monkeypatch.setenv("HEDP_ECOCUTE_HOST", "water-heater.local")
+    monkeypatch.setenv("HEDP_ECOCUTE_PORT", "70000")
+
+    with pytest.raises(RuntimeError, match="port is out of range"):
+        Configuration.ecocute_from_environment()
