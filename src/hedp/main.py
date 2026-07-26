@@ -47,6 +47,10 @@ from hedp.adapters.fusionsolar.modbus_tcp import (
     ModbusTransportError,
     ReadOnlyModbusTcpClient,
 )
+from hedp.adapters.fusionsolar.optimizer_file import (
+    FusionSolarOptimizerCollector,
+    HuaweiReadOnlyFileClient,
+)
 from hedp.storage import RawData
 from hedp.storage import Storage
 from hedp.adapters.switchbot.cli import add_switchbot_parser, run_switchbot
@@ -218,6 +222,30 @@ def _create_modbus_application() -> tuple[
             continuity_reason=modbus.continuity_reason,
         ),
         modbus_record_builder=FusionSolarModbusRecordBuilder(),
+    )
+    return application, connection
+
+
+def _create_optimizer_application() -> tuple[
+    Application, sqlite3.Connection
+]:
+    modbus = Configuration.modbus_from_environment()
+    storage = Storage(Configuration.database_path_from_environment())
+    connection = storage.connect()
+    transport = ReadOnlyModbusTcpClient(
+        modbus.host,
+        port=modbus.port,
+        unit_id=modbus.unit_id,
+        timeout_seconds=10,
+    )
+    application = Application(
+        None,
+        storage,
+        None,
+        optimizer_collector=FusionSolarOptimizerCollector(
+            HuaweiReadOnlyFileClient(transport),
+            target_alias="solar-inverter",
+        ),
     )
     return application, connection
 
@@ -500,6 +528,7 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     device_group.add_argument("--device-dn")
     subparsers.add_parser("collect-realtime")
     subparsers.add_parser("collect-modbus")
+    subparsers.add_parser("collect-optimizer")
     subparsers.add_parser("qualify-modbus")
     battery_parser = subparsers.add_parser("collect-battery-dc")
     battery_parser.add_argument("--device-dn")
@@ -802,6 +831,26 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
         finally:
             connection.close()
         print("modbus: collected 1")
+        return 0
+
+    if arguments.command == "collect-optimizer":
+        application, connection = _create_optimizer_application()
+        try:
+            try:
+                raw_data = application.run_optimizer()
+            except ModbusTransportError:
+                print("optimizer: transport unavailable", file=sys.stderr)
+                return 75
+        finally:
+            connection.close()
+        snapshots = raw_data.payload["snapshots"]
+        optimizer_count = (
+            len(snapshots[-1]["optimizers"]) if snapshots else 0
+        )
+        print(
+            f"optimizer: collected {len(snapshots)} snapshot(s), "
+            f"{optimizer_count} optimizer(s)"
+        )
         return 0
 
     if arguments.command == "qualify-modbus":

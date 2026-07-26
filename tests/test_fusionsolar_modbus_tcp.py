@@ -72,6 +72,28 @@ def test_reads_holding_registers_without_exposing_write_functions(_):
 
 @patch(
     "hedp.adapters.fusionsolar.modbus_tcp.socket.getaddrinfo",
+    return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.2", 0))],
+)
+def test_exchanges_only_read_only_huawei_file_upload_subfunctions(_):
+    payload = bytes((0x41, 0x05, 6, 0x44, 0, 0, 0, 0, 0))
+    wire_response = struct.pack(">HHHB", 1, 0, len(payload) + 1, 0) + payload
+    connection = FakeConnection(wire_response)
+    client = ReadOnlyModbusTcpClient(
+        "inverter.local",
+        connection_factory=lambda *_: connection,
+    )
+
+    result = client.exchange_huawei_file_upload_pdu(b"\x41\x05\x01\x44")
+
+    assert result == payload
+    assert connection.request[7:] == b"\x41\x05\x01\x44"
+    for request in (b"\x41\x01", b"\x06\x05", b"\x41"):
+        with pytest.raises(ValueError):
+            client.exchange_huawei_file_upload_pdu(request)
+
+
+@patch(
+    "hedp.adapters.fusionsolar.modbus_tcp.socket.getaddrinfo",
     return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))],
 )
 def test_rejects_public_network_targets(_):

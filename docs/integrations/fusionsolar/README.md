@@ -1,5 +1,11 @@
 # FusionSolar API knowledge inventory
 
+Related:
+
+- [Modbus TCP切替](modbus-cutover.md)
+- [オプティマイザー読み取り](optimizer-readonly.md)
+- [屋根・太陽光パネル積雪推定](roof-snow-estimation.md)
+
 ## Scope and evidence levels
 
 This document records only behavior supported by the current Python code,

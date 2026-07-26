@@ -32,6 +32,7 @@ class ReadOnlyModbusTcpClient:
     """Minimal Modbus TCP client that intentionally implements no writes."""
 
     _READ_FUNCTIONS = {3, 4}
+    _READ_ONLY_HUAWEI_FILE_SUBFUNCTIONS = {0x05, 0x06, 0x0C}
 
     def __init__(
         self,
@@ -77,9 +78,43 @@ class ReadOnlyModbusTcpClient:
         if start_address + count > 65536:
             raise ValueError("requested register range exceeds the address space")
 
+        request_pdu = struct.pack(">BHH", function_code, start_address, count)
+        response_pdu = self._exchange_pdu(request_pdu, maximum_pdu_length=253)
+        response_function = response_pdu[0]
+        if response_function == function_code | 0x80:
+            raise ModbusTcpError("Modbus device returned an exception")
+        if response_function != function_code:
+            raise ModbusTcpError("unexpected Modbus function code")
+        if len(response_pdu) < 2:
+            raise ModbusTcpError("truncated Modbus response")
+        byte_count = response_pdu[1]
+        expected_bytes = count * 2
+        if byte_count != expected_bytes or len(response_pdu) != byte_count + 2:
+            raise ModbusTcpError("Modbus register count does not match")
+        registers = struct.unpack(f">{count}H", response_pdu[2:])
+        return ModbusReadResult(
+            function_code=function_code,
+            start_address=start_address,
+            registers=tuple(registers),
+        )
+
+    def exchange_huawei_file_upload_pdu(self, request_pdu: bytes) -> bytes:
+        """Exchange one read-only Huawei file-upload PDU.
+
+        Huawei function 0x41 calls the operation an upload because the device
+        uploads a file to this client.  Only start, data-read, and completion
+        subfunctions are accepted here; configuration and register writes have
+        no implementation path.
+        """
+        if len(request_pdu) < 2 or request_pdu[0] != 0x41:
+            raise ValueError("only Huawei file-upload function 0x41 is permitted")
+        if request_pdu[1] not in self._READ_ONLY_HUAWEI_FILE_SUBFUNCTIONS:
+            raise ValueError("Huawei file-upload subfunction is not permitted")
+        return self._exchange_pdu(request_pdu, maximum_pdu_length=260)
+
+    def _exchange_pdu(self, request_pdu: bytes, *, maximum_pdu_length: int) -> bytes:
         self._require_private_target()
         self._transaction_id = (self._transaction_id % 65535) + 1
-        request_pdu = struct.pack(">BHH", function_code, start_address, count)
         request = struct.pack(
             ">HHHB",
             self._transaction_id,
@@ -98,7 +133,7 @@ class ReadOnlyModbusTcpClient:
                 transaction_id, protocol_id, length, unit_id = struct.unpack(
                     ">HHHB", header
                 )
-                if not 2 <= length <= 254:
+                if not 2 <= length <= maximum_pdu_length + 1:
                     raise ModbusTcpError("invalid Modbus response length")
                 response_pdu = self._receive_exact(connection, length - 1)
         except ModbusTcpError:
@@ -114,24 +149,7 @@ class ReadOnlyModbusTcpClient:
             raise ModbusTcpError("Modbus unit ID does not match")
         if not response_pdu:
             raise ModbusTcpError("empty Modbus response")
-
-        response_function = response_pdu[0]
-        if response_function == function_code | 0x80:
-            raise ModbusTcpError("Modbus device returned an exception")
-        if response_function != function_code:
-            raise ModbusTcpError("unexpected Modbus function code")
-        if len(response_pdu) < 2:
-            raise ModbusTcpError("truncated Modbus response")
-        byte_count = response_pdu[1]
-        expected_bytes = count * 2
-        if byte_count != expected_bytes or len(response_pdu) != byte_count + 2:
-            raise ModbusTcpError("Modbus register count does not match")
-        registers = struct.unpack(f">{count}H", response_pdu[2:])
-        return ModbusReadResult(
-            function_code=function_code,
-            start_address=start_address,
-            registers=tuple(registers),
-        )
+        return response_pdu
 
     def _require_private_target(self) -> None:
         try:

@@ -28,6 +28,9 @@ from hedp.adapters.fusionsolar.modbus_collector import (
 from hedp.adapters.fusionsolar.modbus_record_builder import (
     FusionSolarModbusRecordBuilder,
 )
+from hedp.adapters.fusionsolar.optimizer_file import (
+    FusionSolarOptimizerCollector,
+)
 from hedp.storage import RawData
 from hedp.storage import Storage
 
@@ -75,6 +78,9 @@ class Application:
         modbus_record_builder: Optional[
             FusionSolarModbusRecordBuilder
         ] = None,
+        optimizer_collector: Optional[
+            FusionSolarOptimizerCollector
+        ] = None,
     ) -> None:
         self.collector = collector
         self.storage = storage
@@ -86,6 +92,7 @@ class Application:
         self.alarm_collector = alarm_collector
         self.modbus_collector = modbus_collector
         self.modbus_record_builder = modbus_record_builder
+        self.optimizer_collector = optimizer_collector
 
     def run(self) -> RawData:
         if self.collector is None or self.record_builder is None:
@@ -241,6 +248,13 @@ class Application:
         self.storage.save_records(
             self.modbus_record_builder.build(raw_data)
         )
+        return raw_data
+
+    def run_optimizer(self) -> RawData:
+        if self.optimizer_collector is None:
+            raise RuntimeError("Optimizer collector is not configured")
+        raw_data = self.optimizer_collector.collect()
+        self.storage.save_rawdata(raw_data)
         return raw_data
 
     def run_alarm_history(
