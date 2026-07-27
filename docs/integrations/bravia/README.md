@@ -18,11 +18,21 @@ power、audio、batch envelopeでも未知fieldのkey/valueは保持せず、値
 だけをschema変化の証拠にする。取得前Rawを受ける`ReadBatch`と正規化結果の未知schema
 metadataはreprから除外する。
 
-## 初期Adapter
+## 読み取りAdapter
 
-単一allowlist hostに対するread-only能力照会から始める。readerはpower、volume、mute、
-input、content、reachabilityを正規化し、無応答をstandbyと断定しない。executorは初期配布
+`BraviaReadOnlyCollector`は、単一allowlist hostへ接続する外部transportを境界に置き、
+power、volume/mute、playing contentを各1回、合計3回だけ取得する。1回のtimeoutは30秒を
+上限とし、再試行しない。通信実装は書き込みmethodを公開しない
+`BraviaReadTransport`に限定する。Collector本体はOS固有APIを使用しない。
+
+保存するのは入力種別、電源、音量、消音、品質、時刻、Raw応答のSHA-256だけである。
+視聴情報、未知値、IP、識別子、認証情報、例外本文は保存しない。一部の取得に失敗しても
+正常な兄弟応答は残し、失敗した項目だけを`missing`として扱う。無応答をstandbyと断定
 しない。
+
+現在は匿名fixtureによるオフラインCollectorまで正式化済み。実transportは対象テレビの
+method/version、認証、standby到達性をread-only適格性試験で確認した後に追加する。
+executorは初期配布しない。
 
 power、volume、mute、input、channel、app、Wake-on-LANには型付きrequestと短命な
 `BraviaCapabilitySnapshot`、副作用のないdry-run plannerを置く。volume範囲と
