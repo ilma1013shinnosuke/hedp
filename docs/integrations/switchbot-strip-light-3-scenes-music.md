@@ -12,6 +12,8 @@ SwitchBotで「シーン」と呼ばれるものには、別の2種類がある�
 
 公開されているStrip Light 3用OpenAPIの機器コマンドは、電源、明るさ、RGB、色温度である。
 内蔵エフェクトやミュージックを直接選ぶ機器コマンドは公開されていない。
+利用者の現行要件ではこれらをHESTIAから操作しないため、
+[正式操作Adapter](switchbot-strip-light-3-formal-adapter.md)では両方を`unsupported`とする。
 
 ## 現時点の根拠
 

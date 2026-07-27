@@ -3,6 +3,10 @@
 利用者が明示した照明操作を低遅延で送るための、テープライト3専用出力ポートである。
 通常操作では機器一覧や現在状態を先に取得せず、署名済みPOSTを1回だけ送る。
 
+正式な能力、Gate、fast execute、分離read-back、安全停止の正本は
+[正式操作Adapter](switchbot-strip-light-3-formal-adapter.md)とする。本書の直接runnerは
+引き続き診断専用であり、HESTIA UIの正式入口ではない。
+
 ## 確認済み能力
 
 2026-07-27の上限付きread-only確認で、登録種類`Strip Light 3`と、電源、明るさ、

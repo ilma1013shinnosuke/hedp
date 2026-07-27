@@ -1,0 +1,45 @@
+{
+  "schema": "hestia.switchbot.strip-light-3-formal-adapter.v1",
+  "official_status": {
+    "statusCode": 100,
+    "body": {
+      "deviceType": "Strip Light 3",
+      "power": "ON",
+      "brightness": 48,
+      "color": "12:34:56",
+      "colorTemperature": 4200
+    }
+  },
+  "capabilities": {
+    "formal": [
+      "power",
+      "brightness",
+      "color",
+      "color_temperature"
+    ],
+    "unsupported": [
+      "device_effect",
+      "music",
+      "account_automation_scene"
+    ]
+  },
+  "formal_ranges": {
+    "brightness": [
+      1,
+      100
+    ],
+    "rgb_channel": [
+      0,
+      255
+    ],
+    "color_temperature": [
+      2700,
+      6500
+    ]
+  },
+  "unconfirmed_boundaries": {
+    "active_rgb_or_cct_mode_in_openapi_status": false,
+    "exact_device_effect_readback": false,
+    "music_control_in_public_openapi": false
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "official_status": {
+    "statusCode": 100,
+    "body": {
+      "deviceType": "Color Bulb",
+      "power": "on",
+      "brightness": 48,
+      "color": "12:34:56",
+      "colorTemperature": 4200
+    }
+  },
+  "capabilities": {
+    "formal": ["power", "brightness", "color", "color_temperature"],
+    "unsupported": ["timer", "scene_or_effect"]
+  }
+}
