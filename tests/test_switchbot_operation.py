@@ -35,6 +35,7 @@ from hedp.adapters.switchbot.secondary_state import (
     RegistrationStatus,
     SecondaryDeviceKind,
     SecondaryDeviceRegistration,
+    SecondaryField,
     SecondarySource,
     normalize_secondary_observation,
 )
@@ -355,6 +356,7 @@ def light_snapshot(commands=None):
             {
                 LightCommand.SET_POWER,
                 LightCommand.SET_BRIGHTNESS,
+                LightCommand.SET_COLOR_TEMPERATURE,
                 LightCommand.SET_COLOR,
             }
         ),
@@ -471,6 +473,32 @@ def test_light_fixture_dispatch_and_fresh_good_readback_happen_once():
     assert len(transport.calls) == 1
     assert reader.calls == ["light-zone-a"]
     assert result.verification.status is VerificationStatus.MATCHED
+    assert result.outcome is OperationOutcome.COMPLETED
+
+
+def test_light_color_temperature_has_typed_fixture_readback():
+    transport = FakeLightTransport()
+    reader = FakeLightReader(
+        light_state(
+            {
+                "power": "on",
+                "brightness": 40,
+                "colorTemperature": 4200,
+                "color": "1:2:3",
+            }
+        )
+    )
+    desired = LightDesiredState(LightCommand.SET_COLOR_TEMPERATURE, 4200)
+
+    result = LightOperationAdapter(
+        light_snapshot(),
+        transport=transport,
+        state_reader=reader,
+        clock=lambda: NOW,
+    ).execute(light_request(desired, dry_run=False))
+
+    assert result.verification.status is VerificationStatus.MATCHED
+    assert result.verification.field is SecondaryField.COLOR_TEMPERATURE
     assert result.outcome is OperationOutcome.COMPLETED
 
 

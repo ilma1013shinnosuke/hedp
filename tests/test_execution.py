@@ -159,6 +159,27 @@ def test_fixture_mode_rejects_unmarked_port():
     assert result.dispatch_attempted is False
 
 
+def test_live_mode_requires_explicit_production_port_marker():
+    class UnmarkedPort:
+        def execute(self, _):
+            raise AssertionError("must not be called")
+
+    coordinator = ExecutionCoordinator(
+        (capability(),),
+        {("fixture-lock", "lock-position-set"): UnmarkedPort()},
+    )
+    result = coordinator.execute(
+        intent(),
+        evidence=evidence(),
+        authorization=authorization(),
+        evaluated_at=NOW,
+        mode=ExecutionMode.LIVE,
+    )
+
+    assert result.gate.reason_code == "production_port_required"
+    assert result.dispatch_attempted is False
+
+
 def test_callable_port_requires_explicit_test_fixture_acknowledgement():
     with pytest.raises(PermissionError, match="test-fixture-only"):
         function_port(

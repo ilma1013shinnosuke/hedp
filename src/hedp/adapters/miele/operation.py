@@ -14,6 +14,7 @@ import re
 from typing import Protocol
 
 from hedp.observations import Quality
+from hedp.operations.execution import ExecutionCapability
 
 
 _SAFE_REF = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -26,6 +27,27 @@ class MieleCommand(str, Enum):
 class MieleDryRunOutcome(str, Enum):
     WOULD_DISPATCH = "would_dispatch"
     WOULD_BLOCK = "would_block"
+    INDETERMINATE = "indeterminate"
+
+
+class MieleDispatchReceiptStatus(str, Enum):
+    """Sanitized receipt state from a future, separately qualified writer.
+
+    This does not describe an HTTP response.  A production transport may set
+    ``ACCEPTED`` only after the vendor's actual acknowledgement semantics have
+    been verified for the target device and API version.
+    """
+
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    UNKNOWN = "unknown"
+
+
+class MieleStartVerificationOutcome(str, Enum):
+    """Outcome of the read-back contract after a future dispatch attempt."""
+
+    MATCHED = "matched"
+    NOT_MATCHED = "not_matched"
     INDETERMINATE = "indeterminate"
 
 
@@ -116,6 +138,160 @@ class MieleProgramReadbackPort(Protocol):
     """Read-only port; implementations must not start or modify a program."""
 
     def read_program_state(self, target_alias: str) -> MieleProgramReadback: ...
+
+
+@dataclass(frozen=True)
+class MieleDispatchReceipt:
+    """Minimal, vendor-neutral acknowledgement evidence.
+
+    The offline adapter never creates a receipt for an actual device command.
+    This type exists so a later writer cannot report a completed operation from
+    a post-state observation alone.
+    """
+
+    target_alias: str
+    status: MieleDispatchReceiptStatus
+    observed_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_safe_ref("target_alias", self.target_alias)
+        if not isinstance(self.status, MieleDispatchReceiptStatus):
+            raise TypeError("status must be a MieleDispatchReceiptStatus")
+        _require_aware("observed_at", self.observed_at)
+
+
+@dataclass(frozen=True)
+class MieleStartVerificationCapability:
+    """Observed evidence needed to interpret a post-start read-back.
+
+    ``started_status_codes`` has no default interpretation.  It must be
+    populated only from a qualified, read-only observation for the exact API
+    and appliance.  An empty set deliberately leaves verification unresolved.
+    """
+
+    target_alias: str
+    observed_at: datetime
+    max_age: timedelta
+    maximum_readback_age: timedelta
+    started_status_codes: frozenset[int] = frozenset()
+
+    def __post_init__(self) -> None:
+        _require_safe_ref("target_alias", self.target_alias)
+        _require_aware("observed_at", self.observed_at)
+        _require_duration("max_age", self.max_age)
+        _require_duration("maximum_readback_age", self.maximum_readback_age)
+        if not isinstance(self.started_status_codes, frozenset):
+            raise TypeError("started_status_codes must be a frozenset")
+        for value in self.started_status_codes:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError("started_status_codes must contain integers")
+
+    def is_fresh_at(self, value: datetime) -> bool:
+        _require_aware("evaluated_at", value)
+        age = value.astimezone(timezone.utc) - self.observed_at.astimezone(
+            timezone.utc
+        )
+        return timedelta(0) <= age <= self.max_age
+
+
+@dataclass(frozen=True)
+class MieleStartVerificationResult:
+    """Result contract for a future writer's acceptance and read-back check."""
+
+    target_alias: str
+    outcome: MieleStartVerificationOutcome
+    reason_code: str
+    receipt: MieleDispatchReceipt | None = None
+    post_dispatch_readback: MieleProgramReadback | None = None
+
+    def __post_init__(self) -> None:
+        _require_safe_ref("target_alias", self.target_alias)
+        if not isinstance(self.outcome, MieleStartVerificationOutcome):
+            raise TypeError("outcome must be a MieleStartVerificationOutcome")
+        _require_safe_ref("reason_code", self.reason_code)
+        if self.receipt is not None and self.receipt.target_alias != self.target_alias:
+            raise ValueError("receipt target must match verification target")
+        if (
+            self.post_dispatch_readback is not None
+            and self.post_dispatch_readback.target_alias != self.target_alias
+        ):
+            raise ValueError("readback target must match verification target")
+
+
+class MieleStartVerificationGate:
+    """Evaluate receipt plus post-start read-back without dispatching anything."""
+
+    def __init__(self, capability: MieleStartVerificationCapability) -> None:
+        self._capability = capability
+
+    def assess(
+        self,
+        *,
+        receipt: MieleDispatchReceipt | None,
+        post_dispatch_readback: MieleProgramReadback | None,
+        evaluated_at: datetime,
+    ) -> MieleStartVerificationResult:
+        _require_aware("evaluated_at", evaluated_at)
+        capability = self._capability
+        target_alias = capability.target_alias
+        if not capability.is_fresh_at(evaluated_at):
+            return _verification(target_alias, "verification_capability_stale")
+        if not capability.started_status_codes:
+            return _verification(target_alias, "started_status_capability_missing")
+        if receipt is None:
+            return _verification(target_alias, "dispatch_receipt_unavailable")
+        if receipt.target_alias != target_alias:
+            return _verification(target_alias, "receipt_target_mismatch", receipt=receipt)
+        if receipt.status is MieleDispatchReceiptStatus.UNKNOWN:
+            return _verification(target_alias, "dispatch_receipt_unknown", receipt=receipt)
+        if receipt.status is MieleDispatchReceiptStatus.REJECTED:
+            return _verification(
+                target_alias,
+                "dispatch_rejected",
+                outcome=MieleStartVerificationOutcome.NOT_MATCHED,
+                receipt=receipt,
+            )
+        if post_dispatch_readback is None:
+            return _verification(target_alias, "post_dispatch_readback_unavailable", receipt=receipt)
+        if post_dispatch_readback.target_alias != target_alias:
+            return _verification(
+                target_alias,
+                "post_dispatch_readback_target_mismatch",
+                receipt=receipt,
+                post_dispatch_readback=post_dispatch_readback,
+            )
+        if post_dispatch_readback.quality is not Quality.GOOD:
+            return _verification(
+                target_alias,
+                "post_dispatch_readback_quality_insufficient",
+                receipt=receipt,
+                post_dispatch_readback=post_dispatch_readback,
+            )
+        age = evaluated_at.astimezone(timezone.utc) - post_dispatch_readback.observed_at.astimezone(
+            timezone.utc
+        )
+        if not timedelta(0) <= age <= capability.maximum_readback_age:
+            return _verification(
+                target_alias,
+                "post_dispatch_readback_not_fresh",
+                receipt=receipt,
+                post_dispatch_readback=post_dispatch_readback,
+            )
+        if post_dispatch_readback.status_code not in capability.started_status_codes:
+            return _verification(
+                target_alias,
+                "post_start_status_not_matched",
+                outcome=MieleStartVerificationOutcome.NOT_MATCHED,
+                receipt=receipt,
+                post_dispatch_readback=post_dispatch_readback,
+            )
+        return _verification(
+            target_alias,
+            "post_start_status_matched",
+            outcome=MieleStartVerificationOutcome.MATCHED,
+            receipt=receipt,
+            post_dispatch_readback=post_dispatch_readback,
+        )
 
 
 @dataclass(frozen=True)
@@ -232,6 +408,27 @@ class MieleOperationGate:
         )
 
 
+def scheduled_program_execution_capability(
+    capability_snapshot: MieleCapabilitySnapshot,
+) -> ExecutionCapability:
+    """Expose the Miele operation to the common ExecutionGate in Shadow Mode.
+
+    This is a capability declaration only: it registers no dispatch port and
+    cannot send a vendor request.  The Miele-specific gate must still assess
+    the observed capability and read-back before any later writer is eligible.
+    """
+
+    if MieleCommand.START_SCHEDULED_PROGRAM not in capability_snapshot.supported_commands:
+        raise ValueError("start command must be observed before capability registration")
+    return ExecutionCapability(
+        target_alias=capability_snapshot.target_alias,
+        capability="miele-start-scheduled-program",
+        control_owner="miele",
+        allowed_desired_states=(MieleCommand.START_SCHEDULED_PROGRAM,),
+        maximum_state_age=capability_snapshot.maximum_readback_age,
+    )
+
+
 def _result(
     request: StartScheduledProgramRequest,
     outcome: MieleDryRunOutcome,
@@ -239,6 +436,23 @@ def _result(
     readback: MieleProgramReadback | None = None,
 ) -> MieleDryRunResult:
     return MieleDryRunResult(request, outcome, reason_code, readback)
+
+
+def _verification(
+    target_alias: str,
+    reason_code: str,
+    *,
+    outcome: MieleStartVerificationOutcome = MieleStartVerificationOutcome.INDETERMINATE,
+    receipt: MieleDispatchReceipt | None = None,
+    post_dispatch_readback: MieleProgramReadback | None = None,
+) -> MieleStartVerificationResult:
+    return MieleStartVerificationResult(
+        target_alias=target_alias,
+        outcome=outcome,
+        reason_code=reason_code,
+        receipt=receipt,
+        post_dispatch_readback=post_dispatch_readback,
+    )
 
 
 def _require_safe_ref(name: str, value: str) -> None:

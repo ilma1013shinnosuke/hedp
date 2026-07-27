@@ -1,10 +1,9 @@
-"""Offline-safe SwitchBot robot operation contracts.
+"""SwitchBot operation contracts and the gated production light port.
 
-The module contains no HTTP POST method.  Vendor command names are limited to
-the official model-specific vocabulary represented below.  This adapter is not
-a production execution entry point: non-dry-run dispatch is permitted only for
-an explicitly marked fixture transport.  A future live transport must be
-reachable only through the common Execution coordinator.
+Robot and fixture light operations remain offline-safe.  The production light
+port is intentionally narrow and can be reached only through the common
+Execution coordinator; it performs one already-authorized vendor command and
+does not discover, pre-read, retry, or synchronously verify a device.
 """
 
 from __future__ import annotations
@@ -17,8 +16,18 @@ from enum import Enum
 from typing import Protocol
 
 from hedp.observations import Quality
-from hedp.operations.execution import ExecutionCapability
+from hedp.operations.execution import (
+    AdapterExecutionResult,
+    ExecutionCapability,
+    ExecutionOutcome,
+)
+from hedp.operations.shadow_execution import Intent
 
+from .fast_light import (
+    FastLightCommand,
+    FastLightCommandTransport,
+    FastLightTransportError,
+)
 from .robot_state import RobotState, RobotWorkingStatus
 from .secondary_state import (
     LightPower,
@@ -440,6 +449,7 @@ LIGHT_EXECUTION_CAPABILITY = "switchbot-light-state-set"
 class LightCommand(str, Enum):
     SET_POWER = "set_power"
     SET_BRIGHTNESS = "set_brightness"
+    SET_COLOR_TEMPERATURE = "set_color_temperature"
     SET_COLOR = "set_color"
 
 
@@ -461,6 +471,15 @@ class LightDesiredState:
                 or not 0 <= self.value <= 100
             ):
                 raise ValueError("set_brightness value must be from 0 to 100")
+        elif self.command is LightCommand.SET_COLOR_TEMPERATURE:
+            if (
+                isinstance(self.value, bool)
+                or not isinstance(self.value, int)
+                or not 2700 <= self.value <= 6500
+            ):
+                raise ValueError(
+                    "set_color_temperature value must be from 2700 to 6500"
+                )
         elif not isinstance(self.value, RgbColor):
             raise TypeError("set_color value must be RgbColor")
 
@@ -513,10 +532,105 @@ class LightCapabilitySnapshot:
             desired_state_validator=lambda value: (
                 isinstance(value, LightDesiredState)
                 and value.command in self.commands
+                and _desired_state_supported_by_kind(value, self.kind)
             ),
             maximum_state_age=self.max_age,
             approval_required=True,
         )
+
+
+def _desired_state_supported_by_kind(
+    desired_state: LightDesiredState,
+    kind: SecondaryDeviceKind,
+) -> bool:
+    """Apply model-specific limits before a live transport can be called."""
+
+    if (
+        desired_state.command is LightCommand.SET_BRIGHTNESS
+        and kind is SecondaryDeviceKind.E26_SMART_BULB
+    ):
+        return isinstance(desired_state.value, int) and desired_state.value >= 1
+    return True
+
+
+class FastLightExecutionPort:
+    """Translate one authorized semantic light intent into one vendor command."""
+
+    fixture_only = False
+    production_execution_enabled = True
+
+    def __init__(
+        self,
+        transport: FastLightCommandTransport,
+        *,
+        target_alias: str,
+    ) -> None:
+        if not isinstance(transport, FastLightCommandTransport):
+            raise TypeError("transport must be FastLightCommandTransport")
+        if not isinstance(target_alias, str) or not target_alias:
+            raise ValueError("target_alias must be a non-empty string")
+        self._transport = transport
+        self._target_alias = target_alias
+
+    def execute(self, intent: Intent) -> AdapterExecutionResult:
+        if (
+            intent.target_alias != self._target_alias
+            or intent.capability != LIGHT_EXECUTION_CAPABILITY
+            or not isinstance(intent.desired_state, LightDesiredState)
+        ):
+            return AdapterExecutionResult(
+                "rejected",
+                "not_supported",
+                ExecutionOutcome.FAILED,
+            )
+
+        command, parameter = _light_vendor_command(intent.desired_state)
+        try:
+            receipt = self._transport.send(command, parameter)
+        except FastLightTransportError:
+            # A timeout can leave the vendor result unknown. Never retry and
+            # never expose an exception that may contain household data.
+            return AdapterExecutionResult(
+                "transport_error",
+                "unavailable",
+                ExecutionOutcome.UNKNOWN,
+            )
+        if not receipt.accepted:
+            return AdapterExecutionResult(
+                "rejected",
+                "unavailable",
+                ExecutionOutcome.FAILED,
+            )
+
+        # Physical read-back remains asynchronous so UI command latency is one
+        # bounded POST rather than POST plus a blocking status request.
+        return AdapterExecutionResult(
+            "accepted",
+            "pending",
+            ExecutionOutcome.PENDING_VERIFICATION,
+        )
+
+
+def _light_vendor_command(
+    desired_state: LightDesiredState,
+) -> tuple[FastLightCommand, str]:
+    if desired_state.command is LightCommand.SET_POWER:
+        command = (
+            FastLightCommand.TURN_ON
+            if desired_state.value is LightPower.ON
+            else FastLightCommand.TURN_OFF
+        )
+        return command, "default"
+    if desired_state.command is LightCommand.SET_BRIGHTNESS:
+        return FastLightCommand.SET_BRIGHTNESS, str(desired_state.value)
+    if desired_state.command is LightCommand.SET_COLOR_TEMPERATURE:
+        return FastLightCommand.SET_COLOR_TEMPERATURE, str(desired_state.value)
+    if (
+        desired_state.command is LightCommand.SET_COLOR
+        and isinstance(desired_state.value, RgbColor)
+    ):
+        return FastLightCommand.SET_COLOR, desired_state.value.canonical()
+    raise ValueError("unsupported light desired state")
 
 
 @dataclass(frozen=True)
@@ -807,6 +921,7 @@ def _light_field(command: LightCommand) -> SecondaryField:
     return {
         LightCommand.SET_POWER: SecondaryField.POWER,
         LightCommand.SET_BRIGHTNESS: SecondaryField.BRIGHTNESS,
+        LightCommand.SET_COLOR_TEMPERATURE: SecondaryField.COLOR_TEMPERATURE,
         LightCommand.SET_COLOR: SecondaryField.COLOR,
     }[command]
 

@@ -33,6 +33,29 @@ readbackが正常でも予約program IDを確認できない場合は、開始�
 未確認なら`startable_status_capability_missing`、現在statusが集合外なら
 `status_not_startable`とし、program IDだけで開始可能とは判定しない。
 
+## 予約済みプログラムの即時開始：操作準備のみ
+
+`operation.py`には、開始予定のprogramを「今すぐ開始する」ための型付きrequestと
+`MieleOperationGate`がある。ただしこれは操作Adapterではなく、通信しないdry-runである。
+メーカーURL、HTTP method、payload、認証、writer、再試行は持たない。
+
+共通の`ExecutionGate`へは、確認済みの開始capabilityだけを**Shadow Mode**で登録できる。
+この接続でもportを登録しないため、`would_dispatch`は「第4層の共通条件を満たした」という
+意味だけで、家電への送信や受付を意味しない。実Writerを追加するには、別途のread-only
+適格性確認、個別承認、専用transport、結果確認の実機試験が必要である。
+
+将来の結果確認は、次の二つを独立して満たす契約にする。
+
+1. 実Writerが対象機器から受領したことを、確認済みの意味で`accepted`と判定できること。
+2. 直後にread-onlyで再取得した状態が、対象API・対象機器で実測済みの「開始済みstatus」集合に一致すること。
+
+この二つのどちらかが未確認、古い、欠損、低品質なら`indeterminate`で停止する。post-state
+だけで「開始成功」とは扱わない。実際の開始済みstatus、受付responseの意味、URL、payload、
+rate limit、remote enable条件は未確認であり、現時点では`pending`である。
+
+匿名fixture `scheduled_program_start_contract_v1.json` は契約を検証するための架空値であり、
+実Raw、機器ID、API response、認証情報を含まない。これは実機のstatus mappingを主張しない。
+
 正式なオフラインReader契約は`src/hedp/adapters/miele/`へ置く。REST snapshotとSSE stateを
 同じ状態modelへ正規化し、status、program、phase、残時間、経過時間、予約時刻、温度、
 回転数、乾燥段階へ個別の品質を付ける。欠損や`-32768`を0へ変換しない。target aliasを

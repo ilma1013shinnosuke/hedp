@@ -1,20 +1,37 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
 
 from hedp.adapters.miele.operation import (
     MieleCapabilitySnapshot,
     MieleCommand,
+    MieleDispatchReceipt,
+    MieleDispatchReceiptStatus,
     MieleDryRunOutcome,
     MieleOperationGate,
     MieleProgramReadback,
     MieleReadbackUnavailable,
+    MieleStartVerificationCapability,
+    MieleStartVerificationGate,
+    MieleStartVerificationOutcome,
     StartScheduledProgramRequest,
+    scheduled_program_execution_capability,
 )
 from hedp.observations import Quality
+from hedp.operations.execution import (
+    Authorization,
+    ExecutionCoordinator,
+    ExecutionOutcome,
+)
+from hedp.operations.shadow_execution import EvidenceQuality, Intent, StateEvidence
 
 
 NOW = datetime(2026, 7, 27, 7, tzinfo=timezone.utc)
+FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "miele" / "scheduled_program_start_contract_v1.json"
+)
 
 
 class FakeReadback:
@@ -172,3 +189,104 @@ def test_contract_has_no_write_transport_or_payload_fields() -> None:
     assert not hasattr(request, "payload")
     assert not hasattr(MieleOperationGate, "execute")
     assert not hasattr(MieleOperationGate, "dispatch")
+
+
+def test_common_execution_gate_connects_in_shadow_without_a_miele_writer() -> None:
+    snapshot = _snapshot()
+    coordinator = ExecutionCoordinator((scheduled_program_execution_capability(snapshot),))
+    intent = Intent(
+        operation_id="op-1",
+        requested_at=NOW - timedelta(seconds=2),
+        expires_at=NOW + timedelta(minutes=1),
+        requester="fixture-user",
+        reason="anonymous operation fixture",
+        target_alias="laundry",
+        capability="miele-start-scheduled-program",
+        desired_state=MieleCommand.START_SCHEDULED_PROGRAM,
+        priority=1,
+        control_owner="miele",
+        correlation_id="decision-1",
+    )
+    authorization = Authorization(
+        operation_id="op-1",
+        requester="fixture-user",
+        target_alias="laundry",
+        capability="miele-start-scheduled-program",
+        desired_state=MieleCommand.START_SCHEDULED_PROGRAM,
+        granted_at=NOW - timedelta(minutes=1),
+        expires_at=NOW + timedelta(minutes=1),
+    )
+    evidence = StateEvidence(
+        target_alias="laundry",
+        capability="miele-start-scheduled-program",
+        observed_at=NOW - timedelta(seconds=5),
+        quality=EvidenceQuality.GOOD,
+        current_state="scheduled-program-present",
+    )
+
+    result = coordinator.execute(
+        intent,
+        evidence=evidence,
+        authorization=authorization,
+        evaluated_at=NOW,
+    )
+
+    assert result.outcome is ExecutionOutcome.WOULD_DISPATCH
+    assert result.dispatch_attempted is False
+    assert result.adapter_result is None
+
+
+def test_post_dispatch_verification_requires_receipt_and_observed_status_contract() -> (
+    None
+):
+    fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    capability = MieleStartVerificationCapability(
+        target_alias=fixture["target_alias"],
+        observed_at=NOW - timedelta(seconds=10),
+        max_age=timedelta(seconds=fixture["verification"]["max_age_seconds"]),
+        maximum_readback_age=timedelta(
+            seconds=fixture["verification"]["maximum_readback_age_seconds"]
+        ),
+        started_status_codes=frozenset(fixture["verification"]["started_status_codes"]),
+    )
+    receipt = MieleDispatchReceipt(
+        target_alias="laundry",
+        status=MieleDispatchReceiptStatus.ACCEPTED,
+        observed_at=NOW - timedelta(seconds=2),
+    )
+    post_readback = MieleProgramReadback(
+        target_alias="laundry",
+        observed_at=NOW - timedelta(seconds=3),
+        quality=Quality.GOOD,
+        status_code=fixture["post_dispatch_readback"]["status_code"],
+        program_id=fixture["post_dispatch_readback"]["program_id"],
+    )
+
+    result = MieleStartVerificationGate(capability).assess(
+        receipt=receipt,
+        post_dispatch_readback=post_readback,
+        evaluated_at=NOW,
+    )
+
+    assert result.outcome is MieleStartVerificationOutcome.MATCHED
+    assert result.reason_code == "post_start_status_matched"
+
+
+def test_post_dispatch_verification_remains_indeterminate_without_qualified_codes() -> (
+    None
+):
+    capability = MieleStartVerificationCapability(
+        target_alias="laundry",
+        observed_at=NOW - timedelta(seconds=10),
+        max_age=timedelta(minutes=5),
+        maximum_readback_age=timedelta(minutes=2),
+    )
+
+    result = MieleStartVerificationGate(capability).assess(
+        receipt=None,
+        post_dispatch_readback=None,
+        evaluated_at=NOW,
+    )
+
+    assert result.outcome is MieleStartVerificationOutcome.INDETERMINATE
+    assert result.reason_code == "started_status_capability_missing"

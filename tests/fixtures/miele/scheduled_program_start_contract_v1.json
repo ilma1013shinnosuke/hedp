@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "target_alias": "laundry",
+  "command": "START_SCHEDULED_PROGRAM",
+  "purpose": "offline verification-contract fixture; not an API transcript",
+  "capability_observation": {
+    "command_advertised": true,
+    "startable_status_codes": [5]
+  },
+  "verification": {
+    "max_age_seconds": 300,
+    "maximum_readback_age_seconds": 120,
+    "started_status_codes": [8]
+  },
+  "pre_dispatch_readback": {
+    "quality": "good",
+    "status_code": 5,
+    "program_id": 24
+  },
+  "post_dispatch_readback": {
+    "quality": "good",
+    "status_code": 8,
+    "program_id": 24
+  }
+}

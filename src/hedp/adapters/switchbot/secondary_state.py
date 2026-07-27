@@ -48,6 +48,7 @@ class SecondaryField(str, Enum):
     ILLUMINANCE = "illuminance"
     POWER = "power"
     BRIGHTNESS = "brightness"
+    COLOR_TEMPERATURE = "color_temperature"
     COLOR = "color"
 
 
@@ -234,6 +235,7 @@ _FIELD_KEYS = {
     SecondaryField.ILLUMINANCE: "brightness",
     SecondaryField.POWER: "power",
     SecondaryField.BRIGHTNESS: "brightness",
+    SecondaryField.COLOR_TEMPERATURE: "colorTemperature",
     SecondaryField.COLOR: "color",
 }
 
@@ -251,11 +253,13 @@ _KIND_FIELDS = {
     SecondaryDeviceKind.E26_SMART_BULB: (
         SecondaryField.POWER,
         SecondaryField.BRIGHTNESS,
+        SecondaryField.COLOR_TEMPERATURE,
         SecondaryField.COLOR,
     ),
     SecondaryDeviceKind.STRIP_LIGHT_3: (
         SecondaryField.POWER,
         SecondaryField.BRIGHTNESS,
+        SecondaryField.COLOR_TEMPERATURE,
         SecondaryField.COLOR,
     ),
 }
@@ -418,8 +422,12 @@ def _normalize_field(
         )
     elif field_name is SecondaryField.BRIGHTNESS:
         result = _bounded_integer(raw, minimum=0, maximum=100)
-    else:
+    elif field_name is SecondaryField.COLOR_TEMPERATURE:
+        result = _bounded_integer(raw, minimum=2700, maximum=6500)
+    elif field_name is SecondaryField.COLOR:
         result = _rgb(raw)
+    else:  # pragma: no cover - every enum member is handled above
+        raise AssertionError("unsupported secondary field")
     if result.quality is Quality.GOOD and stale:
         return ObservedValue(result.value, Quality.STALE, "observation_stale")
     return result

@@ -19,6 +19,7 @@ from .shadow_execution import EvidenceQuality, Intent, StateEvidence
 class ExecutionMode(str, Enum):
     SHADOW = "shadow"
     FIXTURE = "fixture"
+    LIVE = "live"
 
 
 class GateStatus(str, Enum):
@@ -34,6 +35,7 @@ class ExecutionOutcome(str, Enum):
     EXPIRED = "expired"
     UNAVAILABLE = "unavailable"
     COMPLETED = "completed"
+    PENDING_VERIFICATION = "pending_verification"
     FAILED = "failed"
     UNKNOWN = "unknown"
 
@@ -211,7 +213,7 @@ class ExecutionCoordinator:
             _event("received", intent),
             _event("gate_checking", intent),
         ]
-        if mode is not ExecutionMode.SHADOW and mode is not ExecutionMode.FIXTURE:
+        if not isinstance(mode, ExecutionMode):
             return _stopped(
                 intent,
                 GateDecision(GateStatus.BLOCKED, "execution_mode_invalid"),
@@ -245,10 +247,22 @@ class ExecutionCoordinator:
                 GateDecision(GateStatus.UNAVAILABLE, "dispatch_port_unavailable"),
                 events,
             )
-        if getattr(port, "fixture_only", False) is not True:
+        if (
+            mode is ExecutionMode.FIXTURE
+            and getattr(port, "fixture_only", False) is not True
+        ):
             return _stopped(
                 intent,
                 GateDecision(GateStatus.BLOCKED, "fixture_port_required"),
+                events,
+            )
+        if (
+            mode is ExecutionMode.LIVE
+            and getattr(port, "production_execution_enabled", False) is not True
+        ):
+            return _stopped(
+                intent,
+                GateDecision(GateStatus.BLOCKED, "production_port_required"),
                 events,
             )
         if not self._registry.claim(intent.operation_id):
@@ -421,6 +435,11 @@ def _adapter_result_is_consistent(result: object) -> bool:
         return (
             result.dispatch_status == "accepted"
             and result.verification_status == "matched"
+        )
+    if result.outcome is ExecutionOutcome.PENDING_VERIFICATION:
+        return (
+            result.dispatch_status == "accepted"
+            and result.verification_status == "pending"
         )
     if result.outcome is ExecutionOutcome.FAILED:
         return result.dispatch_status in {

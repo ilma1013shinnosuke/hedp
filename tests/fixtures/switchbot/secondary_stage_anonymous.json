@@ -30,7 +30,8 @@
       "body": {
         "power": "on",
         "brightness": 35,
-        "color": "12:34:56"
+        "color": "12:34:56",
+        "colorTemperature": 4200
       }
     },
     {
@@ -52,6 +53,7 @@
       "body": {
         "power": "off",
         "brightness": 0,
+        "colorTemperature": 4200,
         "color": "0:0:0"
       }
     },

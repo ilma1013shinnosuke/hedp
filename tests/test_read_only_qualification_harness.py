@@ -430,7 +430,8 @@ def test_store_uses_private_permissions_and_enforces_foreign_keys(
     with pytest.raises(sqlite3.IntegrityError):
         store._connection.execute(
             "INSERT INTO qualification_samples VALUES "
-            "('missing', 0, '', '', 'qualified', '[]', 0, 0, 0)"
+            "('missing', 0, '', '', 'qualified', '[]', 0, 0, 0, "
+            "1, 0, 'not_observed', 0, '{}')"
         )
     store._connection.rollback()
     store.close()
@@ -463,7 +464,7 @@ def test_store_rejects_symlink_empty_file_and_marker_only_schema(
     )
     connection.execute(
         "INSERT INTO qualification_meta VALUES "
-        "('read_only_qualification_test_only', '1')"
+        "('read_only_qualification_test_only', '2')"
     )
     connection.commit()
     connection.close()

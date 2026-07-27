@@ -25,6 +25,7 @@ import time
 from typing import Protocol
 
 from hedp.storage import RawData
+from hedp.observations import Quality
 
 from .read_only_qualification import (
     SUPPORTED_SOURCES,
@@ -35,9 +36,14 @@ from .read_only_qualification import (
 
 _SAFE_REF = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _DATABASE_SUFFIX = ".qualification.sqlite3"
-_SCHEMA_VERSION = "1"
+_SCHEMA_VERSION = "2"
+_QUALITY_VALUES = frozenset(item.value for item in Quality)
+_RECOVERY_STATUSES = frozenset(
+    {"not_observed", "not_required", "recovered", "not_recovered"}
+)
 _ALLOWED_REASON_CODES = frozenset(
     {
+        "attempt_budget_exceeded",
         "credential_value_present",
         "database_size_limit_exceeded",
         "evidence_invalid",
@@ -51,6 +57,8 @@ _ALLOWED_REASON_CODES = frozenset(
         "probe_failed",
         "qualification_reason_unrecognized",
         "quality_value_invalid",
+        "recovery_not_completed",
+        "rediscovery_budget_exceeded",
         "required_payload_key_missing",
         "run_deadline_exceeded",
         "sample_missed_after_resume",
@@ -93,6 +101,11 @@ _EXPECTED_COLUMNS = {
         "payload_bytes",
         "evidence_count",
         "elapsed_ms",
+        "attempt_count",
+        "rediscovery_attempt_count",
+        "recovery_status",
+        "recovery_elapsed_ms",
+        "quality_counts_json",
     ),
 }
 
@@ -113,7 +126,44 @@ class QualificationRunStatus(str, Enum):
 class QualificationProbe(Protocol):
     """Injected read-only probe. It must not expose an operation method."""
 
-    def collect(self) -> RawData: ...
+    def collect(self) -> RawData | QualificationProbeResult: ...
+
+
+@dataclass(frozen=True)
+class QualificationProbeResult:
+    """Raw observation plus fixed-vocabulary, anonymous transport evidence."""
+
+    raw_data: RawData
+    attempt_count: int = 1
+    rediscovery_attempt_count: int = 0
+    recovery_status: str = "not_observed"
+    recovery_elapsed_ms: int = 0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.raw_data, RawData):
+            raise TypeError("raw_data must be RawData")
+        _bounded_int("attempt_count", self.attempt_count, 1, 10)
+        _bounded_int(
+            "rediscovery_attempt_count",
+            self.rediscovery_attempt_count,
+            0,
+            5,
+        )
+        if self.recovery_status not in _RECOVERY_STATUSES:
+            raise ValueError("recovery_status is not recognized")
+        _bounded_int(
+            "recovery_elapsed_ms",
+            self.recovery_elapsed_ms,
+            0,
+            300_000,
+        )
+        if (
+            self.recovery_status in {"not_observed", "not_required"}
+            and self.recovery_elapsed_ms != 0
+        ):
+            raise ValueError(
+                "recovery_elapsed_ms must be zero when recovery was not measured"
+            )
 
 
 @dataclass(frozen=True)
@@ -129,6 +179,8 @@ class QualificationPlan:
     maximum_failures: int = 3
     maximum_database_bytes: int = 8 * 1024 * 1024
     maximum_failure_evidence: int = 20
+    maximum_attempts_per_sample: int = 1
+    maximum_rediscovery_attempts_per_sample: int = 0
 
     def __post_init__(self) -> None:
         _safe_ref("run_id", self.run_id)
@@ -171,6 +223,25 @@ class QualificationPlan:
             1,
             100,
         )
+        _bounded_int(
+            "maximum_attempts_per_sample",
+            self.maximum_attempts_per_sample,
+            1,
+            10,
+        )
+        _bounded_int(
+            "maximum_rediscovery_attempts_per_sample",
+            self.maximum_rediscovery_attempts_per_sample,
+            0,
+            5,
+        )
+        if (
+            self.maximum_rediscovery_attempts_per_sample
+            > self.maximum_attempts_per_sample
+        ):
+            raise ValueError(
+                "maximum rediscovery attempts must not exceed maximum attempts"
+            )
         expected = math.ceil(self.duration / self.sample_interval)
         if self.maximum_samples != expected:
             raise ValueError("maximum_samples must match duration/sample_interval")
@@ -291,6 +362,13 @@ class QualificationRunSummary:
     latency_p50_ms: int
     latency_p95_ms: int
     latency_max_ms: int
+    quality_counts: tuple[tuple[str, int], ...]
+    total_attempts: int
+    maximum_attempts: int
+    total_rediscovery_attempts: int
+    recovery_counts: tuple[tuple[str, int], ...]
+    recovery_p95_ms: int
+    recovery_max_ms: int
     maximum_consecutive_failed_samples: int
     failure_evidence: tuple[FailureEvidence, ...]
     omitted_failure_evidence: int
@@ -313,6 +391,13 @@ class QualificationRunSummary:
             "latency_p50_ms": self.latency_p50_ms,
             "latency_p95_ms": self.latency_p95_ms,
             "latency_max_ms": self.latency_max_ms,
+            "quality_counts": dict(self.quality_counts),
+            "total_attempts": self.total_attempts,
+            "maximum_attempts": self.maximum_attempts,
+            "total_rediscovery_attempts": self.total_rediscovery_attempts,
+            "recovery_counts": dict(self.recovery_counts),
+            "recovery_p95_ms": self.recovery_p95_ms,
+            "recovery_max_ms": self.recovery_max_ms,
             "maximum_consecutive_failed_samples": (
                 self.maximum_consecutive_failed_samples
             ),
@@ -406,6 +491,11 @@ class QualificationTestStore:
                 payload_bytes INTEGER NOT NULL,
                 evidence_count INTEGER NOT NULL,
                 elapsed_ms INTEGER NOT NULL,
+                attempt_count INTEGER NOT NULL,
+                rediscovery_attempt_count INTEGER NOT NULL,
+                recovery_status TEXT NOT NULL,
+                recovery_elapsed_ms INTEGER NOT NULL,
+                quality_counts_json TEXT NOT NULL,
                 PRIMARY KEY (run_id, sample_index),
                 FOREIGN KEY (run_id) REFERENCES qualification_runs(run_id)
             );
@@ -526,14 +616,36 @@ class QualificationTestStore:
         payload_bytes: int,
         evidence_count: int,
         elapsed_ms: int,
+        attempt_count: int = 0,
+        rediscovery_attempt_count: int = 0,
+        recovery_status: str = "not_observed",
+        recovery_elapsed_ms: int = 0,
+        quality_counts: dict[str, int] | None = None,
     ) -> None:
         safe_reasons = tuple(_safe_reason(value) for value in reason_codes[:100])
         safe_status = _safe_sample_status(status)
+        _bounded_int("attempt_count", attempt_count, 0, 10)
+        _bounded_int(
+            "rediscovery_attempt_count",
+            rediscovery_attempt_count,
+            0,
+            5,
+        )
+        safe_recovery_status = _safe_recovery_status(recovery_status)
+        _bounded_int(
+            "recovery_elapsed_ms",
+            recovery_elapsed_ms,
+            0,
+            300_000,
+        )
+        safe_quality_counts = _safe_quality_counts(quality_counts or {})
         self._connection.execute(
             "INSERT INTO qualification_samples("
             "run_id, sample_index, scheduled_at, recorded_at, status, "
-            "reason_codes_json, payload_bytes, evidence_count, elapsed_ms"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "reason_codes_json, payload_bytes, evidence_count, elapsed_ms, "
+            "attempt_count, rediscovery_attempt_count, recovery_status, "
+            "recovery_elapsed_ms, quality_counts_json"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 plan.run_id,
                 sample_index,
@@ -544,6 +656,15 @@ class QualificationTestStore:
                 payload_bytes,
                 evidence_count,
                 elapsed_ms,
+                attempt_count,
+                rediscovery_attempt_count,
+                safe_recovery_status,
+                recovery_elapsed_ms,
+                json.dumps(
+                    safe_quality_counts,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
             ),
         )
         self._connection.execute(
@@ -582,7 +703,9 @@ class QualificationTestStore:
         if run is None:
             raise ValueError("qualification run does not exist")
         samples = self._connection.execute(
-            "SELECT sample_index, recorded_at, status, reason_codes_json, elapsed_ms "
+            "SELECT sample_index, recorded_at, status, reason_codes_json, "
+            "elapsed_ms, attempt_count, rediscovery_attempt_count, "
+            "recovery_status, recovery_elapsed_ms, quality_counts_json "
             "FROM qualification_samples WHERE run_id = ? ORDER BY sample_index",
             (plan.run_id,),
         ).fetchall()
@@ -617,6 +740,25 @@ class QualificationTestStore:
             counts["run_failed"] += 1
         evidence = tuple(evidence_items[: plan.maximum_failure_evidence])
         latencies = sorted(max(0, int(row["elapsed_ms"])) for row in samples)
+        attempts = [_stored_bounded_int(row["attempt_count"], 0, 10) for row in samples]
+        rediscovery_attempts = [
+            _stored_bounded_int(row["rediscovery_attempt_count"], 0, 5)
+            for row in samples
+        ]
+        recovery_counts = Counter(
+            _safe_recovery_status(str(row["recovery_status"])) for row in samples
+        )
+        recovery_latencies = sorted(
+            _stored_bounded_int(row["recovery_elapsed_ms"], 0, 300_000)
+            for row in samples
+            if _safe_recovery_status(str(row["recovery_status"]))
+            in {"recovered", "not_recovered"}
+        )
+        quality_counts: Counter[str] = Counter()
+        for row in samples:
+            quality_counts.update(
+                _safe_stored_quality_counts(row["quality_counts_json"])
+            )
         qualified_samples = counts.get("qualified", 0)
         return QualificationRunSummary(
             run_id=plan.run_id,
@@ -640,6 +782,15 @@ class QualificationTestStore:
             latency_p50_ms=_nearest_rank(latencies, 0.50),
             latency_p95_ms=_nearest_rank(latencies, 0.95),
             latency_max_ms=latencies[-1] if latencies else 0,
+            quality_counts=tuple(sorted(quality_counts.items())),
+            total_attempts=sum(attempts),
+            maximum_attempts=max(attempts, default=0),
+            total_rediscovery_attempts=sum(rediscovery_attempts),
+            recovery_counts=tuple(sorted(recovery_counts.items())),
+            recovery_p95_ms=_nearest_rank(recovery_latencies, 0.95),
+            recovery_max_ms=(
+                recovery_latencies[-1] if recovery_latencies else 0
+            ),
             maximum_consecutive_failed_samples=_maximum_failed_run(
                 tuple(status for _, status, _ in sanitized)
             ),
@@ -762,7 +913,7 @@ class ReadOnlyQualificationHarness:
                         recorded_at,
                     )
                     return self._store.summary(plan)
-                if sample.raw_data is None:
+                if sample.result is None:
                     self._record_failure(
                         plan,
                         next_index,
@@ -781,7 +932,8 @@ class ReadOnlyQualificationHarness:
                         )
                         return self._store.summary(plan)
                 else:
-                    report = self._checker.evaluate(sample.raw_data)
+                    probe_result = sample.result
+                    report = self._checker.evaluate(probe_result.raw_data)
                     if report.source != plan.source:
                         report = OfflineQualificationReport(
                             "not_qualified",
@@ -790,8 +942,28 @@ class ReadOnlyQualificationHarness:
                             report.payload_bytes,
                             report.evidence_count,
                         )
+                    operational_reasons: list[str] = []
+                    if (
+                        probe_result.attempt_count
+                        > plan.maximum_attempts_per_sample
+                    ):
+                        operational_reasons.append("attempt_budget_exceeded")
+                    if (
+                        probe_result.rediscovery_attempt_count
+                        > plan.maximum_rediscovery_attempts_per_sample
+                    ):
+                        operational_reasons.append(
+                            "rediscovery_budget_exceeded"
+                        )
+                    if probe_result.recovery_status == "not_recovered":
+                        operational_reasons.append("recovery_not_completed")
                     status = (
-                        "qualified" if report.status == "qualified" else "not_qualified"
+                        "qualified"
+                        if (
+                            report.status == "qualified"
+                            and not operational_reasons
+                        )
+                        else "not_qualified"
                     )
                     self._store.record_sample(
                         plan=plan,
@@ -799,10 +971,24 @@ class ReadOnlyQualificationHarness:
                         scheduled_at=scheduled_at,
                         recorded_at=recorded_at,
                         status=status,
-                        reason_codes=report.reasons,
+                        reason_codes=(
+                            *report.reasons,
+                            *operational_reasons,
+                        ),
                         payload_bytes=report.payload_bytes,
                         evidence_count=report.evidence_count,
                         elapsed_ms=sample.elapsed_ms,
+                        attempt_count=probe_result.attempt_count,
+                        rediscovery_attempt_count=(
+                            probe_result.rediscovery_attempt_count
+                        ),
+                        recovery_status=probe_result.recovery_status,
+                        recovery_elapsed_ms=(
+                            probe_result.recovery_elapsed_ms
+                        ),
+                        quality_counts=_quality_counts(
+                            probe_result.raw_data.payload
+                        ),
                     )
                     if status != "qualified":
                         failures += 1
@@ -867,7 +1053,7 @@ class ReadOnlyQualificationHarness:
 
 @dataclass(frozen=True)
 class _ProbeSample:
-    raw_data: RawData | None
+    result: QualificationProbeResult | None
     status: str
     reason_code: str
     elapsed_ms: int
@@ -898,7 +1084,11 @@ def _collect_with_timeout(
         status, value = result.get_nowait()
     except Empty:
         return _ProbeSample(None, "probe_error", "probe_failed", elapsed_ms)
-    if status != "ok" or not isinstance(value, RawData):
+    if status != "ok":
+        return _ProbeSample(None, "probe_error", "probe_failed", elapsed_ms)
+    if isinstance(value, RawData):
+        value = QualificationProbeResult(value)
+    if not isinstance(value, QualificationProbeResult):
         return _ProbeSample(None, "probe_error", "probe_failed", elapsed_ms)
     return _ProbeSample(value, "qualified", "", elapsed_ms)
 
@@ -916,6 +1106,10 @@ def _plan_json(plan: QualificationPlan) -> str:
             "maximum_failures": plan.maximum_failures,
             "maximum_database_bytes": plan.maximum_database_bytes,
             "maximum_failure_evidence": plan.maximum_failure_evidence,
+            "maximum_attempts_per_sample": plan.maximum_attempts_per_sample,
+            "maximum_rediscovery_attempts_per_sample": (
+                plan.maximum_rediscovery_attempts_per_sample
+            ),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -1007,6 +1201,54 @@ def _safe_sample_status(value: str) -> str:
     return "not_qualified"
 
 
+def _safe_recovery_status(value: str) -> str:
+    if isinstance(value, str) and value in _RECOVERY_STATUSES:
+        return value
+    return "not_observed"
+
+
+def _quality_counts(value: object) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+
+    def visit(item: object) -> None:
+        if isinstance(item, dict):
+            for key, nested in item.items():
+                if key == "quality" and isinstance(nested, str):
+                    if nested in _QUALITY_VALUES:
+                        counts[nested] += 1
+                visit(nested)
+        elif isinstance(item, list):
+            for nested in item:
+                visit(nested)
+
+    visit(value)
+    return dict(sorted(counts.items()))
+
+
+def _safe_quality_counts(value: dict[str, int]) -> dict[str, int]:
+    safe: dict[str, int] = {}
+    for quality, count in value.items():
+        if quality not in _QUALITY_VALUES:
+            continue
+        if isinstance(count, bool) or not isinstance(count, int):
+            continue
+        if 0 <= count <= 1_000_000:
+            safe[quality] = count
+    return dict(sorted(safe.items()))
+
+
+def _safe_stored_quality_counts(value: object) -> dict[str, int]:
+    if not isinstance(value, str):
+        return {}
+    try:
+        counts = json.loads(value)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(counts, dict):
+        return {}
+    return _safe_quality_counts(counts)
+
+
 def _safe_stored_reasons(value: object) -> tuple[str, ...]:
     if not isinstance(value, str):
         return ("qualification_reason_unrecognized",)
@@ -1042,6 +1284,14 @@ def _stored_sample_index(value: object, maximum_samples: int) -> int:
         raise ValueError("stored qualification sample index is invalid")
     if not 0 <= value <= maximum_samples:
         raise ValueError("stored qualification sample index is invalid")
+    return value
+
+
+def _stored_bounded_int(value: object, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("stored qualification metric is invalid")
+    if not minimum <= value <= maximum:
+        raise ValueError("stored qualification metric is invalid")
     return value
 
 

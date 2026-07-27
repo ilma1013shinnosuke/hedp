@@ -87,6 +87,10 @@ def test_four_registered_kinds_normalize_without_vendor_device_type_guessing():
     strip = observations[2]
     assert strip.field(SecondaryField.POWER).observation.value is LightPower.ON
     assert strip.field(SecondaryField.BRIGHTNESS).observation.value == 35
+    assert (
+        strip.field(SecondaryField.COLOR_TEMPERATURE).observation.value
+        == 4200
+    )
     assert strip.field(SecondaryField.COLOR).observation.value.canonical() == "12:34:56"
 
     bulb = observations[3]
@@ -210,7 +214,12 @@ def test_service_persists_typed_secondary_state_and_keeps_pending_neutral(tmp_pa
     }
     client.status.return_value = {
         "statusCode": 100,
-        "body": {"power": "on", "brightness": 42, "color": "1:2:3"},
+        "body": {
+            "power": "on",
+            "brightness": 42,
+            "colorTemperature": 4200,
+            "color": "1:2:3",
+        },
     }
     storage = SwitchBotStorage(str(tmp_path / "secondary.db"))
     storage.connect()
@@ -231,6 +240,7 @@ def test_service_persists_typed_secondary_state_and_keeps_pending_neutral(tmp_pa
     assert {item["field"] for item in typed["fields"]} == {
         "power",
         "brightness",
+        "color_temperature",
         "color",
     }
     pending = next(

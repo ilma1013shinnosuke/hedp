@@ -23,6 +23,8 @@ canonicalな`SUMICORE_`名を直接使うまで削除しない。
 
 - `SUMICORE_FUSIONSOLAR_USERNAME`、`SUMICORE_FUSIONSOLAR_PASSWORD`
 - `SWITCHBOT_TOKEN`、`SWITCHBOT_SECRET`
+- `SWITCHBOT_E26_DEVICE_ID`（高速直送用の家庭固有機器ID）
+- `SWITCHBOT_STRIP_LIGHT_3_DEVICE_ID`（高速直送用の家庭固有機器ID）
 - GAS Script Propertiesの`FUSIONSOLAR_COOKIE`、`FUSIONSOLAR_CSRF_TOKEN`
 - backup runtimeが将来利用する`RESTIC_PASSWORD_COMMAND`
 
@@ -102,3 +104,10 @@ cloud設定を削除しない。まず5分cloud realtime用の不要項目を候
 Ubuntu運用は将来要件であり、現時点ではsystemd配備を実装しない。Python、SQLite、
 Adapter、暗号化秘密形式をOS非依存に保ち、実際のIntel MacとUbuntuの利用可否が
 確定してからservice、timer、directory、USB/BLE権限を追加する。
+
+## platform別installerの境界
+
+SwitchBotの一度だけ行う`.env`紐付けhelperは、mode 0600とatomic replaceを保証できる
+POSIX環境専用である。Reader、Writer、ExecutionGateなどの実行時中核はOS非依存だが、
+Windowsでは同helperを流用せず、同等のACLとatomic updateを保証するplatform別installerを
+用意する。それまではWindows上で秘密ファイルを自動更新せず、安全側に失敗させる。
