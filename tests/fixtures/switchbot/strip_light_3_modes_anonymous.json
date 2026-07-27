@@ -1,0 +1,39 @@
+{
+  "schema": "hestia.switchbot.strip-light-3-modes.v1",
+  "runtime_mode_cases": [
+    {
+      "raw_mode": 2,
+      "expected": "rgb"
+    },
+    {
+      "raw_mode": 3,
+      "expected": "device_effect"
+    },
+    {
+      "raw_mode": 4,
+      "expected": "music"
+    },
+    {
+      "raw_mode": 5,
+      "expected": "controller"
+    },
+    {
+      "raw_mode": 6,
+      "expected": "color_temperature"
+    }
+  ],
+  "unknown_runtime_mode": 15,
+  "effect_catalog_example": [
+    "christmas",
+    "ocean"
+  ],
+  "music_capability": {
+    "audio_source": "device_built_in_microphone",
+    "public_cloud_control": false,
+    "public_cloud_readback": false,
+    "ble_control_verified": false,
+    "ble_mode_readback_candidate": true,
+    "sensitivity_readback_verified": false,
+    "palette_readback_verified": false
+  }
+}

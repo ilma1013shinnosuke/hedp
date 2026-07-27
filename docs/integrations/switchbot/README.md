@@ -106,6 +106,10 @@ firmware更新、校正、Webhook登録、照明操作は行わない。
 
 ## 残る改善点
 
+- テープライト3のシーン／ミュージック境界、公開APIで未対応の能力、
+  任意BLE backendの採用条件は
+  [専用文書](../switchbot-strip-light-3-scenes-music.md)を正本とする。
+
 - `observed_at`不明時に収集時刻を機器発生時刻と断定しない。
 
 OpenAPI status応答には、全機種共通で信頼できる機器発生時刻が確認できていない。そのため
