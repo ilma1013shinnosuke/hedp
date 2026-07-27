@@ -94,6 +94,18 @@ scheduler、サービス管理、秘密注入、firewall設定は交換可能な
 現行コードのまま全条件を満たすCLIはない。このため、安全な専用入口が完成するまで
 実通信を行わない判断が適切である。
 
+共通オフライン適格性Gateと匿名テストDBは、EcoCute、Qrio、Miele、Smart LEDZに加え、
+FusionSolarのread-only Modbus rangeを受理できる。FusionSolarではfunction code 3/4、
+address範囲、1要求のregister数、register値をfail closedで検査する。一方、
+SwitchBot、BRAVIA、日産サクラは共通Gateへ未登録であり、専用の非保存runnerまたは
+安全性を確認した共通Reader factoryが必要である。
+
+SwitchBot専用runnerは、一覧・状態取得を各最大1回、retryなし、総deadlineと応答byte上限
+付きで実行し、匿名alias、deviceType、field名、quality、取得時刻以外を返さない契約を
+持つ。ただし現在は、実行用venvが現行sourceより古く、登録済み4機器の匿名対応表も空で
+ある。このためE26を含む4機器はlive-confirmedとせず、venv同期と匿名対応表の安全な設定を
+終えるまで`pending_registration`または未確認として扱う。deviceTypeを製品名から推測しない。
+
 ## 優先修正
 
 1. SwitchBotの非dry-run dispatchをfixture以外では拒否する。

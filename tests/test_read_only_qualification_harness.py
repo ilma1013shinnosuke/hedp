@@ -62,6 +62,24 @@ def _valid_raw(timestamp: datetime = NOW) -> RawData:
     )
 
 
+def _valid_modbus_raw(timestamp: datetime = NOW) -> RawData:
+    return RawData(
+        "fusionsolar_modbus_tcp",
+        timestamp,
+        {
+            "ranges": [
+                {
+                    "name": "inverter_state",
+                    "function_code": 3,
+                    "start_address": 32064,
+                    "registers": [1, 2, 3],
+                }
+            ]
+        },
+        metadata={"target_alias": "solar-inverter"},
+    )
+
+
 def _store_path(tmp_path: Path, name: str = "run") -> Path:
     return tmp_path / f"{name}.qualification.sqlite3"
 
@@ -103,6 +121,32 @@ def test_single_run_uses_only_anonymous_summary_database(tmp_path: Path) -> None
     assert b"evidence_sha256" not in database_bytes
     assert SHA.encode() not in database_bytes
     assert b"target_ref" not in database_bytes
+
+
+def test_single_modbus_run_persists_only_anonymous_summary(
+    tmp_path: Path,
+) -> None:
+    class ModbusProbe:
+        def collect(self) -> RawData:
+            return _valid_modbus_raw()
+
+    clock = FakeClock()
+    store, harness = _harness(tmp_path, clock, name="modbus")
+    plan = QualificationPlan.single(
+        run_id="modbus-single-1",
+        source="fusionsolar_modbus_tcp",
+        started_at=NOW,
+    )
+
+    summary = harness.run(plan, ModbusProbe())
+    store.close()
+
+    assert summary.status is QualificationRunStatus.COMPLETED
+    assert summary.qualified_samples == 1
+    database_bytes = _store_path(tmp_path, "modbus").read_bytes()
+    assert b"inverter_state" not in database_bytes
+    assert b"solar-inverter" not in database_bytes
+    assert b"registers" not in database_bytes
 
 
 def test_short_run_can_interrupt_and_resume_without_duplicate_samples(
@@ -152,6 +196,93 @@ def test_24_hour_plan_completes_with_simulated_clock_not_launchd(
     assert summary.expected_samples == 24
     assert summary.qualified_samples == 24
     assert probe.calls == 24
+
+
+def test_24_hour_plan_rejects_success_rate_below_99_percent(
+    tmp_path: Path,
+) -> None:
+    class OneInvalidProbe(GoodProbe):
+        def collect(self) -> RawData:
+            raw = super().collect()
+            if self.calls != 2:
+                return raw
+            return RawData(
+                raw.source,
+                raw.timestamp,
+                {**raw.payload, "quality": "unsupported-quality"},
+                metadata=raw.metadata,
+            )
+
+    clock = FakeClock()
+    store, harness = _harness(tmp_path, clock, name="day-tolerant")
+    probe = OneInvalidProbe(clock)
+    plan = QualificationPlan.day_24(
+        run_id="day-tolerant-1",
+        source="qrio_read_only",
+        started_at=NOW,
+        sample_interval=timedelta(hours=1),
+        maximum_failures=2,
+    )
+
+    summary = harness.run(plan, probe)
+    store.close()
+
+    assert summary.status is QualificationRunStatus.FAILED
+    assert summary.success_rate < 0.99
+    assert summary.maximum_consecutive_failed_samples == 1
+
+
+def test_24_hour_acceptance_uses_99_percent_and_15_minute_gap(
+    tmp_path: Path,
+) -> None:
+    class OneInvalidProbe(GoodProbe):
+        def collect(self) -> RawData:
+            raw = super().collect()
+            if self.calls != 2:
+                return raw
+            return RawData(
+                raw.source,
+                raw.timestamp,
+                {**raw.payload, "quality": "unsupported-quality"},
+                metadata=raw.metadata,
+            )
+
+    clock = FakeClock()
+    store, harness = _harness(tmp_path, clock, name="day-accepted")
+    probe = OneInvalidProbe(clock)
+    plan = QualificationPlan.day_24(
+        run_id="day-accepted-1",
+        source="qrio_read_only",
+        started_at=NOW,
+        sample_interval=timedelta(minutes=5),
+        maximum_failures=2,
+    )
+
+    summary = harness.run(plan, probe)
+    store.close()
+
+    assert summary.status is QualificationRunStatus.COMPLETED
+    assert summary.success_rate >= 0.99
+    assert summary.maximum_consecutive_failed_samples == 1
+
+
+def test_summary_reports_anonymous_latency_statistics(tmp_path: Path) -> None:
+    clock = FakeClock()
+    store, harness = _harness(tmp_path, clock, name="latency")
+    summary = harness.run(
+        QualificationPlan.single(
+            run_id="latency-1",
+            source="qrio_read_only",
+            started_at=NOW,
+        ),
+        GoodProbe(clock),
+    )
+    store.close()
+
+    assert summary.latency_p50_ms >= 0
+    assert summary.latency_p95_ms >= summary.latency_p50_ms
+    assert summary.latency_max_ms >= summary.latency_p95_ms
+    assert summary.as_dict()["success_rate"] == 1.0
 
 
 def test_resume_records_missed_slot_as_failure_evidence(tmp_path: Path) -> None:

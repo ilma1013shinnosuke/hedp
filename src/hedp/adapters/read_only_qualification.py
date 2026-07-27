@@ -15,6 +15,7 @@ from hedp.storage import RawData
 SUPPORTED_SOURCES = frozenset(
     {
         "ecocute_echonet_lite",
+        "fusionsolar_modbus_tcp",
         "qrio_read_only",
         "miele_read_only",
         "smartledz_read_only",
@@ -27,6 +28,7 @@ _REQUIRED_PAYLOAD_KEYS = {
     "ecocute_echonet_lite": frozenset(
         {"property_map_response_hex", "state_response_hex", "properties"}
     ),
+    "fusionsolar_modbus_tcp": frozenset({"ranges"}),
     "qrio_read_only": frozenset({"status", "health", "history", "evidence_sha256"}),
     "miele_read_only": frozenset(
         {"collection_kind", "observations", "evidence_sha256"}
@@ -251,6 +253,11 @@ def _validate_evidence(raw_data: RawData) -> tuple[int, bool]:
             isinstance(value, str) and _HEX.fullmatch(value) is not None
             for value in values
         )
+    if raw_data.source == "fusionsolar_modbus_tcp":
+        ranges = raw_data.payload.get("ranges")
+        if not isinstance(ranges, list) or not ranges:
+            return 0, False
+        return len(ranges), all(_valid_modbus_range(item) for item in ranges)
     if isinstance(evidence, str):
         values = (evidence,)
     elif isinstance(evidence, Mapping):
@@ -262,4 +269,35 @@ def _validate_evidence(raw_data: RawData) -> tuple[int, bool]:
     return len(values), bool(values) and all(
         isinstance(value, str) and _SHA256.fullmatch(value) is not None
         for value in values
+    )
+
+
+def _valid_modbus_range(value: object) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    if set(value) != {"name", "function_code", "start_address", "registers"}:
+        return False
+    name = value.get("name")
+    function_code = value.get("function_code")
+    start_address = value.get("start_address")
+    registers = value.get("registers")
+    if not isinstance(name, str) or not name or len(name) > 64:
+        return False
+    if function_code not in {3, 4}:
+        return False
+    if (
+        not isinstance(start_address, int)
+        or isinstance(start_address, bool)
+        or not 0 <= start_address <= 65535
+    ):
+        return False
+    if not isinstance(registers, list) or not 1 <= len(registers) <= 125:
+        return False
+    if start_address + len(registers) > 65536:
+        return False
+    return all(
+        isinstance(register, int)
+        and not isinstance(register, bool)
+        and 0 <= register <= 65535
+        for register in registers
     )

@@ -287,6 +287,11 @@ class QualificationRunSummary:
     started_at: str
     updated_at: str
     status_counts: tuple[tuple[str, int], ...]
+    success_rate: float
+    latency_p50_ms: int
+    latency_p95_ms: int
+    latency_max_ms: int
+    maximum_consecutive_failed_samples: int
     failure_evidence: tuple[FailureEvidence, ...]
     omitted_failure_evidence: int
 
@@ -304,6 +309,13 @@ class QualificationRunSummary:
             "started_at": self.started_at,
             "updated_at": self.updated_at,
             "status_counts": dict(self.status_counts),
+            "success_rate": self.success_rate,
+            "latency_p50_ms": self.latency_p50_ms,
+            "latency_p95_ms": self.latency_p95_ms,
+            "latency_max_ms": self.latency_max_ms,
+            "maximum_consecutive_failed_samples": (
+                self.maximum_consecutive_failed_samples
+            ),
             "failure_evidence": [item.as_dict() for item in self.failure_evidence],
             "omitted_failure_evidence": self.omitted_failure_evidence,
         }
@@ -570,7 +582,7 @@ class QualificationTestStore:
         if run is None:
             raise ValueError("qualification run does not exist")
         samples = self._connection.execute(
-            "SELECT sample_index, recorded_at, status, reason_codes_json "
+            "SELECT sample_index, recorded_at, status, reason_codes_json, elapsed_ms "
             "FROM qualification_samples WHERE run_id = ? ORDER BY sample_index",
             (plan.run_id,),
         ).fetchall()
@@ -604,6 +616,8 @@ class QualificationTestStore:
             )
             counts["run_failed"] += 1
         evidence = tuple(evidence_items[: plan.maximum_failure_evidence])
+        latencies = sorted(max(0, int(row["elapsed_ms"])) for row in samples)
+        qualified_samples = counts.get("qualified", 0)
         return QualificationRunSummary(
             run_id=plan.run_id,
             source=plan.source,
@@ -611,7 +625,7 @@ class QualificationTestStore:
             status=_stored_run_status(run["status"]),
             expected_samples=plan.maximum_samples,
             recorded_samples=len(samples),
-            qualified_samples=counts.get("qualified", 0),
+            qualified_samples=qualified_samples,
             failed_samples=len(evidence_items),
             next_sample_index=_stored_sample_index(
                 run["next_sample_index"],
@@ -620,6 +634,15 @@ class QualificationTestStore:
             started_at=_safe_stored_timestamp(run["started_at"]),
             updated_at=_safe_stored_timestamp(run["updated_at"]),
             status_counts=tuple(sorted(counts.items())),
+            success_rate=(
+                qualified_samples / len(samples) if samples else 0.0
+            ),
+            latency_p50_ms=_nearest_rank(latencies, 0.50),
+            latency_p95_ms=_nearest_rank(latencies, 0.95),
+            latency_max_ms=latencies[-1] if latencies else 0,
+            maximum_consecutive_failed_samples=_maximum_failed_run(
+                tuple(status for _, status, _ in sanitized)
+            ),
             failure_evidence=evidence,
             omitted_failure_evidence=max(0, len(evidence_items) - len(evidence)),
         )
@@ -801,9 +824,10 @@ class ReadOnlyQualificationHarness:
                 )
                 return self._store.summary(plan)
 
+        final_summary = self._store.summary(plan)
         final = (
             QualificationRunStatus.COMPLETED
-            if failures == 0
+            if _accepts_completed_run(plan, final_summary)
             else QualificationRunStatus.FAILED
         )
         self._store.set_run_status(plan.run_id, final, self._now())
@@ -1026,3 +1050,36 @@ def _bounded_int(name: str, value: int, minimum: int, maximum: int) -> None:
         raise TypeError(f"{name} must be an integer")
     if not minimum <= value <= maximum:
         raise ValueError(f"{name} must be between {minimum} and {maximum}")
+
+
+def _nearest_rank(values: list[int], quantile: float) -> int:
+    if not values:
+        return 0
+    rank = max(1, math.ceil(len(values) * quantile))
+    return values[min(rank - 1, len(values) - 1)]
+
+
+def _maximum_failed_run(statuses: tuple[str, ...]) -> int:
+    maximum = 0
+    current = 0
+    for status in statuses:
+        if status == "qualified":
+            current = 0
+            continue
+        current += 1
+        maximum = max(maximum, current)
+    return maximum
+
+
+def _accepts_completed_run(
+    plan: QualificationPlan,
+    summary: QualificationRunSummary,
+) -> bool:
+    if summary.recorded_samples != plan.maximum_samples:
+        return False
+    if plan.stage is not QualificationStage.DAY_24:
+        return summary.failed_samples == 0
+    maximum_gap = (
+        plan.sample_interval * summary.maximum_consecutive_failed_samples
+    )
+    return summary.success_rate >= 0.99 and maximum_gap <= timedelta(minutes=15)

@@ -46,6 +46,7 @@ cache、build生成物は正本にしない。必要な知識、実装、匿名f
 [共通Execution契約](../execution-contract.md)、
 [読み取り専用Adapter適格性確認](read-only-qualification-plan.md)、
 [操作用Adapter適格性確認](operation-qualification-plan.md)、
+[機器別の実機操作試験台帳](operation-live-test-ledger.md)、
 [保存方針](../data-retention-policy.md)、
 [秘密情報方針](../security-policy.md)を正とする。
 

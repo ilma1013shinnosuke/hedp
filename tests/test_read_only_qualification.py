@@ -28,6 +28,21 @@ SHA = "a" * 64
             2,
         ),
         (
+            "fusionsolar_modbus_tcp",
+            {
+                "ranges": [
+                    {
+                        "name": "inverter_state",
+                        "function_code": 3,
+                        "start_address": 32064,
+                        "registers": [1, 2, 3],
+                    }
+                ]
+            },
+            {"target_alias": "solar-inverter"},
+            1,
+        ),
+        (
             "qrio_read_only",
             {
                 "status": {"quality": "good"},
@@ -69,7 +84,7 @@ SHA = "a" * 64
         ),
     ],
 )
-def test_all_four_adapters_share_the_same_offline_gate(
+def test_supported_adapters_share_the_same_offline_gate(
     source: str,
     payload: dict[str, object],
     metadata: dict[str, object],
@@ -82,6 +97,52 @@ def test_all_four_adapters_share_the_same_offline_gate(
     assert report.status == "qualified"
     assert report.reasons == ()
     assert report.evidence_count == evidence_count
+
+
+@pytest.mark.parametrize(
+    "ranges",
+    [
+        [],
+        [
+            {
+                "name": "state",
+                "function_code": 6,
+                "start_address": 32064,
+                "registers": [1],
+            }
+        ],
+        [
+            {
+                "name": "state",
+                "function_code": 3,
+                "start_address": 65535,
+                "registers": [1, 2],
+            }
+        ],
+        [
+            {
+                "name": "state",
+                "function_code": 3,
+                "start_address": 32064,
+                "registers": [-1],
+            }
+        ],
+    ],
+)
+def test_modbus_qualification_accepts_only_bounded_read_ranges(
+    ranges: list[object],
+) -> None:
+    report = ReadOnlyOfflineQualificationChecker().evaluate(
+        RawData(
+            "fusionsolar_modbus_tcp",
+            NOW,
+            {"ranges": ranges},
+            metadata={"target_alias": "solar-inverter"},
+        )
+    )
+
+    assert report.status == "not_qualified"
+    assert report.reasons == ("evidence_invalid",)
 
 
 @pytest.mark.parametrize(

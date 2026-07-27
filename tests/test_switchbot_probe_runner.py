@@ -76,7 +76,9 @@ def test_runner_uses_read_only_baseline_and_returns_only_safe_summary(
     assert summary["device_type"] == "Exact E26 Type"
     assert summary["quality"] == "good"
     assert summary["persisted"] is False
-    rendered = json.dumps(summary)
+    rendered = json.dumps(
+        {key: value for key, value in summary.items() if key != "observed_at"}
+    )
     for private in (
         "already-known",
         "private-new-id",

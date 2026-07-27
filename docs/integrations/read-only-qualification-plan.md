@@ -70,6 +70,9 @@ Smart LEDZ、エコキュート、Qrio、Miele、FusionSolarのReaderを、実�
 - 1 sampleのtimeoutは300秒以下かつsample間隔以下、sleep確認間隔は60秒以下とする。
 - 失敗数、DB容量、要約に含める失敗証拠数にも上限を持つ。
 - 未来の開始時刻は拒否し、timeoutしたprobeの完了を待たずに次のprobeを重ねない。
+- 要約は成功率、応答時間のp50・p95・最大、連続失敗sample数を匿名集約して返す。
+- singleとshortは全sample成功を要求する。day_24は99%以上かつ連続欠損15分以内を
+  最低条件とし、planに設定した最大失敗数へ先に達した場合はさらに厳しくfail closedとする。
 
 保存先は利用者が明示した`*.qualification.sqlite3`だけである。既存ファイルを再利用する
 場合はtest-only marker、schema版、table列、foreign keyが一致しなければ開かない。新規作成は

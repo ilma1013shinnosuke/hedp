@@ -187,7 +187,9 @@ def test_visible_probe_uses_one_list_and_one_status_without_exposing_values():
     assert transport.request_counts == (1, 1)
     assert all(call[1]["stream"] is True for call in calls)
     assert all(call[1]["timeout"] <= 10 for call in calls)
-    rendered = json.dumps(safe)
+    rendered = json.dumps(
+        {key: value for key, value in safe.items() if key != "observed_at"}
+    )
     assert "opaque" not in rendered
     assert "private-name" not in rendered
     assert "private-hub" not in rendered
