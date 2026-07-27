@@ -332,6 +332,37 @@ def test_failed_switchbot_response_is_kept_only_in_collection_event(tmp_path):
     assert events[0]["raw_payload_json"]
 
 
+def test_collect_does_not_poll_devices_disabled_in_storage(tmp_path):
+    storage = _storage(tmp_path)
+    client = Mock()
+    devices = [
+        {"deviceId": "enabled", "deviceName": "Enabled", "deviceType": "Meter"},
+        {"deviceId": "disabled", "deviceName": "Disabled", "deviceType": "Meter"},
+    ]
+    client.devices.return_value = {
+        "statusCode": 100,
+        "body": {"deviceList": devices, "infraredRemoteList": []},
+    }
+    client.status.return_value = {
+        "statusCode": 100,
+        "body": {"temperature": 20, "humidity": 50, "battery": 80},
+    }
+    try:
+        SwitchBotService(client, storage).refresh_devices()
+        storage.set_enabled("disabled", False)
+
+        report = SwitchBotService(client, storage).collect()
+        observations = storage.rows("SELECT device_id FROM switchbot_observations")
+    finally:
+        storage.close()
+
+    client.status.assert_called_once_with("enabled")
+    assert observations == [{"device_id": "enabled"}]
+    assert report["devices"] == 2
+    assert report["polled_devices"] == 1
+    assert report["skipped_disabled"] == 1
+
+
 def _write_csv(path: Path, rows):
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.writer(stream)

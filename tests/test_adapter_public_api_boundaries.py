@@ -180,6 +180,11 @@ def test_adapter_package_roots_never_import_operation_modules() -> None:
         assert _operation_imports(path) == (), path
 
 
+def test_nested_adapter_package_roots_never_import_operation_modules() -> None:
+    for path in sorted(ADAPTERS_ROOT.glob("*/*/__init__.py")):
+        assert _operation_imports(path) == (), path
+
+
 def test_selected_package_roots_export_no_operation_or_set_symbols() -> None:
     for package, forbidden in ROOT_OPERATION_EXPORTS.items():
         module = importlib.import_module(f"hedp.adapters.{package}")

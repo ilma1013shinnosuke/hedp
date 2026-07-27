@@ -1,23 +1,6 @@
-"""Formal SwitchBot E26 reader and operation adapter."""
+"""SwitchBot E26 implementation package.
 
-from .operation import (
-    E26Capability,
-    E26CapabilityStatus,
-    E26OpenApiReader,
-    E26OperationAdapter,
-    E26ReadError,
-    E26State,
-    e26_capabilities,
-    parse_e26_status,
-)
-
-__all__ = [
-    "E26Capability",
-    "E26CapabilityStatus",
-    "E26OpenApiReader",
-    "E26OperationAdapter",
-    "E26ReadError",
-    "E26State",
-    "e26_capabilities",
-    "parse_e26_status",
-]
+Read and operation symbols are intentionally not re-exported from this package
+root.  Callers must choose the explicit module boundary instead of gaining an
+operation entry point through a broad package import.
+"""

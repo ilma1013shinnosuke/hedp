@@ -511,6 +511,14 @@ class SwitchBotStorage:
         )
         self._connection().commit()
 
+    def enabled_device_ids(self) -> frozenset[str]:
+        """Return the devices explicitly enabled for periodic status polling."""
+
+        rows = self._connection().execute(
+            "SELECT device_id FROM switchbot_devices WHERE enabled=1"
+        )
+        return frozenset(str(row[0]) for row in rows)
+
     def rows(self, query: str, parameters: Iterable[Any] = ()) -> list[dict[str, Any]]:
         return [dict(row) for row in self._connection().execute(query, parameters)]
 

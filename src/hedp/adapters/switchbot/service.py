@@ -62,10 +62,21 @@ class SwitchBotService:
         listing = self.refresh_devices(dry_run=dry_run)
         collected_at = datetime.now(timezone.utc)
         results = []
+        enabled_device_ids = (
+            None if dry_run else self.storage.enabled_device_ids()
+        )
+        skipped_disabled = 0
+        polled_devices = 0
         registry = self.household.secondary_registry
         seen_secondary_aliases = set()
         for device in listing["physical"]:
             device_id = str(device.get("deviceId", ""))
+            if (
+                enabled_device_ids is not None
+                and device_id not in enabled_device_ids
+            ):
+                skipped_disabled += 1
+                continue
             registration = registry.resolve_vendor_id(device_id)
             if registration is not None:
                 seen_secondary_aliases.add(registration.target_alias)
@@ -87,6 +98,7 @@ class SwitchBotService:
                     )
                     continue
             try:
+                polled_devices += 1
                 response = self.client.status(device_id)
                 success = response.get("statusCode") == 100
                 error = None if success else "api_status"
@@ -146,7 +158,12 @@ class SwitchBotService:
                     "error": None,
                 }
             )
-        return {"devices": len(listing["physical"]), "results": results}
+        return {
+            "devices": len(listing["physical"]),
+            "polled_devices": polled_devices,
+            "skipped_disabled": skipped_disabled,
+            "results": results,
+        }
 
     @staticmethod
     def _observation(

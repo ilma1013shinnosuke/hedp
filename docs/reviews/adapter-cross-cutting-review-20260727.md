@@ -20,7 +20,7 @@ Adapter本体は概ねPython標準機能とHTTP/TCP/UDP/SQLiteで構成され、
 | Adapter | 読み取り | 操作 | 主な未完了 |
 |---|---|---|---|
 | FusionSolar / SmartLogger | cloud Readerとread-only Modbus部品あり | fixture限定の操作契約 | Modbusの機器同一性照合、cloud Readerのendpoint allowlist、並行取得の終了期限、同一snapshot抑止 |
-| SwitchBot | cloud取得とSQLite保存あり | 型付き操作契約あり | ReaderとDBの分離、poll無効化の実効性、同一状態の履歴抑止、共通Execution経由の強制 |
+| SwitchBot | cloud取得とSQLite保存あり | 型付き操作契約、E26・テープライト3の正式Adapterあり | ReaderとDBの分離、同一状態の履歴抑止。本番配線は共通Execution経由に限定。poll無効化は実装済み |
 | Smart LEDZ | TCP Reader、正規化、通知契約あり | 別moduleの操作契約 | 対象固定、総要求数・応答byte上限を持つ実機適格性確認 |
 | エコキュート | ECHONET Lite Get Readerあり | Set transportと操作Adapterは別module | 単一IP固定、全体deadline、実機property map確認。操作は本番未配線 |
 | Qrio | cloud Reader、匿名正規化あり | 別moduleの操作Adapter | 非公開cloud仕様の継続性、実機read-only確認。操作は本番未配線 |
@@ -91,8 +91,9 @@ scheduler、サービス管理、秘密注入、firewall設定は交換可能な
 - 出力はAdapter名、成否、要求数、所要時間区分、quality件数、同一性照合結果だけにする。
 - 例外は安全なreason codeへ変換し、接続先やpayloadを含めない。
 
-現行コードのまま全条件を満たすCLIはない。このため、安全な専用入口が完成するまで
-実通信を行わない判断が適切である。
+共通の有限runnerと匿名テストDBは実装済みである。ただし、これはtransportを所有しない。
+実通信は、上記条件を満たすAdapter別probeを注入できる対象に限り、通常Collectorや定期job
+からは実行しない。
 
 共通オフライン適格性Gateと匿名テストDBは、EcoCute、Qrio、Miele、Smart LEDZに加え、
 FusionSolarのread-only Modbus rangeを受理できる。FusionSolarではfunction code 3/4、
@@ -108,10 +109,10 @@ SwitchBot専用runnerは、一覧・状態取得を各最大1回、retryなし�
 
 ## 優先修正
 
-1. SwitchBotの非dry-run dispatchをfixture以外では拒否する。
-2. 全package rootから操作APIを外し、横断回帰試験で境界を固定する。
-3. 共通read-only qualification harnessを単発・短時間・24時間で共用する。
+1. ~~SwitchBotの汎用非dry-run dispatchをfixture以外では拒否する。~~ 実装・回帰試験済み。
+2. ~~全package rootから操作APIを外し、横断回帰試験で境界を固定する。~~ 実装・回帰試験済み。
+3. ~~共通read-only qualification harnessを単発・短時間・24時間で共用する。~~ 実装・回帰試験済み。
 4. FusionSolar Modbusで、値を保存・表示せず期待機器identityを照合する。
-5. SwitchBot ReaderからSQLite transactionを分離し、poll対象のenabled設定を実効化する。
+5. SwitchBot ReaderからSQLite transactionを分離する。poll対象のenabled設定は実装・回帰試験済み。
 6. SwitchBotとFusionSolarへstate interval、変化event、Raw上限、parallel終了期限を導入する。
 7. LinuxとWindowsでoffline testを実行し、実LAN確認は各OSのfirewall条件を別に記録する。
