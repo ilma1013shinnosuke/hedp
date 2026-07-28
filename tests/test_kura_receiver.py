@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +13,8 @@ import pytest
 from hedp.adapters.hokuriku_tariff import parse_official_payload
 from hedp.adapters.hokuriku_tariff.collector import HokurikuTariffCollector
 from hedp.integrations.kura import (
+    AcknowledgementConflictError,
+    AcknowledgementIntent,
     DeliveryCommitRecord,
     DurableKuraInbox,
     ReceiverPolicy,
@@ -132,6 +135,8 @@ def test_inbox_returns_ack_only_after_durable_commit(tmp_path: Path) -> None:
         )
         assert outcome.committed
         assert outcome.acknowledgement is not None
+        assert outcome.acknowledgement.app_commit_id.startswith("hestia-kura-")
+        assert inbox.pending_acknowledgements() == (outcome.acknowledgement,)
         assert inbox.raw_payload("delivery-hestia-1") == RAW
         assert inbox.delivery_count() == 1
     assert oct(path.stat().st_mode & 0o777) == "0o600"
@@ -160,6 +165,183 @@ def test_duplicate_is_not_recommitted_or_reacknowledged(tmp_path: Path) -> None:
         assert not second.committed
         assert second.acknowledgement is None
         assert inbox.delivery_count() == 1
+        assert inbox.pending_acknowledgements() == (first.acknowledgement,)
+
+
+def test_pending_ack_survives_close_and_reopen(tmp_path: Path) -> None:
+    envelope = _envelope()
+    path = tmp_path / "public.kura-inbox.sqlite3"
+    with DurableKuraInbox(path) as inbox:
+        outcome = inbox.receive(
+            raw=RAW,
+            envelope_json=_encoded(envelope),
+            provided_envelope_sha256=canonical_envelope_sha256(envelope),
+            policy=_policy(),
+            evaluated_at=NOW,
+        )
+        expected = outcome.acknowledgement
+        assert expected is not None
+
+    with DurableKuraInbox(path) as reopened:
+        assert reopened.pending_acknowledgements() == (expected,)
+        duplicate = reopened.receive(
+            raw=RAW,
+            envelope_json=_encoded(envelope),
+            provided_envelope_sha256=canonical_envelope_sha256(envelope),
+            policy=_policy(),
+            evaluated_at=NOW,
+        )
+        assert duplicate.conformance.code == "DUPLICATE_DELIVERY"
+        assert not duplicate.committed
+        assert duplicate.acknowledgement is None
+        assert reopened.pending_acknowledgements() == (expected,)
+
+
+def test_ack_completion_is_explicit_and_idempotent(tmp_path: Path) -> None:
+    envelope = _envelope()
+    path = tmp_path / "public.kura-inbox.sqlite3"
+    with DurableKuraInbox(path) as inbox:
+        outcome = inbox.receive(
+            raw=RAW,
+            envelope_json=_encoded(envelope),
+            provided_envelope_sha256=canonical_envelope_sha256(envelope),
+            policy=_policy(),
+            evaluated_at=NOW,
+        )
+        acknowledgement = outcome.acknowledgement
+        assert acknowledgement is not None
+        assert not inbox.mark_acknowledged(
+            acknowledgement,
+            acknowledged_at=NOW,
+        )
+        assert inbox.pending_acknowledgements() == ()
+        assert inbox.mark_acknowledged(
+            acknowledgement,
+            acknowledged_at=NOW,
+        )
+
+    with DurableKuraInbox(path) as reopened:
+        assert reopened.pending_acknowledgements() == ()
+        assert reopened.mark_acknowledged(
+            acknowledgement,
+            acknowledged_at=NOW,
+        )
+
+
+def test_ack_completion_rejects_different_binding(tmp_path: Path) -> None:
+    envelope = _envelope()
+    with DurableKuraInbox(tmp_path / "public.kura-inbox.sqlite3") as inbox:
+        outcome = inbox.receive(
+            raw=RAW,
+            envelope_json=_encoded(envelope),
+            provided_envelope_sha256=canonical_envelope_sha256(envelope),
+            policy=_policy(),
+            evaluated_at=NOW,
+        )
+        acknowledgement = outcome.acknowledgement
+        assert acknowledgement is not None
+        changed = AcknowledgementIntent(
+            app_commit_id="hestia-kura-different",
+            delivery_id=acknowledgement.delivery_id,
+            recipient=acknowledgement.recipient,
+            envelope_sha256=acknowledgement.envelope_sha256,
+            raw_sha256=acknowledgement.raw_sha256,
+            raw_size=acknowledgement.raw_size,
+            committed_at=acknowledgement.committed_at,
+        )
+        with pytest.raises(AcknowledgementConflictError):
+            inbox.mark_acknowledged(changed, acknowledged_at=NOW)
+        assert inbox.pending_acknowledgements() == (acknowledgement,)
+
+
+def test_outbox_commit_failure_rolls_back_inbox_record(tmp_path: Path) -> None:
+    envelope = _envelope()
+    path = tmp_path / "public.kura-inbox.sqlite3"
+    inbox = DurableKuraInbox(path)
+    inbox._connection.execute(  # noqa: SLF001 - deliberate failure injection
+        """
+        CREATE TRIGGER refuse_kura_ack_outbox
+        BEFORE INSERT ON kura_ack_outbox
+        BEGIN
+            SELECT RAISE(ABORT, 'synthetic outbox failure');
+        END
+        """
+    )
+    with pytest.raises(InboxCommitError):
+        inbox.receive(
+            raw=RAW,
+            envelope_json=_encoded(envelope),
+            provided_envelope_sha256=canonical_envelope_sha256(envelope),
+            policy=_policy(),
+            evaluated_at=NOW,
+        )
+    assert inbox.delivery_count() == 0
+    assert inbox.pending_acknowledgements() == ()
+    inbox.close()
+
+
+def test_legacy_inbox_is_migrated_to_stable_pending_ack(
+    tmp_path: Path,
+) -> None:
+    envelope = _envelope()
+    encoded = _encoded(envelope)
+    envelope_sha256 = canonical_envelope_sha256(envelope)
+    raw_sha256 = hashlib.sha256(RAW).hexdigest()
+    path = tmp_path / "legacy.kura-inbox.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        """
+        CREATE TABLE kura_inbox (
+            delivery_id TEXT PRIMARY KEY,
+            recipient TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            connector_release_id TEXT NOT NULL,
+            media_type TEXT NOT NULL,
+            envelope_sha256 TEXT NOT NULL,
+            raw_sha256 TEXT NOT NULL,
+            raw_size INTEGER NOT NULL,
+            envelope_json BLOB NOT NULL,
+            raw BLOB NOT NULL,
+            committed_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO kura_inbox (
+            delivery_id, recipient, purpose, source_id, connector_release_id,
+            media_type, envelope_sha256, raw_sha256, raw_size, envelope_json,
+            raw, committed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "delivery-hestia-1",
+            "hestia",
+            "shadow_evaluation",
+            "synthetic-hestia-public",
+            "public-pdf-v1",
+            "application/pdf",
+            envelope_sha256,
+            raw_sha256,
+            len(RAW),
+            encoded,
+            RAW,
+            NOW.isoformat(),
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+    with DurableKuraInbox(path) as migrated:
+        pending = migrated.pending_acknowledgements()
+        assert len(pending) == 1
+        assert pending[0].app_commit_id.startswith("hestia-kura-legacy-")
+        assert pending[0].delivery_id == "delivery-hestia-1"
+        assert migrated.raw_payload("delivery-hestia-1") == RAW
+
+    with DurableKuraInbox(path) as reopened:
+        assert reopened.pending_acknowledgements() == pending
 
 
 def test_same_delivery_id_with_changed_binding_is_rejected(tmp_path: Path) -> None:

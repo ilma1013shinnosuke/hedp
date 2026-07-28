@@ -10,6 +10,7 @@ from .conformance import (
     validate_delivery_json,
 )
 from .inbox import (
+    AcknowledgementConflictError,
     AcknowledgementIntent,
     DurableKuraInbox,
     ReceiveOutcome,
@@ -17,6 +18,7 @@ from .inbox import (
 from .shadow import build_shadow_observation, compare_shadow
 
 __all__ = [
+    "AcknowledgementConflictError",
     "AcknowledgementIntent",
     "ConformanceResult",
     "DeliveryCommitRecord",

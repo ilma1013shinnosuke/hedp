@@ -21,7 +21,8 @@ HESTIAは、KURAの内部DB・サービス・Python実装へ依存せず、
 
 受信箱はHESTIA本体DBとは別の、名前が`.kura-inbox.sqlite3`で終わる専用SQLiteです。
 トランザクションは`BEGIN IMMEDIATE`、`synchronous=FULL`で行い、Raw、Envelope、
-束縛hash、受信属性がatomicにcommitされた後だけACK準備を返します。
+束縛hash、受信属性、stableな`app_commit_id`、pending ACK outboxがatomicにcommit
+された後だけACK準備を返します。
 
 - 検証拒否: 保存なし、ACKなし
 - 初回受領: durable commit後だけACK
@@ -29,8 +30,11 @@ HESTIAは、KURAの内部DB・サービス・Python実装へ依存せず、
 - 同じDelivery IDで束縛値が異なる: conflict拒否、保存なし、ACKなし
 - commit失敗: 例外として明示し、ACKを生成しない
 
-受信箱はKURAのDBを読みません。将来ACK送信を実装する場合も、ここで返るACK準備を
-送信層へ渡し、送信失敗でRaw commitを取り消しません。
+受信箱はKURAのDBを読みません。ACK送信層はpending outboxを列挙し、KURAが同じ
+束縛値と`app_commit_id`のACK成功を返した後だけ明示的に完了記録します。送信前に
+processが停止しても再起動後に同じintentを回収でき、送信失敗でRaw commitやpending
+ACKを取り消しません。duplicate受領はRawを再保存せず、新しいACKも作りませんが、
+初回commitのpending ACKはACK成功まで保持します。
 
 ## Shadow比較
 
@@ -56,4 +60,5 @@ KURA_RECEIVER_FIXTURE_ROOT=<KURA正本>/tests/fixtures/receiver-conformance/v1 \
 
 通常のテストでは外部にあるfixture試験だけをskipし、同じ検証器のローカル回帰、
 durable commit後ACK、重複・競合、commit失敗、既存Collector Shadow比較、KURA停止
-試験を実行します。
+試験に加え、再起動後のpending ACK回収、ACK完了の冪等性、異なるACK束縛値の拒否を
+実行します。
