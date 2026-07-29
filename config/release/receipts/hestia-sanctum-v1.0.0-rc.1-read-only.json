@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "status": "blocked",
+  "tag_before": "v1.0.0-rc.1",
+  "tag_after": "v1.0.0-rc.1",
+  "commit_before": "692bfce92a1289fc7886102a7c758d4e1b2b44b9",
+  "commit_after": "692bfce92a1289fc7886102a7c758d4e1b2b44b9",
+  "execution": {
+    "attempts": 1,
+    "timeout_seconds": 60,
+    "stdout": "discarded",
+    "stderr": "discarded",
+    "mode": "fusionsolar.smartlogger.read_only",
+    "executor_invoked": false,
+    "write_invoked": false,
+    "exit_code": 75,
+    "reason": "transport_unavailable"
+  },
+  "isolated_database": {
+    "raw_before": 0,
+    "raw_after": 0,
+    "raw_added": 0,
+    "records_before": 0,
+    "records_after": 0,
+    "records_added": 0,
+    "mode": "0600"
+  },
+  "sops": {
+    "exec_env_only": true,
+    "plaintext_files": 0,
+    "plaintext_saved": false
+  },
+  "jobs": {
+    "persistent_before": 0,
+    "persistent_after": 0,
+    "active_after": 0,
+    "cron_before": 0,
+    "cron_after": 0
+  },
+  "host": {
+    "ssh": "active",
+    "network_manager": "active",
+    "connection": "KWIFI",
+    "default_route": true
+  },
+  "rollback": {
+    "status": "pass",
+    "previous": "none",
+    "action": "unlink-current"
+  },
+  "verified_at": "2026-07-30T07:35:45+09:00"
+}

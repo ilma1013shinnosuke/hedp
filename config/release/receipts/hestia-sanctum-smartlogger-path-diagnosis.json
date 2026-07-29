@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "target_config": "valid",
+  "target_private": true,
+  "resolved_ipv4_count": 1,
+  "default_route_present": true,
+  "default_interface_is_wifi": true,
+  "same_subnet": true,
+  "route_selected": true,
+  "route_interface_is_wifi": true,
+  "selected_interface_same_subnet": true,
+  "neighbor_resolution": "resolved",
+  "icmp_reference": "reply",
+  "tcp_connect_once": "open",
+  "host_firewall": "inspection_unavailable",
+  "host_egress_deny_detected": null,
+  "reason_code": "TCP_OPEN",
+  "changes_made": false,
+  "secrets_or_addresses_output": false
+}

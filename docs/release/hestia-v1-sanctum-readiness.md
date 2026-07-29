@@ -84,3 +84,21 @@ transport到達不能で安全停止した。観測追加は0件、再試行な�
 
 匿名receipt:
 `config/release/receipts/hestia-sanctum-v1.0.0-rc.1-deployment.json`
+
+## SmartLogger経路診断
+
+匿名read-only診断では、対象設定、default route、Wi-Fi interface、同一subnet、
+route選択、neighbor解決、ICMP、TCP handshakeがすべて成立した。host firewallの
+ruleset全体は非対話権限では確認できなかったが、対象TCP接続の送信拒否は実効上ない。
+
+続く上限1回のcollectorはModbus応答待ちで`transport_unavailable`となり、隔離DB追加0件、
+Executor・writeなし、平文保存なし、永続jobなしで安全停止した。追加試行は行っていない。
+
+既存Mac成功証拠とSmartLoggerの接続元制限から、sanctumがModbus許可接続元に含まれない
+可能性を主候補とする。必要変更候補は既存Mac許可を維持したままsanctumの安定した接続元を
+追加すること。影響はsanctumからのread-only Modbus許可、rollbackは追加許可だけの除去。
+複数接続元対応と正規UI手順が未確認で実機設定変更に当たるため、変更せずblockedとする。
+
+匿名receipt:
+`config/release/receipts/hestia-sanctum-smartlogger-path-diagnosis.json`、
+`config/release/receipts/hestia-sanctum-v1.0.0-rc.1-read-only.json`

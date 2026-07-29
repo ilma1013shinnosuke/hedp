@@ -45,3 +45,7 @@
 sanctumからSmartLoggerへのtransportは到達不能で、上限1回・データ0件・再試行なしで
 安全停止した。macOSの承認済みread-only運用証拠には影響しないが、Linux/sanctumは
 保証対象外・永続jobなしを維持する。
+
+追加の匿名経路診断ではsanctumから対象TCP portまで到達したが、Modbus collectorは
+応答待ちで安全停止した。SmartLoggerの許可接続元が既存Macに限定されている可能性が
+主候補である。実機設定変更は行わず、sanctumのlive observationはblockedを維持する。
