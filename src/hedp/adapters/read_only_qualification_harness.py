@@ -50,6 +50,11 @@ _ALLOWED_REASON_CODES = frozenset(
         "fingerprint_only_policy_missing",
         "forbidden_key_present",
         "metadata_not_json_safe",
+        "metric_contract_mismatch",
+        "metric_duplicate",
+        "metric_missing",
+        "metric_unknown",
+        "metric_value_invalid",
         "network_address_present",
         "nonfinite_number_present",
         "payload_not_json_safe",
@@ -127,6 +132,16 @@ class QualificationProbe(Protocol):
     """Injected read-only probe. It must not expose an operation method."""
 
     def collect(self) -> RawData | QualificationProbeResult: ...
+
+
+class QualificationProbeError(RuntimeError):
+    """Probe failure that may expose only a fixed anonymous reason code."""
+
+    def __init__(self, reason_code: str) -> None:
+        if reason_code not in _ALLOWED_REASON_CODES:
+            raise ValueError("reason_code is not recognized")
+        super().__init__("qualification probe failed")
+        self.reason_code = reason_code
 
 
 @dataclass(frozen=True)
@@ -1069,6 +1084,9 @@ def _collect_with_timeout(
     def collect() -> None:
         try:
             value = probe.collect()
+        except QualificationProbeError as error:
+            result.put(("probe_error", error.reason_code))
+            return
         except Exception:
             result.put(("probe_error", None))
             return
@@ -1085,7 +1103,13 @@ def _collect_with_timeout(
     except Empty:
         return _ProbeSample(None, "probe_error", "probe_failed", elapsed_ms)
     if status != "ok":
-        return _ProbeSample(None, "probe_error", "probe_failed", elapsed_ms)
+        reason_code = value if isinstance(value, str) else "probe_failed"
+        return _ProbeSample(
+            None,
+            "probe_error",
+            _safe_reason(reason_code),
+            elapsed_ms,
+        )
     if isinstance(value, RawData):
         value = QualificationProbeResult(value)
     if not isinstance(value, QualificationProbeResult):
