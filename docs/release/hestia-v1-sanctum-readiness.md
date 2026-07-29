@@ -102,3 +102,6 @@ Executor・writeなし、平文保存なし、永続jobなしで安全停止し�
 匿名receipt:
 `config/release/receipts/hestia-sanctum-smartlogger-path-diagnosis.json`、
 `config/release/receipts/hestia-sanctum-v1.0.0-rc.1-read-only.json`
+
+公式仕様、変更前Gate、影響、rollbackは
+`docs/release/hestia-v1-sanctum-smartlogger-change-plan.md`を正本とする。
