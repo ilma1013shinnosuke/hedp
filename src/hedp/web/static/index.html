@@ -68,6 +68,11 @@
           </div>
         </section>
 
+        <div class="data-warning glass" id="data-warning" role="status" hidden>
+          <span aria-hidden="true">!</span>
+          <span id="data-warning-text">一部の情報を確認できません</span>
+        </div>
+
         <div class="section-heading">
           <div>
             <p class="eyebrow">LIVE</p>
@@ -86,6 +91,7 @@
             </div>
             <p class="card-label">太陽光</p>
             <p class="card-value"><span id="solar">—</span><small>kW</small></p>
+            <p class="metric-meta" id="solar-meta">取得待ち</p>
             <div class="sparkline solar-line" aria-hidden="true">
               <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
             </div>
@@ -98,6 +104,7 @@
             </div>
             <p class="card-label">蓄電池</p>
             <p class="card-value"><span id="battery">—</span><small>%</small></p>
+            <p class="metric-meta" id="battery-meta">取得待ち</p>
             <div class="progress" aria-label="蓄電池残量"><i id="battery-bar"></i></div>
           </article>
 
@@ -115,32 +122,40 @@
         <section class="solar-chart-card glass" aria-labelledby="solar-chart-title">
           <div class="chart-heading">
             <div>
-              <p class="eyebrow">SOLAR · TODAY</p>
-              <h2 id="solar-chart-title">太陽光の発電推移</h2>
+              <p class="eyebrow" id="chart-period-label">ENERGY · TODAY</p>
+              <h2 id="solar-chart-title">太陽光・蓄電池の推移</h2>
             </div>
-            <div class="chart-summary" aria-label="本日の発電概要">
-              <span><strong id="today-energy">—</strong> kWh</span>
-              <small>自家消費 <strong id="self-consumption">—</strong>%</small>
+            <div class="chart-tools">
+              <div class="period-picker" aria-label="グラフの表示期間">
+                <button class="active" data-period="day" aria-pressed="true">今日</button>
+                <button data-period="7d" aria-pressed="false">7日</button>
+                <button data-period="30d" aria-pressed="false">30日</button>
+              </div>
+              <div class="chart-summary" aria-label="本日の発電概要">
+                <span><strong id="today-energy">—</strong> kWh</span>
+                <small>自家消費 <strong id="self-consumption">—</strong>%</small>
+              </div>
             </div>
           </div>
           <div class="chart-legend">
-            <span><i class="legend-solar"></i>発電電力</span>
+            <div>
+              <span><i class="legend-solar"></i>発電電力</span>
+              <span><i class="legend-battery"></i>蓄電池残量</span>
+            </div>
             <span class="chart-note">
               <strong id="data-mode">SHADOW</strong> ·
-              <span id="data-quality">demo</span>
+              <span id="data-quality">demo</span> ·
+              <span id="data-observed-at">更新待ち</span>
             </span>
           </div>
           <div class="chart-frame">
             <canvas
               id="solar-chart"
               role="img"
-              aria-label="5時から18時までの太陽光発電電力の推移"
+              aria-label="太陽光発電電力と蓄電池残量の推移"
             ></canvas>
           </div>
-          <div class="chart-axis" aria-hidden="true">
-            <span>05:00</span><span>08:00</span><span>11:00</span>
-            <span>14:00</span><span>18:00</span>
-          </div>
+          <div class="chart-axis" id="chart-axis" aria-hidden="true"></div>
         </section>
 
         <div class="section-heading">

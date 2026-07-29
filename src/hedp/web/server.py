@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qs, urlsplit
 
 from .read_model import (
     read_only_dashboard_snapshot_provider,
@@ -22,12 +23,18 @@ _ASSET_TYPES = {
 }
 
 
-def demonstration_snapshot() -> dict[str, Any]:
+_PERIODS = {"day", "7d", "30d"}
+
+
+def demonstration_snapshot(*, period: str = "day") -> dict[str, Any]:
     """Return value-free sample data for the first visual interface."""
 
     return {
         "schema": "hestia.interface.demo.v1",
         "mode": "shadow",
+        "period": period,
+        "observed_at": None,
+        "quality": {"status": "good", "reason": "anonymous_demo"},
         "home": {"status": "comfortable", "alerts": 0},
         "energy": {
             "solar_kw": 4.8,
@@ -36,6 +43,7 @@ def demonstration_snapshot() -> dict[str, Any]:
             "grid_kw": -1.4,
             "today_kwh": 18.6,
             "self_consumption_percent": 91,
+            "observations": {},
             "history": [
                 {"time": "05:00", "solar_kw": 0.0},
                 {"time": "06:00", "solar_kw": 0.2},
@@ -51,6 +59,13 @@ def demonstration_snapshot() -> dict[str, Any]:
                 {"time": "16:00", "solar_kw": 2.3},
                 {"time": "17:00", "solar_kw": 1.0},
                 {"time": "18:00", "solar_kw": 0.2},
+            ],
+            "battery_history": [
+                {"time": "05:00", "battery_percent": 42},
+                {"time": "08:00", "battery_percent": 36},
+                {"time": "11:00", "battery_percent": 53},
+                {"time": "14:00", "battery_percent": 71},
+                {"time": "18:00", "battery_percent": 78},
             ],
         },
         "climate": {
@@ -77,15 +92,19 @@ class _DashboardHandler(BaseHTTPRequestHandler):
     server_version = "HESTIA"
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-        path = self.path.split("?", 1)[0]
+        request = urlsplit(self.path)
+        path = request.path
         if path == "/api/summary":
-            provider = getattr(
-                self.server, "summary_provider", demonstration_snapshot
-            )
+            values = parse_qs(request.query).get("period", ["day"])
+            period = values[-1]
+            if period not in _PERIODS:
+                self.send_error(HTTPStatus.BAD_REQUEST)
+                return
+            provider = getattr(self.server, "summary_provider", demonstration_snapshot)
             try:
-                summary = provider()
+                summary = _summary_for_period(provider, period)
             except Exception:
-                summary = unavailable_dashboard_snapshot()
+                summary = unavailable_dashboard_snapshot(period=period)
             self._send_json(summary)
             return
         asset_name = "index.html" if path in {"/", "/index.html"} else path[1:]
@@ -108,9 +127,7 @@ class _DashboardHandler(BaseHTTPRequestHandler):
         """Avoid retaining household access details in ordinary logs."""
 
     def _send_json(self, value: dict[str, Any]) -> None:
-        payload = json.dumps(
-            value, ensure_ascii=False, separators=(",", ":")
-        ).encode()
+        payload = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
@@ -124,7 +141,7 @@ def create_dashboard_server(
     host: str = "127.0.0.1",
     port: int = 8765,
     *,
-    summary_provider: Callable[[], dict[str, Any]] = demonstration_snapshot,
+    summary_provider: Callable[..., dict[str, Any]] = demonstration_snapshot,
 ) -> ThreadingHTTPServer:
     """Create, but do not start, the local dashboard server."""
 
@@ -133,6 +150,17 @@ def create_dashboard_server(
     server = ThreadingHTTPServer((host, port), _DashboardHandler)
     server.summary_provider = summary_provider  # type: ignore[attr-defined]
     return server
+
+
+def _summary_for_period(
+    provider: Callable[..., dict[str, Any]],
+    period: str,
+) -> dict[str, Any]:
+    """Keep zero-argument providers compatible for the default day view."""
+
+    if period == "day":
+        return provider()
+    return provider(period=period)
 
 
 def serve_dashboard(
@@ -148,9 +176,7 @@ def serve_dashboard(
         if database_path is None
         else read_only_dashboard_snapshot_provider(database_path)
     )
-    server = create_dashboard_server(
-        host, port, summary_provider=provider
-    )
+    server = create_dashboard_server(host, port, summary_provider=provider)
     try:
         print(f"HESTIA interface: http://{host}:{server.server_port}")
         server.serve_forever()

@@ -23,6 +23,11 @@ _SELF_CONSUMPTION_METRICS = (
     "selfUsePowerRatioByProduct",
     "daily_self_consumption_percent",
 )
+_PERIODS = {
+    "day": timedelta(days=1),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+}
 
 
 def read_only_dashboard_snapshot_provider(
@@ -31,18 +36,19 @@ def read_only_dashboard_snapshot_provider(
     clock: Callable[[], datetime] | None = None,
     timezone_name: str = "Asia/Tokyo",
     stale_after: timedelta = timedelta(minutes=15),
-) -> Callable[[], dict[str, Any]]:
+) -> Callable[..., dict[str, Any]]:
     """Build a callable that projects the database without ever writing it."""
 
     path = str(database_path)
     current_time = clock or (lambda: datetime.now(timezone.utc))
 
-    def provide() -> dict[str, Any]:
+    def provide(*, period: str = "day") -> dict[str, Any]:
         return build_read_only_dashboard_snapshot(
             path,
             at=current_time(),
             timezone_name=timezone_name,
             stale_after=stale_after,
+            period=period,
         )
 
     return provide
@@ -54,6 +60,7 @@ def build_read_only_dashboard_snapshot(
     at: datetime | None = None,
     timezone_name: str = "Asia/Tokyo",
     stale_after: timedelta = timedelta(minutes=15),
+    period: str = "day",
 ) -> dict[str, Any]:
     """Return a compact, anonymous view of confirmed stored metrics."""
 
@@ -61,7 +68,8 @@ def build_read_only_dashboard_snapshot(
     local_timezone = ZoneInfo(timezone_name)
     local_now = now.astimezone(local_timezone)
     local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    start = local_start.astimezone(timezone.utc)
+    start = _period_start(period, local_start).astimezone(timezone.utc)
+    today_start = local_start.astimezone(timezone.utc)
     end = now.astimezone(timezone.utc)
 
     storage = Storage(str(database_path))
@@ -77,10 +85,11 @@ def build_read_only_dashboard_snapshot(
 
     solar_record = _latest_by_priority(records, _SOLAR_METRICS)
     battery_record = _latest_by_priority(records, _BATTERY_METRICS)
-    today_record = _latest_by_priority(records, _TODAY_METRICS)
-    self_consumption_record = _latest_by_priority(
-        records, _SELF_CONSUMPTION_METRICS
-    )
+    today_records = [
+        record for record in records if _as_aware(record.timestamp) >= today_start
+    ]
+    today_record = _latest_by_priority(today_records, _TODAY_METRICS)
+    self_consumption_record = _latest_by_priority(records, _SELF_CONSUMPTION_METRICS)
     observed_records = [
         record
         for record in (
@@ -100,6 +109,7 @@ def build_read_only_dashboard_snapshot(
     return {
         "schema": "hestia.interface.summary.v1",
         "mode": "live_read_only",
+        "period": period,
         "observed_at": observed_at.isoformat() if observed_at else None,
         "quality": quality,
         "home": {"status": "unknown", "alerts": None},
@@ -109,10 +119,33 @@ def build_read_only_dashboard_snapshot(
             "battery_percent": _numeric_value(battery_record),
             "grid_kw": None,
             "today_kwh": _numeric_value(today_record),
-            "self_consumption_percent": _numeric_value(
-                self_consumption_record
+            "self_consumption_percent": _numeric_value(self_consumption_record),
+            "observations": {
+                "solar_kw": _observation(solar_record, now, stale_after),
+                "battery_percent": _observation(battery_record, now, stale_after),
+                "today_kwh": _observation(today_record, now, stale_after),
+                "self_consumption_percent": _observation(
+                    self_consumption_record, now, stale_after
+                ),
+            },
+            "history": _metric_history(
+                records,
+                (
+                    ("fusionsolar_modbus_tcp", "input_power"),
+                    ("fusionsolar_energy_balance", "productPower"),
+                    ("fusionsolar", "productPower"),
+                ),
+                value_key="solar_kw",
+                local_timezone=local_timezone,
+                period=period,
             ),
-            "history": _solar_history(records, local_timezone),
+            "battery_history": _metric_history(
+                records,
+                tuple((source, "storage_soc") for source in _SOURCE_PRIORITY),
+                value_key="battery_percent",
+                local_timezone=local_timezone,
+                period=period,
+            ),
         },
         "climate": {
             "temperature_c": None,
@@ -123,12 +156,13 @@ def build_read_only_dashboard_snapshot(
     }
 
 
-def unavailable_dashboard_snapshot() -> dict[str, Any]:
+def unavailable_dashboard_snapshot(*, period: str = "day") -> dict[str, Any]:
     """Return a non-sensitive response when the read model is unavailable."""
 
     return {
         "schema": "hestia.interface.summary.v1",
         "mode": "unavailable",
+        "period": period,
         "observed_at": None,
         "quality": {
             "status": "missing",
@@ -142,7 +176,23 @@ def unavailable_dashboard_snapshot() -> dict[str, Any]:
             "grid_kw": None,
             "today_kwh": None,
             "self_consumption_percent": None,
+            "observations": {
+                metric: {
+                    "observed_at": None,
+                    "quality": {
+                        "status": "missing",
+                        "reason": "read_model_unavailable",
+                    },
+                }
+                for metric in (
+                    "solar_kw",
+                    "battery_percent",
+                    "today_kwh",
+                    "self_consumption_percent",
+                )
+            },
             "history": [],
+            "battery_history": [],
         },
         "climate": {
             "temperature_c": None,
@@ -175,14 +225,15 @@ def _latest_by_priority(
     )
 
 
-def _solar_history(
-    records: Iterable[Record], local_timezone: ZoneInfo
+def _metric_history(
+    records: Iterable[Record],
+    candidates: tuple[tuple[str, str], ...],
+    *,
+    value_key: str,
+    local_timezone: ZoneInfo,
+    period: str,
 ) -> list[dict[str, Any]]:
-    for source, metric in (
-        ("fusionsolar_modbus_tcp", "input_power"),
-        ("fusionsolar_energy_balance", "productPower"),
-        ("fusionsolar", "productPower"),
-    ):
+    for source, metric in candidates:
         matching = [
             record
             for record in records
@@ -197,14 +248,44 @@ def _solar_history(
             )
             return [
                 {
-                    "time": _as_aware(record.timestamp)
-                    .astimezone(local_timezone)
-                    .strftime("%H:%M"),
-                    "solar_kw": _numeric_value(record),
+                    "time": _history_label(
+                        _as_aware(record.timestamp).astimezone(local_timezone),
+                        period,
+                    ),
+                    "observed_at": _as_aware(record.timestamp).isoformat(),
+                    value_key: _numeric_value(record),
                 }
                 for record in _downsample(ordered, maximum=144)
             ]
     return []
+
+
+def _period_start(period: str, local_start: datetime) -> datetime:
+    try:
+        duration = _PERIODS[period]
+    except KeyError as error:
+        raise ValueError(f"unsupported dashboard period: {period}") from error
+    if period == "day":
+        return local_start
+    return local_start - duration + timedelta(days=1)
+
+
+def _history_label(observed_at: datetime, period: str) -> str:
+    if period == "day":
+        return observed_at.strftime("%H:%M")
+    return observed_at.strftime("%m/%d %H:%M")
+
+
+def _observation(
+    record: Record | None,
+    now: datetime,
+    stale_after: timedelta,
+) -> dict[str, Any]:
+    observed_at = _as_aware(record.timestamp) if record is not None else None
+    return {
+        "observed_at": observed_at.isoformat() if observed_at else None,
+        "quality": _quality(observed_at, now, stale_after),
+    }
 
 
 def _downsample(records: list[Record], *, maximum: int) -> list[Record]:

@@ -177,6 +177,29 @@ button { font: inherit; }
 .metric-value { font-size: 46px; font-weight: 740; letter-spacing: -.05em; }
 .metric-label { color: var(--muted); font-size: 12px; font-weight: 650; }
 
+.data-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin-top: 14px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  color: var(--orange);
+  font-size: 12px;
+  font-weight: 650;
+}
+.data-warning[hidden] { display: none; }
+.data-warning > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  color: white;
+  background: var(--orange);
+}
+
 .section-heading { justify-content: space-between; margin: 34px 4px 14px; }
 .section-heading h2 { margin: 3px 0 0; font-size: 21px; letter-spacing: -.025em; }
 .shadow-badge { color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 7px 10px; font-size: 10px; font-weight: 750; letter-spacing: .1em; }
@@ -194,6 +217,10 @@ button { font: inherit; }
 .card-value { margin: 0; font-size: 40px; font-weight: 730; letter-spacing: -.045em; }
 .card-value small { color: var(--muted); font-size: 14px; margin-left: 5px; }
 .detail { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.metric-meta { min-height: 15px; margin: 7px 0 0; color: var(--muted); font-size: 10px; }
+.metric-meta.stale,
+.metric-meta.invalid,
+.metric-meta.missing { color: var(--orange); font-weight: 650; }
 
 .progress { height: 7px; margin-top: 20px; overflow: hidden; border-radius: 99px; background: rgba(120,120,128,.14); }
 .progress i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--mint), var(--green)); transition: width .6s ease; }
@@ -217,6 +244,43 @@ button { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.chart-tools {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.period-picker {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(120,120,128,.11);
+}
+
+.period-picker button {
+  min-width: 46px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.period-picker button.active {
+  color: var(--ink);
+  background: var(--surface-strong);
+  box-shadow: 0 2px 7px rgba(0,0,0,.08);
+}
+
+.period-picker button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .chart-heading h2 {
@@ -250,6 +314,7 @@ button { font: inherit; }
   align-items: center;
   gap: 7px;
 }
+.chart-legend > div { display: flex; align-items: center; gap: 18px; }
 
 .legend-solar {
   width: 9px;
@@ -257,6 +322,14 @@ button { font: inherit; }
   border-radius: 50%;
   background: #ff9f0a;
   box-shadow: 0 0 0 4px rgba(255,159,10,.13);
+}
+
+.legend-battery {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 0 4px rgba(0,169,143,.13);
 }
 
 .chart-note { font-weight: 500; }
@@ -341,6 +414,9 @@ body.dark .icon-button:hover { background: rgba(255,255,255,.08); }
   .solar-chart-card { padding: 20px 18px 17px; }
   .chart-frame { height: 170px; }
   .chart-note { display: none !important; }
+  .chart-heading { align-items: flex-start; gap: 14px; }
+  .chart-tools { flex-direction: column; align-items: flex-end; gap: 9px; }
+  .period-picker button { min-width: 42px; padding: 0 7px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
