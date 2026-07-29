@@ -38,3 +38,10 @@
 外部backupと30日容量評価は利用者がリスク受容して延期済み。旧`.env`、現役job、
 現役DB、実機は変更していない。承認後もcommit、push、公開release、deploymentは
 別の明示指示まで実施しない。
+
+## sanctum配備追補
+
+`v1.0.0-rc.1`の成果物配置、SOPS復旧、host preflight、rollbackは合格した。
+sanctumからSmartLoggerへのtransportは到達不能で、上限1回・データ0件・再試行なしで
+安全停止した。macOSの承認済みread-only運用証拠には影響しないが、Linux/sanctumは
+保証対象外・永続jobなしを維持する。

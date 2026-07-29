@@ -71,3 +71,16 @@ Macとsanctumは同一SHA-256の正本を平文非出力で復旧し、sanctum�
 mode 0600、`/dev/null`復号に合格した。匿名receiptは
 `config/release/receipts/hestia-sanctum-sops-recovery.json`を正本とする。
 旧`.env`、現役job、既存秘密値は変更していない。
+
+## v1.0.0-rc.1 配備結果
+
+承認tag `v1.0.0-rc.1`をsanctumへハッシュ照合して配置し、専用runtime、
+SOPS復旧、host preflight、rollbackは合格した。Linuxはv1.0の保証対象外であるため、
+永続service、timer、cronは登録していない。
+
+上限1回のFusionSolar / SmartLogger read-only試験は、Executorを呼ばず、
+transport到達不能で安全停止した。観測追加は0件、再試行なし。機器設定、家庭LAN、
+認証、旧秘密は変更していない。sanctum上のlive observationは未適格のままとする。
+
+匿名receipt:
+`config/release/receipts/hestia-sanctum-v1.0.0-rc.1-deployment.json`
