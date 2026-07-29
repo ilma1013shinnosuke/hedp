@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "key_id": "hestia-sanctum-runtime-v1",
+  "recipient": "age175jwmvqag2gmcexd84d5dwvljs3qx8he9wcjexhjwfjzmzkqxekqq3hq0w",
+  "checks": [
+    "mode-0600",
+    "sops-non-secret-probe"
+  ],
+  "verified_at": "2026-07-29T21:49:58Z"
+}

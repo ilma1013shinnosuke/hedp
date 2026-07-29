@@ -13,6 +13,8 @@ from hedp.operations.operational_metrics import (
     OperationMetric,
     OperationName,
     OperationOutcome,
+    OperatorActivity,
+    OperatorMetric,
     OperationalMetricsJournal,
     ReadOnlyDatabaseMetrics,
     duration_bucket,
@@ -57,6 +59,26 @@ def test_operation_metric_rejects_ambiguous_outcomes() -> None:
             OperationOutcome.TIMED_OUT,
             1,
             FailureCategory.NETWORK,
+        )
+
+
+def test_operator_metric_records_only_fixed_activity_count_and_coarse_time() -> None:
+    metric = OperatorMetric.from_observation(
+        OperatorActivity.MANUAL_RECOVERY,
+        count=2,
+        elapsed_seconds=45,
+    )
+
+    assert metric.to_dict() == {
+        "activity": "manual_recovery",
+        "count": 2,
+        "duration": "30s_or_more",
+    }
+    with pytest.raises(ValueError, match="between 1 and 1000"):
+        OperatorMetric.from_observation(
+            OperatorActivity.WARNING_REVIEW,
+            count=0,
+            elapsed_seconds=1,
         )
 
 
@@ -462,6 +484,37 @@ def test_summary_reports_database_growth_without_paths_or_payloads(tmp_path) -> 
         "database_bytes_delta": 60,
     }
     assert "missing.db" not in repr(summary)
+
+
+def test_summary_counts_warning_review_and_manual_recovery_effort(tmp_path) -> None:
+    journal = OperationalMetricsJournal(tmp_path / "state")
+    journal.append(
+        OperatorMetric.from_observation(
+            OperatorActivity.WARNING_REVIEW, count=3, elapsed_seconds=12
+        )
+    )
+    journal.append(
+        OperatorMetric.from_observation(
+            OperatorActivity.MANUAL_RECOVERY, count=1, elapsed_seconds=40
+        )
+    )
+
+    summary = summarize_operational_metrics(tmp_path / "state")
+
+    assert summary["operator_counts"] == [
+        {
+            "date": summary["operator_counts"][0]["date"],
+            "activity": "manual_recovery",
+            "duration": "30s_or_more",
+            "count": 1,
+        },
+        {
+            "date": summary["operator_counts"][1]["date"],
+            "activity": "warning_review",
+            "duration": "5_to_30s",
+            "count": 3,
+        },
+    ]
 
 
 def test_summary_rejects_boolean_numbers_and_unknown_vocabulary(tmp_path) -> None:

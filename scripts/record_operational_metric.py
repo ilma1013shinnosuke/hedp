@@ -20,6 +20,8 @@ from hedp.operations.operational_metrics import (
     OperationMetric,
     OperationName,
     OperationOutcome,
+    OperatorActivity,
+    OperatorMetric,
     OperationalMetricsJournal,
     ReadOnlyDatabaseMetrics,
 )
@@ -35,6 +37,12 @@ def parser() -> argparse.ArgumentParser:
     operation.add_argument(
         "failure_category", choices=[item.value for item in FailureCategory]
     )
+    operator = command.add_parser("operator")
+    operator.add_argument(
+        "activity", choices=[item.value for item in OperatorActivity]
+    )
+    operator.add_argument("count", type=int)
+    operator.add_argument("elapsed_seconds", type=float)
     command.add_parser("database")
     return value
 
@@ -49,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
                 OperationOutcome(arguments.outcome),
                 arguments.elapsed_seconds,
                 FailureCategory(arguments.failure_category),
+            )
+        elif arguments.command == "operator":
+            metric = OperatorMetric.from_observation(
+                OperatorActivity(arguments.activity),
+                arguments.count,
+                arguments.elapsed_seconds,
             )
         else:
             metric = ReadOnlyDatabaseMetrics().collect(

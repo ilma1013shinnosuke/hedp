@@ -22,9 +22,19 @@
 `SUMICORE_`を優先し、未設定の場合だけ従来の`HEDP_`を使用する。移行中に両方へ
 異なる値を設定しない。値を変更した場合は、切替前の項目名検査で競合がないことを確認する。
 
-5分収集と03:10の収集はlaunchd plistに必要値を保持するため、設定変更後は
+FusionSolar / SmartLoggerの定時収集と03:10の収集はlaunchd plistに必要値を保持するため、設定変更後は
 `install_macos_device_realtime_launchd.sh`と`install_macos_equipment_launchd.sh`を
 再実行する。再実行前に、対象ラベル、現在の収集状況、DBロックを確認する。
+
+FusionSolar / SmartLoggerの取得周期はGit管理外の`.env`に
+`SUMICORE_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS`として秒単位で置く。設定可能範囲は
+300〜3600秒で、既定値は300秒である。下限を5分に固定することで、定時収集は最大でも
+1日288回に制限される。収集処理は、応答受領前かつ保存開始前と確定できる通信失敗だけを
+上限付きで再試行し、1回の定時起動で複数sampleを保存しない。
+
+この値はprivateなlaunchd plistへ埋め込まれるため、変更を反映するには
+`install_macos_device_realtime_launchd.sh`の再実行が必要である。installerを再実行する
+前に、対象、影響、確認方法、復旧方法を確認する。
 
 ## SwitchBot
 

@@ -57,6 +57,7 @@ def _collection_script_repository(tmp_path: Path, runner_name: str) -> tuple[Pat
         "run_with_env.py",
         "log_maintenance.sh",
         "operational_metrics.sh",
+        "collection_schedule.sh",
     ):
         shutil.copy(ROOT / "scripts" / name, scripts / name)
     runner = scripts / runner_name
@@ -95,7 +96,67 @@ def test_five_minute_script_preserves_parallel_mode_and_has_modbus_only_runner()
     assert "MAX_ATTEMPTS" in modbus_runner
     assert '"${exit_code}" -ne 75' in modbus_runner
     assert "FUSIONSOLAR_REALTIME_MODE" in script
+    assert "collection_schedule.sh" in script
+    assert "COLLECTION_INTERVAL_SECONDS" in script
+    assert "--interval-seconds 300" not in script
+    assert "collection_schedule.sh" in modbus_runner
+    assert "COLLECTION_INTERVAL_SECONDS" in modbus_runner
+    assert "--interval-seconds 300" not in modbus_runner
     assert "com.hedp.database.lock" in script
+
+
+def test_fusionsolar_schedule_defaults_to_five_minutes_and_288_daily_runs():
+    schedule = ROOT / "scripts" / "collection_schedule.sh"
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                f"source {schedule}; "
+                "sumicore_fusionsolar_collection_interval_seconds; "
+                "sumicore_fusionsolar_max_scheduled_samples_per_day"
+            ),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            key: value
+            for key, value in os.environ.items()
+            if key
+            not in {
+                "SUMICORE_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS",
+                "HEDP_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS",
+            }
+        },
+    )
+
+    assert result.stdout.splitlines() == ["300", "288"]
+
+
+def test_fusionsolar_schedule_rejects_more_than_288_daily_runs(tmp_path):
+    _, runner = _collection_script_repository(tmp_path, "run_modbus_realtime.sh")
+    call_log = tmp_path / "calls.log"
+
+    result = subprocess.run(
+        [str(runner)],
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "CALL_LOG": str(call_log),
+            "HEDP_DATABASE_LOCK_DIRECTORY": str(tmp_path / "database.lock"),
+            "SUMICORE_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS": "299",
+            "HEDP_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS": "299",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "between 300 and 3600 seconds" in result.stderr
+    assert not call_log.exists()
 
 
 def test_equipment_job_runs_battery_dc_at_0310():
@@ -488,6 +549,8 @@ def test_modbus_only_installer_omits_cloud_credentials(tmp_path):
         "HEDP_FUSIONSOLAR_MODBUS_UNIT_ID": "1",
         "HEDP_FUSIONSOLAR_MODBUS_EXPECTED_SERIAL": "fixture",
         "HEDP_FUSIONSOLAR_REALTIME_MODE": "modbus",
+        "SUMICORE_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS": "600",
+        "HEDP_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS": "600",
     }
 
     subprocess.run(
@@ -508,6 +571,8 @@ def test_modbus_only_installer_omits_cloud_credentials(tmp_path):
     )
     values = plist["EnvironmentVariables"]
     assert values["HEDP_FUSIONSOLAR_REALTIME_MODE"] == "modbus"
+    assert values["HEDP_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS"] == "600"
+    assert plist["StartInterval"] == 600
     assert plist["RunAtLoad"] is True
     assert "HEDP_FUSIONSOLAR_PASSWORD" not in values
     assert "HEDP_FUSIONSOLAR_USERNAME" not in values

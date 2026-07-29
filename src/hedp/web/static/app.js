@@ -7,6 +7,7 @@ let solarHistory = [];
 let batteryHistory = [];
 let currentPeriod = "day";
 let requestSequence = 0;
+let activeWarningCode = null;
 
 function displayNumber(value, decimals = 0) {
   return Number.isFinite(value) ? value.toFixed(decimals) : "—";
@@ -59,18 +60,34 @@ function updateWarning(data) {
   const observations = Object.values(data.energy?.observations || {});
   const statuses = observations.map((item) => item?.quality?.status);
   const unavailable = data.mode === "unavailable";
-  const invalid = statuses.includes("invalid");
-  const missing = statuses.includes("missing");
-  const stale = statuses.includes("stale");
-  warning.hidden = !(unavailable || invalid || missing || stale);
+  let current = null;
   if (unavailable) {
-    setText("#data-warning-text", "表示用データへ接続できません");
-  } else if (invalid) {
-    setText("#data-warning-text", "確認が必要な値があります");
-  } else if (missing) {
-    setText("#data-warning-text", "取得できていない項目があります");
-  } else if (stale) {
-    setText("#data-warning-text", "一部の値が古くなっています");
+    current = ["unavailable", "表示用データへ接続できません", "収集状態とDB接続を確認してください"];
+  } else if (statuses.includes("invalid")) {
+    current = ["invalid", "確認が必要な値があります", "値を補正せず、Schemaと取得元を確認してください"];
+  } else if (statuses.includes("missing")) {
+    current = ["missing", "取得できていない項目があります", "次回取得を待ち、継続時はReaderを確認してください"];
+  } else if (statuses.includes("stale")) {
+    current = ["stale", "一部の値が古くなっています", "更新時刻と収集jobを確認してください"];
+  }
+  if (current) {
+    const [code, message, action] = current;
+    const repeated = activeWarningCode === code;
+    warning.hidden = false;
+    warning.classList.remove("recovered");
+    setText("#data-warning-text", `${repeated ? "継続中" : "要確認"} · ${message}`);
+    setText("#data-warning-action", `次の行動: ${action}`);
+    if (!repeated) showToast(message);
+    activeWarningCode = code;
+  } else if (activeWarningCode) {
+    warning.hidden = false;
+    warning.classList.add("recovered");
+    setText("#data-warning-text", "復旧 · 最新データを確認できました");
+    setText("#data-warning-action", "次の行動: 追加対応は不要です");
+    activeWarningCode = null;
+  } else {
+    warning.hidden = true;
+    warning.classList.remove("recovered");
   }
 }
 
@@ -116,8 +133,12 @@ async function loadSummary(period = currentPeriod) {
   } catch {
     if (sequence !== requestSequence) return;
     document.querySelector("#data-warning").hidden = false;
-    setText("#data-warning-text", "表示用データを読み込めませんでした");
-    showToast("表示用データを読み込めませんでした");
+    document.querySelector("#data-warning").classList.remove("recovered");
+    const repeated = activeWarningCode === "request_failed";
+    setText("#data-warning-text", `${repeated ? "継続中" : "要確認"} · 表示用データを読み込めませんでした`);
+    setText("#data-warning-action", "次の行動: local serverの状態を確認してください");
+    if (!repeated) showToast("表示用データを読み込めませんでした");
+    activeWarningCode = "request_failed";
   }
 }
 

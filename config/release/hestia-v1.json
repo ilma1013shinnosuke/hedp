@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "release_id": "hestia-v1.0",
+  "stage": "candidate",
+  "supported_platforms": [
+    "macOS"
+  ],
+  "deferred_platform_qualification": [
+    "Linux",
+    "Windows"
+  ],
+  "scope_approved": true,
+  "scope_approved_at": "2026-07-28",
+  "approved_scope": {
+    "platform": "macOS",
+    "production_candidate": "fusionsolar.smartlogger.read_only",
+    "deferred_readers": "all_other_integrations",
+    "deferred_live_operations": "all"
+  },
+  "default_execution_mode": "shadow",
+  "checklist": "docs/release/hestia-v1-checklist.md",
+  "required_documents": [
+    "docs/system-philosophy.md",
+    "docs/observation-contract.md",
+    "docs/execution-contract.md",
+    "docs/data-retention-policy.md",
+    "docs/release/hestia-v1-roadmap.md",
+    "docs/release/hestia-v1-checklist.md",
+    "docs/release/hestia-v1-capability-matrix.md",
+    "docs/release/hestia-v1-operational-assurance.md",
+    "docs/release/hestia-v1-fusionsolar-qualification.md",
+    "docs/release/hestia-v1-operations-runbook.md",
+    "docs/release/hestia-v1-failure-drills.md",
+    "docs/release/hestia-v1-sanctum-readiness.md",
+    "docs/release/hestia-v1-quality-gate-20260728.md",
+    "docs/release/hestia-v1-quality-gate-20260730.md",
+    "docs/release/hestia-v1-approval-summary.md"
+  ],
+  "required_gates": [
+    "R0-04",
+    "R2-10",
+    "R2-11",
+    "R2-12",
+    "R2-13",
+    "R2-14",
+    "R3-09",
+    "R4-04",
+    "R4-05",
+    "R7-02",
+    "R7-05",
+    "R7-06",
+    "R8-02",
+    "R8-03",
+    "R8-04",
+    "R8-05",
+    "R8-06",
+    "R8-07",
+    "R8-08",
+    "R8-09",
+    "R8-10"
+  ],
+  "minimum_live_capabilities": 1,
+  "production_capabilities": [
+    {
+      "id": "fusionsolar.smartlogger.read_only",
+      "qualification": "live_qualified",
+      "evidence": [
+        "docs/release/hestia-v1-fusionsolar-qualification.md"
+      ],
+      "qualification_manifest": "config/release/qualification/fusionsolar-smartlogger-read-only.json"
+    }
+  ],
+  "rollback_verified": true
+}

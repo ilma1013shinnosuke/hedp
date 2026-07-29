@@ -176,6 +176,54 @@ def test_short_run_can_interrupt_and_resume_without_duplicate_samples(
     assert probe.calls == 10
 
 
+def test_short_run_preserves_missing_sample_and_later_recovery(
+    tmp_path: Path,
+) -> None:
+    class MissingThenGoodProbe(GoodProbe):
+        def collect(self) -> RawData:
+            raw = super().collect()
+            if self.calls != 1:
+                return raw
+            return RawData(
+                raw.source,
+                raw.timestamp,
+                {
+                    key: value
+                    for key, value in raw.payload.items()
+                    if key != "status"
+                },
+                metadata=raw.metadata,
+            )
+
+    clock = FakeClock()
+    store, harness = _harness(tmp_path, clock, name="missing-recovery")
+    probe = MissingThenGoodProbe(clock)
+    plan = QualificationPlan.short(
+        run_id="missing-recovery",
+        source="qrio_read_only",
+        started_at=NOW,
+        maximum_failures=2,
+    )
+
+    summary = harness.run(plan, probe)
+    with sqlite3.connect(_store_path(tmp_path, "missing-recovery")) as connection:
+        statuses = [
+            row[0]
+            for row in connection.execute(
+                "SELECT status FROM qualification_samples ORDER BY sample_index"
+            )
+        ]
+    store.close()
+
+    assert summary.status is QualificationRunStatus.FAILED
+    assert summary.recorded_samples == plan.maximum_samples == 10
+    assert summary.qualified_samples == 9
+    assert summary.failure_evidence[0].reason_codes == (
+        "required_payload_key_missing",
+    )
+    assert statuses == ["not_qualified", *(["qualified"] * 9)]
+
+
 def test_24_hour_plan_completes_with_simulated_clock_not_launchd(
     tmp_path: Path,
 ) -> None:

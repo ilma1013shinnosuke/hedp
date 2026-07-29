@@ -9,13 +9,15 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/environment_compatibility.sh"
+source "${SCRIPT_DIR}/collection_schedule.sh"
 sumicore_apply_legacy_environment \
     FUSIONSOLAR_BASE_URL FUSIONSOLAR_STATION_DN \
     FUSIONSOLAR_USERNAME FUSIONSOLAR_PASSWORD \
     FUSIONSOLAR_DEVICE_DNS FUSIONSOLAR_BATTERY_DN \
     FUSIONSOLAR_BATTERY_SIGIDS FUSIONSOLAR_MODBUS_HOST \
     FUSIONSOLAR_MODBUS_PORT FUSIONSOLAR_MODBUS_UNIT_ID \
-    FUSIONSOLAR_MODBUS_EXPECTED_SERIAL FUSIONSOLAR_REALTIME_MODE
+    FUSIONSOLAR_MODBUS_EXPECTED_SERIAL FUSIONSOLAR_REALTIME_MODE \
+    FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS
 RUN_SCRIPT="${SCRIPT_DIR}/run_device_realtime.sh"
 PLIST_PATH="${HOME}/Library/LaunchAgents/com.sumicore.device-realtime.plist"
 LOG_DIRECTORY="${HOME}/Library/Logs/hedp"
@@ -28,6 +30,9 @@ DOMAIN="gui/$(id -u)"
 : "${HEDP_FUSIONSOLAR_MODBUS_UNIT_ID:?Set HEDP_FUSIONSOLAR_MODBUS_UNIT_ID before installing.}"
 : "${HEDP_FUSIONSOLAR_MODBUS_EXPECTED_SERIAL:?Set HEDP_FUSIONSOLAR_MODBUS_EXPECTED_SERIAL before installing.}"
 HEDP_FUSIONSOLAR_REALTIME_MODE="${HEDP_FUSIONSOLAR_REALTIME_MODE:-parallel}"
+HEDP_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS="$(
+    sumicore_fusionsolar_collection_interval_seconds
+)"
 if [[ "${HEDP_FUSIONSOLAR_REALTIME_MODE}" != "parallel" \
    && "${HEDP_FUSIONSOLAR_REALTIME_MODE}" != "modbus" ]]; then
     echo "HEDP_FUSIONSOLAR_REALTIME_MODE must be parallel or modbus." >&2
@@ -39,6 +44,7 @@ environment_names=(
     HEDP_FUSIONSOLAR_MODBUS_UNIT_ID
     HEDP_FUSIONSOLAR_MODBUS_EXPECTED_SERIAL
     HEDP_FUSIONSOLAR_REALTIME_MODE
+    HEDP_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS
 )
 if [[ "${HEDP_FUSIONSOLAR_REALTIME_MODE}" == "parallel" ]]; then
     : "${HEDP_FUSIONSOLAR_BASE_URL:?Set HEDP_FUSIONSOLAR_BASE_URL before installing.}"
@@ -79,7 +85,8 @@ umask 077
     printf '  <key>Label</key><string>%s</string>\n' "${LABEL}"
     printf '  <key>ProgramArguments</key><array><string>%s</string></array>\n' "$(xml_escape "${RUN_SCRIPT}")"
     printf '  <key>WorkingDirectory</key><string>%s</string>\n' "$(xml_escape "${REPOSITORY_ROOT}")"
-    printf '%s\n' '  <key>StartInterval</key><integer>300</integer>'
+    printf '  <key>StartInterval</key><integer>%s</integer>\n' \
+        "${HEDP_FUSIONSOLAR_COLLECTION_INTERVAL_SECONDS}"
     # The Modbus-only route is safe to start immediately after login/reboot.
     # Do not change the legacy parallel cloud route's startup behaviour during
     # its qualification period.

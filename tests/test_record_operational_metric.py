@@ -120,3 +120,30 @@ def test_database_cli_hides_configuration_errors(tmp_path: Path) -> None:
     assert result.stdout == ""
     assert result.stderr == "unable to record operational metric\n"
     assert "Traceback" not in result.stderr
+
+
+def test_operator_cli_records_warning_review_without_free_text(tmp_path: Path) -> None:
+    state_home = tmp_path / "state"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "operator",
+            "warning_review",
+            "2",
+            "8",
+        ],
+        env=_environment(state_home),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert _journal_record(state_home) == {
+        "date": _journal_record(state_home)["date"],
+        "kind": "operator",
+        "activity": "warning_review",
+        "count": 2,
+        "duration": "5_to_30s",
+    }

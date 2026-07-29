@@ -1,0 +1,33 @@
+{
+  "target_alias": "garden_weather_camera",
+  "stream_url_env": "HESTIA_EUFY_WEATHER_RTSP_URL",
+  "analysis_width": 320,
+  "timeout_seconds": 8,
+  "maximum_attempts": 1,
+  "sky_roi": {
+    "x": 0.0,
+    "y": 0.0,
+    "width": 1.0,
+    "height": 0.5
+  },
+  "shadow_roi": {
+    "x": 0.0,
+    "y": 0.5,
+    "width": 1.0,
+    "height": 0.5
+  },
+  "calibration": null,
+  "energy_policy": {
+    "high_generation_ratio": 0.7,
+    "high_generation_min_window_minutes": 10,
+    "evidence_max_age_seconds": 120,
+    "winter_months": [11, 12, 1, 2, 3],
+    "pause_battery_soc_percent": 30,
+    "resume_battery_soc_percent": 40,
+    "pause_energy_deficit_kwh": 2,
+    "resume_energy_surplus_kwh": 2,
+    "normal_interval_minutes": 10,
+    "uncertain_interval_minutes": 60,
+    "paused_recheck_minutes": 60
+  }
+}

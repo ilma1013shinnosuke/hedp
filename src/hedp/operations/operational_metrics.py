@@ -54,12 +54,20 @@ class FailureCategory(str, Enum):
 class MetricKind(str, Enum):
     OPERATION = "operation"
     DATABASE = "database"
+    OPERATOR = "operator"
 
 
 class DatabaseProbeStatus(str, Enum):
     OK = "ok"
     LOCKED = "locked"
     UNAVAILABLE = "unavailable"
+
+
+class OperatorActivity(str, Enum):
+    """Human effort categories without free-form household context."""
+
+    WARNING_REVIEW = "warning_review"
+    MANUAL_RECOVERY = "manual_recovery"
 
 
 class MetricPayload(Protocol):
@@ -112,6 +120,33 @@ class OperationMetric:
             "outcome": self.outcome.value,
             "duration": self.duration,
             "failure_category": self.failure_category.value,
+        }
+
+
+@dataclass(frozen=True)
+class OperatorMetric:
+    """Coarse human effort and counts for release-operability review."""
+
+    activity: OperatorActivity
+    count: int
+    duration: str
+
+    @classmethod
+    def from_observation(
+        cls,
+        activity: OperatorActivity,
+        count: int,
+        elapsed_seconds: float,
+    ) -> "OperatorMetric":
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 1000:
+            raise ValueError("operator metric count must be between 1 and 1000")
+        return cls(activity, count, duration_bucket(elapsed_seconds))
+
+    def to_dict(self) -> dict[str, int | str]:
+        return {
+            "activity": self.activity.value,
+            "count": self.count,
+            "duration": self.duration,
         }
 
 
@@ -284,13 +319,18 @@ class OperationalMetricsJournal:
         """Return the configured journal location for local maintenance only."""
         return self._path
 
-    def append(self, metric: OperationMetric | DatabaseCapacityMetric) -> None:
+    def append(
+        self,
+        metric: OperationMetric | DatabaseCapacityMetric | OperatorMetric,
+    ) -> None:
         """Write one date-only, schema-controlled JSONL record."""
         record = {
             "date": datetime.now(timezone.utc).date().isoformat(),
             "kind": (
                 MetricKind.OPERATION.value
                 if isinstance(metric, OperationMetric)
+                else MetricKind.OPERATOR.value
+                if isinstance(metric, OperatorMetric)
                 else MetricKind.DATABASE.value
             ),
             **metric.to_dict(),
@@ -608,6 +648,7 @@ def summarize_operational_metrics(
             records.append(record)
 
     operation_counts: dict[tuple[str, str, str, str, str], int] = {}
+    operator_counts: dict[tuple[str, str, str], int] = {}
     database_by_date: dict[str, int] = {}
     for record in records:
         if record["kind"] == MetricKind.OPERATION.value:
@@ -616,6 +657,11 @@ def summarize_operational_metrics(
                 for field in ("date", "job", "outcome", "failure_category", "duration")
             )
             operation_counts[key] = operation_counts.get(key, 0) + 1
+        elif record["kind"] == MetricKind.OPERATOR.value:
+            key = tuple(
+                str(record[field]) for field in ("date", "activity", "duration")
+            )
+            operator_counts[key] = operator_counts.get(key, 0) + int(record["count"])
         elif record["status"] == DatabaseProbeStatus.OK.value:
             # Later valid entries for one date replace earlier ones.  Exact time
             # is not stored, so this is only a daily observation, not an event log.
@@ -639,6 +685,15 @@ def summarize_operational_metrics(
                 "count": count,
             }
             for key, count in sorted(operation_counts.items())
+        ],
+        "operator_counts": [
+            {
+                "date": key[0],
+                "activity": key[1],
+                "duration": key[2],
+                "count": count,
+            }
+            for key, count in sorted(operator_counts.items())
         ],
         "database_capacity": {
             "observed_days": len(database_dates),
@@ -691,5 +746,14 @@ def _is_valid_metric_record(record: object) -> bool:
                 or (type(record[field]) is int and record[field] >= 0)
                 for field in optional_numeric
             )
+        )
+    if record.get("kind") == MetricKind.OPERATOR.value:
+        return (
+            set(record) == {"date", "kind", "activity", "count", "duration"}
+            and record["activity"] in {item.value for item in OperatorActivity}
+            and type(record["count"]) is int
+            and 1 <= record["count"] <= 1000
+            and record["duration"]
+            in {"under_1s", "1_to_5s", "5_to_30s", "30s_or_more"}
         )
     return False

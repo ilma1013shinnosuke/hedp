@@ -1,0 +1,7 @@
+# Copy to .sops.yaml only after replacing both placeholders with real public recipients.
+# Never place AGE-SECRET-KEY values in this file.
+creation_rules:
+  - path_regex: ^secrets/.*\.sops\.(env|json|yaml)$
+    age:
+      - age1MAC_PUBLIC_RECIPIENT_REPLACE_BEFORE_USE
+      - age1SANCTUM_PUBLIC_RECIPIENT_REPLACE_BEFORE_USE

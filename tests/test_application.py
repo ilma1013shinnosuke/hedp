@@ -8,6 +8,31 @@ from hedp.storage import RawData
 from hedp.storage import Record
 
 
+def _energy_balance_daily_records(target_date: date) -> list[Record]:
+    timestamp = datetime(
+        target_date.year,
+        target_date.month,
+        target_date.day,
+        tzinfo=timezone.utc,
+    ) - timedelta(hours=9)
+    return [
+        Record(
+            source="fusionsolar_energy_balance",
+            timestamp=timestamp,
+            metric=metric,
+            value=value,
+            unit="unknown",
+        )
+        for metric, value in (
+            ("totalProductPower", 40),
+            ("totalSelfUsePower", 12),
+            ("totalOnGridPower", 28),
+            ("totalBuyPower", 6),
+            ("totalUsePower", 18),
+        )
+    ]
+
+
 def test_run_collects_then_saves_and_returns_same_raw_data() -> None:
     raw_data = RawData(
         source="fusionsolar",
@@ -355,9 +380,49 @@ def test_run_energy_balance_range_saves_each_raw_data_only() -> None:
     record_builder.build.assert_not_called()
 
 
+def test_run_energy_balance_persists_exact_daily_summary_records() -> None:
+    target_date = date(2026, 7, 20)
+    raw_data = RawData(
+        source="fusionsolar_energy_balance",
+        timestamp=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        payload={"data": {}},
+        target_date=target_date,
+    )
+    collector = Mock()
+    collector.collect_for_date.return_value = raw_data
+    builder = Mock()
+    builder.build.return_value = _energy_balance_daily_records(target_date)
+    storage = Mock()
+    application = Application(
+        Mock(),
+        storage,
+        Mock(),
+        energy_balance_collector=collector,
+        energy_balance_record_builder=builder,
+    )
+
+    application.run_energy_balance_for_date(target_date)
+
+    saved = storage.save_records.call_args.args[0]
+    by_metric = {record.metric: record for record in saved}
+    assert by_metric["daily_generation_kwh"].value == 40.0
+    assert by_metric["daily_grid_import_kwh"].value == 6.0
+    assert by_metric["daily_consumption_kwh"].value == 18.0
+    assert by_metric["daily_generation_kwh"].unit == "kWh"
+    assert builder.build.call_args_list == [call(raw_data)]
+
+
 def test_backfill_missing_energy_balance_collects_only_gaps_and_rebuilds() -> None:
     missing = [date(2026, 7, 19), date(2026, 7, 21)]
-    raw_items = [Mock(spec=RawData), Mock(spec=RawData)]
+    raw_items = [
+        RawData(
+            source="fusionsolar_energy_balance",
+            timestamp=datetime(2026, 7, 22, tzinfo=timezone.utc),
+            payload={"data": {}},
+            target_date=target_date,
+        )
+        for target_date in missing
+    ]
     collector = Mock()
     collector.collect_for_date.side_effect = raw_items
     storage = Mock()
@@ -365,7 +430,9 @@ def test_backfill_missing_energy_balance_collects_only_gaps_and_rebuilds() -> No
     storage.get_record_dates.return_value = set(missing)
     storage.load_rawdata_for_range.return_value = []
     builder = Mock()
-    builder.build.return_value = []
+    builder.build.side_effect = lambda raw: _energy_balance_daily_records(
+        raw.target_date
+    )
     application = Application(
         Mock(), storage, Mock(),
         energy_balance_collector=collector,

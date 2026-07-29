@@ -1,0 +1,36 @@
+# Local confidential context and credentials
+/HEDP_CODEX_CONTEXT.md
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.plist
+
+# Databases, backups, runtime data and exports
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+backups/
+runtime/
+outputs/
+tmp/
+work/
+*.csv
+*.xlsx
+*.xls
+
+# Generated dependencies and build output
+.venv/
+venv/
+dist/
+build/
+coverage/
+.pytest_cache/
+__pycache__/
+
+# Logs and caches
+*.log
+.cache/

@@ -22,7 +22,7 @@
 2. バックアップの名前、容量、更新日時を確認する。
 
    ```bash
-   ls -lah /Users/shinnosuke/hedp/backups
+   ls -lah "${HESTIA_ROOT:-/Users/shinnosuke/chatGPT/projects/HESTIA}/backups"
    ```
 
 3. 次のように分類する。
@@ -35,7 +35,7 @@
 4. 一時ファイルを使用中の処理がないか確認する。
 
    ```bash
-   lsof +D /Users/shinnosuke/hedp/backups
+   lsof +D "${HESTIA_ROOT:-/Users/shinnosuke/chatGPT/projects/HESTIA}/backups"
    ```
 
 5. 1時間以上古いSumiCore生成の`.partial`は、次の日次処理で自動除去される。

@@ -199,6 +199,10 @@ button { font: inherit; }
   color: white;
   background: var(--orange);
 }
+.data-warning > span:last-child { display: grid; gap: 2px; }
+.data-warning small { color: var(--muted); font-weight: 550; }
+.data-warning.recovered { color: var(--green); }
+.data-warning.recovered > span:first-child { background: var(--green); }
 
 .section-heading { justify-content: space-between; margin: 34px 4px 14px; }
 .section-heading h2 { margin: 3px 0 0; font-size: 21px; letter-spacing: -.025em; }

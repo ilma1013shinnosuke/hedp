@@ -16,6 +16,14 @@
 - failure_category: `none`、`lock_held`、`timeout`、`network`、
   `invalid_response`、`configuration`、`internal`、`unknown`
 
+利用者の運用負担は、自由文を持たない次の手動記録だけを許可する。
+
+- activity: `warning_review`、`manual_recovery`
+- count: 1〜1000件
+- duration: 操作メトリクスと同じ粗い4区分
+
+警告内容、対応内容、機器名、正確な時刻は保存しない。
+
 DB容量probeは、status、DB容量、filesystem空き容量、page数、free page数、
 共通Raw・Recordの件数、粗い実行時間だけを持つ。SQLiteをread-only・即時timeoutで開き、
 値、payload、識別子、時刻列、DB path、例外本文は返さない。
@@ -67,7 +75,8 @@ backupの終了結果を変更しない。
 
 `scripts/summarize_operational_metrics.py`は現行ファイルと旧2世代をread-onlyで読み、
 日付・job・outcome・failure_category・duration別の件数と、正常なDB容量観測の最初から最後までの
-差分だけをJSONで出力する。不正行、未知語彙、余分な項目を持つ行は内容を表示せず件数化する。
+差分、警告確認件数、手動復旧件数、粗い対応時間だけをJSONで出力する。
+不正行、未知語彙、余分な項目を持つ行は内容を表示せず件数化する。
 警告や削除・compact判断は行わない。
 
 通常の日次DB probeは、ファイル容量、filesystem空き容量、SQLiteのpage数とfree page数だけを

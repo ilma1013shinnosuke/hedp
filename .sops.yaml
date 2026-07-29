@@ -1,0 +1,5 @@
+creation_rules:
+  - path_regex: ^secrets/.*\.sops\.(env|json|yaml)$
+    age:
+      - age1pxhwfv2srna8pu3vawjztxhzzf8dxyw6fflhf5jf5ggt3zquevdqs3s6pr
+      - age175jwmvqag2gmcexd84d5dwvljs3qx8he9wcjexhjwfjzmzkqxekqq3hq0w

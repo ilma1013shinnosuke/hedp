@@ -32,5 +32,6 @@ def test_summary_cli_returns_safe_empty_report(tmp_path) -> None:
         "files_read": 0,
         "invalid_lines": 0,
         "operation_counts": [],
+        "operator_counts": [],
         "schema_version": 1,
     }

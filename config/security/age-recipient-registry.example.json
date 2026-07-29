@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "key_id": "hestia-mac-runtime-v1",
+      "recipient": "age1PUBLIC_RECIPIENT_REPLACE_BEFORE_USE",
+      "purpose": "HESTIA Mac runtime SOPS decryption",
+      "updated_at": "YYYY-MM-DD",
+      "recovery_procedure": "docs/secret-management.md#macos-keychainによるhestia-runtime鍵"
+    },
+    {
+      "key_id": "hestia-sanctum-runtime-v1",
+      "recipient": "age1SEPARATE_PUBLIC_RECIPIENT_REPLACE_BEFORE_USE",
+      "purpose": "HESTIA sanctum runtime SOPS decryption",
+      "updated_at": "YYYY-MM-DD",
+      "recovery_procedure": "docs/release/hestia-v1-sanctum-readiness.md"
+    }
+  ]
+}

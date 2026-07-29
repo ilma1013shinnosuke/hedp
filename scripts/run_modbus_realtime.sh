@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/log_maintenance.sh"
 source "${SCRIPT_DIR}/operational_metrics.sh"
+source "${SCRIPT_DIR}/collection_schedule.sh"
 sumicore_rotate_job_logs modbus-realtime
 LOCK_DIRECTORY="${SUMICORE_DATABASE_LOCK_DIRECTORY:-${HEDP_DATABASE_LOCK_DIRECTORY:-/tmp/com.hedp.database.lock}}"
 TOTAL_TIMEOUT_SECONDS="${SUMICORE_MODBUS_TOTAL_TIMEOUT_SECONDS:-${HEDP_MODBUS_TOTAL_TIMEOUT_SECONDS:-240}}"
@@ -16,6 +17,11 @@ ATTEMPT_TIMEOUT_SECONDS="${SUMICORE_MODBUS_ATTEMPT_TIMEOUT_SECONDS:-${HEDP_MODBU
 MAX_ATTEMPTS="${SUMICORE_MODBUS_MAX_ATTEMPTS:-${HEDP_MODBUS_MAX_ATTEMPTS:-3}}"
 RETRY_DELAY_SECONDS="${SUMICORE_MODBUS_RETRY_DELAY_SECONDS:-${HEDP_MODBUS_RETRY_DELAY_SECONDS:-5}}"
 SECONDS=0
+
+if ! COLLECTION_INTERVAL_SECONDS="$(sumicore_fusionsolar_collection_interval_seconds)"; then
+    sumicore_record_operational_metric modbus_realtime failed "${SECONDS}" configuration
+    exit 2
+fi
 
 is_whole_number() { [[ "$1" =~ ^[0-9]+$ ]]; }
 for value in "${TOTAL_TIMEOUT_SECONDS}" "${ATTEMPT_TIMEOUT_SECONDS}" "${MAX_ATTEMPTS}" "${RETRY_DELAY_SECONDS}"; do
@@ -46,7 +52,7 @@ trap 'rmdir "${LOCK_DIRECTORY}" 2>/dev/null || true' EXIT
 cd "${REPOSITORY_ROOT}"
 continuity=""
 CONTINUITY_ENV=()
-if continuity="$("${REPOSITORY_ROOT}/.venv/bin/python" "${SCRIPT_DIR}/modbus_continuity.py" --interval-seconds 300 --gap-multiplier 2 2>/dev/null)"; then
+if continuity="$("${REPOSITORY_ROOT}/.venv/bin/python" "${SCRIPT_DIR}/modbus_continuity.py" --interval-seconds "${COLLECTION_INTERVAL_SECONDS}" --gap-multiplier 2 2>/dev/null)"; then
     read -r CONTINUITY_ID CONTINUITY_REASON <<< "${continuity}"
     if [[ ! "${CONTINUITY_ID}" =~ ^[0-9a-f]{32}$ ]] || [[ "${CONTINUITY_REASON}" != "initial" && "${CONTINUITY_REASON}" != "continuous" && "${CONTINUITY_REASON}" != "boot_changed" && "${CONTINUITY_REASON}" != "scheduling_gap" && "${CONTINUITY_REASON}" != "boot_evidence_unavailable" && "${CONTINUITY_REASON}" != "boot_evidence_recovered" ]]; then
         CONTINUITY_ID=""

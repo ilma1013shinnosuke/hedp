@@ -1,0 +1,10 @@
+{
+  "playbook_version": "1.0",
+  "scope": "all-project principles; HESTIA-specific context and rules remain in HEDP_CODEX_CONTEXT.md, PROJECT.md, and SPECIFICATION.md",
+  "formal_path": "governance/AI_DEVELOPMENT_PLAYBOOK.md",
+  "compact_path": "governance/AI_DEVELOPMENT_PLAYBOOK_COMPACT.md",
+  "project_rules_paths": ["HEDP_CODEX_CONTEXT.md", "PROJECT.md", "SPECIFICATION.md"],
+  "agents_path": "AGENTS.md",
+  "formal_sha256": "7e1baee765eac1a3d7f43c875b0c6e54cba3d881e591e76da6e57a2cd5054c36",
+  "compact_sha256": "7c23282ed8c1251f71a9d3eb1598de697749cdca562ab8c32c67a6c692246a77"
+}

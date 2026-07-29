@@ -1,6 +1,7 @@
 import json
 import threading
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
@@ -26,6 +27,19 @@ def test_demonstration_snapshot_contains_no_household_identifiers():
     assert "192.168." not in payload
     assert "device_id" not in payload
     assert "serial" not in payload
+
+
+def test_dashboard_assets_define_warning_lifecycle_and_next_action() -> None:
+    root = Path(__file__).parents[1] / "src/hedp/web/static"
+    page = (root / "index.html").read_text(encoding="utf-8")
+    script = (root / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="data-warning-action"' in page
+    assert "activeWarningCode" in script
+    assert "継続中" in script
+    assert "復旧 · 最新データを確認できました" in script
+    assert "次の行動:" in script
+    assert "if (!repeated) showToast" in script
 
 
 def test_dashboard_server_serves_page_assets_and_summary():

@@ -47,7 +47,7 @@ platform、LIOPは既存Python package・企業商標・software protocolとの�
 | launchd | `com.hedp.*` | 新job確認後に旧jobを停止 |
 | ログ | `~/Library/Logs/hedp` | 新旧読取期間を設ける |
 | lock | `/tmp/com.hedp.*` | 全job同時切替で二重実行を防止 |
-| ローカルパス | `/Users/shinnosuke/hedp` | GitHub・launchd切替後に変更 |
+| ローカルパス | `/Users/shinnosuke/chatGPT/projects/HESTIA` | macOSではこの場所を使用。Linuxでは配置先を環境設定で指定 |
 
 ## 実施順序
 

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "capability_id": "fusionsolar.smartlogger.read_only",
+  "redacted": true,
+  "read_only": true,
+  "settings_changed": false,
+  "secrets_present": false,
+  "device_impact_observed": false,
+  "summary_sha256": "fc0b6d8e05f40ef5ddca889dedc4ea922ce96aab159b409666ec535183838467",
+  "stages": [
+    {
+      "name": "single",
+      "result": "pass",
+      "started_at": "2026-07-29T15:10:59.524231+00:00",
+      "ended_at": "2026-07-29T15:10:59.568829+00:00",
+      "sample_count": 1
+    },
+    {
+      "name": "short",
+      "result": "pass",
+      "started_at": "2026-07-29T15:11:19.028302+00:00",
+      "ended_at": "2026-07-29T15:21:19.177076+00:00",
+      "sample_count": 3
+    },
+    {
+      "name": "day_24",
+      "result": "pass",
+      "observed_result": "pass",
+      "started_at": "2026-07-28T05:42:21.493529+09:00",
+      "ended_at": "2026-07-29T05:41:58.471705+09:00",
+      "sample_count": 279,
+      "nominal_sample_count": 288,
+      "slot_fill_rate": 0.96875,
+      "max_gap_seconds": 731.657,
+      "gaps_over_15_minutes": 0,
+      "normalized_metrics_per_sample": 10,
+      "acceptance": "pass_with_user_approved_gap_tolerance"
+    }
+  ],
+  "qualification_note": "Single and short stages were repeated on 2026-07-30 JST to recover exact structured timestamps. The standard 99 percent day-24 target remains unchanged; the development-Mac day-24 run was accepted with explicit user-approved tolerance for host interruption gaps."
+}

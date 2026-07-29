@@ -63,6 +63,18 @@ def test_approved_bounded_dictionary_is_valid() -> None:
     assert validate_retention_dictionary(value) == ()
 
 
+def test_dictionary_requires_all_seven_deletion_gates() -> None:
+    value = example()
+
+    assert len(value["deletion_conditions"]) == 7
+    for condition in tuple(value["deletion_conditions"]):
+        incomplete = example()
+        incomplete["deletion_conditions"].remove(condition)
+        assert validate_retention_dictionary(incomplete) == (
+            "deletion_conditions must contain every deletion gate",
+        )
+
+
 def test_schema_and_validator_require_the_same_top_level_fields() -> None:
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
 

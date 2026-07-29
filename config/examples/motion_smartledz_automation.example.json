@@ -1,0 +1,16 @@
+{
+  "schema": "hestia.motion-lighting-rule.v1",
+  "rule_alias": "entrance-motion-light",
+  "sensor_alias": "entrance-motion",
+  "hold_seconds": 900,
+  "on_detected": {
+    "kind": "scene",
+    "target_alias": "entrance",
+    "selection_alias": "motion-on"
+  },
+  "on_timeout": {
+    "kind": "schedule",
+    "target_alias": "entrance",
+    "selection_alias": "normal-schedule"
+  }
+}

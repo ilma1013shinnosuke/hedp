@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "key_id": "hestia-sanctum-runtime-v1",
+  "source_sha256": "2c15fa6448ddff5d8e3686009f2a5ef85a2316a34da4288aea41ea4a6f7c5ccb",
+  "checks": [
+    "transport-sha256-match",
+    "mode-0600",
+    "sops-decrypt-to-dev-null"
+  ],
+  "verified_at": "2026-07-29T21:55:06Z"
+}

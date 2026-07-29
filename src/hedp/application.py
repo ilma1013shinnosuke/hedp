@@ -21,6 +21,10 @@ from hedp.adapters.fusionsolar.device_realtime_collector import (
 from hedp.adapters.fusionsolar.energy_balance_record_builder import (
     FusionSolarEnergyBalanceRecordBuilder,
 )
+from hedp.adapters.fusionsolar.energy_aggregation import (
+    build_daily_energy_summary,
+    daily_summary_records,
+)
 from hedp.adapters.fusionsolar.record_builder import FusionSolarRecordBuilder
 from hedp.adapters.fusionsolar.modbus_collector import (
     FusionSolarModbusCollector,
@@ -121,9 +125,7 @@ class Application:
         raw_data = self.energy_balance_collector.collect_for_date(target_date)
         self.storage.save_rawdata(raw_data)
         if self.energy_balance_record_builder is not None:
-            self.storage.save_records(
-                self.energy_balance_record_builder.build(raw_data)
-            )
+            self._save_energy_balance_records(raw_data)
         return raw_data
 
     def run_energy_balance_range(
@@ -137,9 +139,7 @@ class Application:
         for raw_data in raw_data_list:
             self.storage.save_rawdata(raw_data)
             if self.energy_balance_record_builder is not None:
-                self.storage.save_records(
-                    self.energy_balance_record_builder.build(raw_data)
-                )
+                self._save_energy_balance_records(raw_data)
         return raw_data_list
 
     def build_energy_balance_records(
@@ -151,10 +151,24 @@ class Application:
         for raw_data in self.storage.load_rawdata_for_range(
             "fusionsolar_energy_balance", start_date, end_date
         ):
-            records = self.energy_balance_record_builder.build(raw_data)
-            self.storage.save_records(records)
-            count += len(records)
+            count += self._save_energy_balance_records(raw_data)
         return count
+
+    def _save_energy_balance_records(self, raw_data: RawData) -> int:
+        """Persist source records and authoritative daily summary together."""
+
+        if self.energy_balance_record_builder is None:
+            raise RuntimeError("Energy-balance record builder is not configured")
+        if raw_data.target_date is None:
+            raise ValueError("energy-balance RawData requires target_date")
+        source_records = self.energy_balance_record_builder.build(raw_data)
+        summary = build_daily_energy_summary(
+            source_records,
+            raw_data.target_date,
+        )
+        retained_records = source_records + daily_summary_records(summary)
+        self.storage.save_records(retained_records)
+        return len(retained_records)
 
     def find_missing_energy_balance_dates(
         self, start_date: date, end_date: date
@@ -197,9 +211,7 @@ class Application:
             "fusionsolar_energy_balance", start_date, end_date
         ):
             if raw_data.target_date in missing_record_dates:
-                self.storage.save_records(
-                    self.energy_balance_record_builder.build(raw_data)
-                )
+                self._save_energy_balance_records(raw_data)
         return raw_data_list
 
     def run_device_realtime(

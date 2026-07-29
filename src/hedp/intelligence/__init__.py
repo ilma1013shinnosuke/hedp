@@ -1,5 +1,13 @@
 """Pure, read-only Layer 3 explanations."""
 
+from .motion_lighting import (
+    LightingSelection,
+    LightingSelectionKind,
+    MotionLightingAutomation,
+    MotionLightingDecision,
+    MotionLightingReason,
+    MotionLightingRule,
+)
 from .roof_snow import (
     RoofSnowEstimate,
     RoofSnowEvidence,
@@ -18,6 +26,12 @@ from .solar_self_consumption_opportunity import (
 __all__ = [
     "ExplanationOutcome",
     "ExplanationReason",
+    "LightingSelection",
+    "LightingSelectionKind",
+    "MotionLightingAutomation",
+    "MotionLightingDecision",
+    "MotionLightingReason",
+    "MotionLightingRule",
     "RoofSnowEstimate",
     "RoofSnowEvidence",
     "RoofSnowState",

@@ -42,9 +42,12 @@ APPROVED_REQUIRED_VALUES = frozenset(
 )
 DELETION_CONDITIONS = frozenset(
     {
-        "archive_verified",
+        "scope_identified",
+        "derived_data_retained",
+        "archive_restore_verified",
         "offsite_copy_verified",
         "source_not_in_active_use",
+        "recovery_impact_documented",
         "explicit_approval",
     }
 )

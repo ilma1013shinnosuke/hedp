@@ -2,7 +2,8 @@
 
 ## 目的
 
-Smart LEDZ、エコキュート、Qrio、Miele、FusionSolarのReaderを、実機や標準機能を
+Smart LEDZ、エコキュート、Qrio、Miele、FusionSolar、およびEufy屋外観測候補のReaderを、
+実機や標準機能を
 変更せずに確認し、
 取得周期、通知欠落、負荷、再接続、データ品質を実測で決める。ここで扱うのは第1層の
 観測だけであり、機器操作、設定変更、自動判断、常駐化は含めない。
@@ -14,7 +15,9 @@ Smart LEDZ、エコキュート、Qrio、Miele、FusionSolarのReaderを、実�
 - eventは秒・ミリ秒精度を保持する。機器横断分析は第2層で1分bucketへ整列する。
 - 取得周期と保存粒度を混同しない。current stateは更新し、同一値を無制限に追記しない。
 - 欠損を0、空文字、前回値で埋めない。部分eventに含まれない項目は欠損にしない。
-- AdapterはOS、scheduler、secret store、DBから独立させる。macOSとLinuxで同じReaderを使う。
+- AdapterはOS、scheduler、secret store、DBから独立させる。共通ReaderをOS固有serviceの
+  外側に置く。v1.0の実行保証はmacOSだけとし、Linux/Windowsは移行先確定後に同じfixtureと
+  実通信条件で再適格化する。
 - 再起動・再接続後は保存済み状態を機器へ適用せず、read-only snapshotから再同期する。
 - タイムアウト、再試行、総経過時間、取得回数には必ず上限を設ける。
 - 秘密値、家庭固有ID、名称、IP、MAC、SSIDをfixture、通常ログ、報告へ出さない。
@@ -23,8 +26,9 @@ Smart LEDZ、エコキュート、Qrio、Miele、FusionSolarのReaderを、実�
 
 ### 0. オフライン基準
 
-全fixture test、全体test、lint、秘密検査、Linux非依存検査を成功させる。匿名fixtureから
-同じ正規化結果を再生成できることを確認する。この段階では通信しない。
+全fixture test、全体test、lint、秘密検査、OS固有依存の境界検査を成功させる。匿名fixtureから
+同じ正規化結果を再生成できることをmacOSで確認する。この段階では通信しない。
+Linux/Windowsでの同一結果確認は、v1.0後の再適格化項目として記録する。
 
 ### 1. 単発read-only確認
 
@@ -111,6 +115,7 @@ transport timeoutをharnessのsample timeoutより短く設定し、有限時間
 | Qrio | cloud history/status | statusは画面表示・操作後、履歴は再接続時と日次 | 電池・firmware・Hubは日次 | 携帯pushは人への通知とし、履歴差分をSumiCoreの正本候補にする |
 | Miele | SSE | 接続時と10分程度の照合候補 | 連携状態は60分、機器情報は起動時と日次 | SSEを主経路とし、RESTは再接続後の正しさ回復へ限定する |
 | FusionSolar | local Modbus TCP | 既存の有限周期候補を24時間比較で確定 | 機器構成・firmwareは起動時と日次 | クラウド経路から独立した現在値を取り、IP変更時は安全な再発見だけ行う |
+| Eufy屋外観測 | RTSPの1枚取得候補 | 日中5〜15分から実測 | ROI・校正は設置変更時 | 常時映像を扱わず、相対輝度と固定面の影だけを証拠化する |
 
 緊急性や安全性を取得頻度だけで代替しない。例えばQrioの防犯判断を数分pollだけへ依存させず、
 公式機能と物理操作を主経路として維持する。
@@ -154,6 +159,20 @@ transport timeoutをharnessのsample timeoutより短く設定し、有限時間
 - オプティマイザー取得は現在保留であり、24時間適格性確認へ含めない。
 - register write、機器検索、firmware更新、設備追加・削除、運転parameter変更を行わない。
 
+### Eufy屋外観測候補
+
+- 事前段階では匿名画像fixtureだけを使い、RTSP、HomeBase、実機へ接続しない。
+- 実機確認では1回の接続につき1枚だけ取得し、直後にstreamを解放する。
+- 画像、RTSP URL、認証情報、人物・車両情報を通常保存へ残さない。
+- 自動露出やHDRの影響があるため絶対luxを生成せず、相対輝度と固定面の影を観測する。
+- 現地校正前は日照状態を`unknown`とし、閾値を推測しない。
+- 発電が定格比70%以上で10分継続した場合は、画像取得を省略し、カメラへ接続しないことを確認する。
+- 冬季に蓄電池30%以下または残り電力収支が-2kWh以下なら、省エネ停止して画像取得しない。
+- 発電情報が欠損・古い・品質不明の場合は大量発電と断定せず、低頻度取得または停止維持とする。
+- 停止後は蓄電池40%以上または残り収支+2kWh以上の回復証拠まで再開しない。
+- E42の待機中RTSP開始可否、復帰時間、電池消費は実機適格性確認で測定する。
+- カメラ登録、RTSP有効化、録画設定、検知設定、向きの変更はこの試験に含めない。
+
 ## 合格条件
 
 - 24時間の予定slotに対して99%以上の取得またはevent継続性がある。
@@ -163,7 +182,9 @@ transport timeoutをharnessのsample timeoutより短く設定し、有限時間
 - 欠損、古い値、未知値、異常値が共通品質区分で区別される。
 - 秘密値と家庭固有情報が通常ログ、fixture、報告へ出ない。
 - 取得により機器設定、公式アプリ、機器標準制御へ悪影響が出ない。
-- 同一テストがmacOSとLinuxで同じ正規化結果になる。
+- v1.0の保証対象であるmacOS上で、同一fixtureから同じ正規化結果を再生成できる。
+- Linux/Windowsへ移行するときは、同一fixtureと対象OS固有portの試験を再実行し、
+  macOSとの差異を解消または既知制限として承認する。
 
 99%を満たしても、長い連続欠損、秘密漏えい、設定変化、機器影響が一つでもあれば不合格とする。
 
@@ -177,5 +198,6 @@ transport timeoutをharnessのsample timeoutより短く設定し、有限時間
 ## 本番常駐化の条件
 
 5機器を一括で常駐化しない。機器ごとに適格性確認を終え、周期、停止方法、容量上限、
-監視指標、Linux service定義を確認してから個別に導入する。常駐化、DB接続、既存job切替、
+監視指標、macOS service定義を確認してから個別に導入する。Linux/Windowsへ移行するときは、
+対象OSのservice、秘密注入、保存先、権限を改めて適格化する。常駐化、DB接続、既存job切替、
 実API認証、実機通信は、それぞれ対象と影響を示して明示承認を得る。

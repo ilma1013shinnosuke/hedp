@@ -13,6 +13,8 @@ from .execution import (
     OperationRegistry,
     function_port,
 )
+from .immediate import ImmediateExecutionSession, PreparedOperation
+from .release_assurance import check_hestia_release_assurance
 from .shadow_execution import (
     AuditEvent,
     CapabilityDescriptor,
@@ -43,11 +45,14 @@ __all__ = [
     "GateResult",
     "GateStatus",
     "Intent",
+    "ImmediateExecutionSession",
     "OperationRegistry",
+    "PreparedOperation",
     "ShadowAssessment",
     "ShadowExecutionGate",
     "ShadowOperationRegistry",
     "ShadowResult",
     "StateEvidence",
     "function_port",
+    "check_hestia_release_assurance",
 ]
