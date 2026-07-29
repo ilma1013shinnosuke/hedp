@@ -99,9 +99,12 @@ hedp import-fusionsolar-gas-queue runtime/import/fusionsolar-gas --inspect
 hedp import-fusionsolar-gas-queue runtime/import/fusionsolar-gas --dry-run
 ```
 
-`hedp interface`は、最初のHESTIAローカルWeb画面を
-`http://127.0.0.1:8765`で開く。現在は匿名デモ値だけを表示するShadow版であり、
+`hedp interface`は、HESTIAローカルWeb画面を
+`http://127.0.0.1:8765`で開く。既定は匿名デモ値だけを表示するShadow版であり、
 現役DB、実機Adapter、ExecutionGateへ接続せず、操作ボタンも実機へ送信しない。
+明示したSQLiteを読み取り専用で表示する場合だけ
+`hedp interface --database /path/to/hedp.db`を使う。この経路もDBへの書き込みや
+実機操作は行わず、未取得値を`0`や前回値で補わない。
 
 `daily-health --safe-json`は定期ログ向けで、家庭固有ID、path、正確な時刻を
 出さず、状態、件数、鮮度区分だけを返します。SwitchBotの一覧・観測・gap・

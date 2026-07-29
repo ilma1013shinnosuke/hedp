@@ -113,6 +113,28 @@ def test_cli_collect_runs_today_and_prints_success(capsys) -> None:
     assert capsys.readouterr().out == "Collected 1 RawData item.\n"
 
 
+def test_cli_interface_passes_explicit_read_only_database_path() -> None:
+    with patch("hedp.main.serve_dashboard") as serve_dashboard:
+        result = cli(
+            [
+                "interface",
+                "--host",
+                "127.0.0.2",
+                "--port",
+                "8877",
+                "--database",
+                "/tmp/hestia-test.db",
+            ]
+        )
+
+    assert result == 0
+    serve_dashboard.assert_called_once_with(
+        "127.0.0.2",
+        8877,
+        database_path=Path("/tmp/hestia-test.db"),
+    )
+
+
 def test_cli_collect_energy_balance_runs_today_in_tokyo(capsys) -> None:
     application = Mock()
     connection = Mock()

@@ -1,9 +1,4 @@
-"""Small standard-library server for the local HESTIA dashboard.
-
-The first interface milestone is intentionally isolated from the live database,
-device adapters, and ExecutionGate.  It serves only packaged static assets and
-an anonymous demonstration snapshot.
-"""
+"""Small standard-library server for the local HESTIA dashboard."""
 
 from __future__ import annotations
 
@@ -11,7 +6,13 @@ import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
+
+from .read_model import (
+    read_only_dashboard_snapshot_provider,
+    unavailable_dashboard_snapshot,
+)
 
 
 _ASSET_TYPES = {
@@ -78,7 +79,14 @@ class _DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         path = self.path.split("?", 1)[0]
         if path == "/api/summary":
-            self._send_json(demonstration_snapshot())
+            provider = getattr(
+                self.server, "summary_provider", demonstration_snapshot
+            )
+            try:
+                summary = provider()
+            except Exception:
+                summary = unavailable_dashboard_snapshot()
+            self._send_json(summary)
             return
         asset_name = "index.html" if path in {"/", "/index.html"} else path[1:]
         try:
@@ -113,19 +121,36 @@ class _DashboardHandler(BaseHTTPRequestHandler):
 
 
 def create_dashboard_server(
-    host: str = "127.0.0.1", port: int = 8765
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    *,
+    summary_provider: Callable[[], dict[str, Any]] = demonstration_snapshot,
 ) -> ThreadingHTTPServer:
     """Create, but do not start, the local dashboard server."""
 
     if not 0 <= port <= 65535:
         raise ValueError("port must be between 0 and 65535")
-    return ThreadingHTTPServer((host, port), _DashboardHandler)
+    server = ThreadingHTTPServer((host, port), _DashboardHandler)
+    server.summary_provider = summary_provider  # type: ignore[attr-defined]
+    return server
 
 
-def serve_dashboard(host: str = "127.0.0.1", port: int = 8765) -> None:
-    """Serve until interrupted; no device or database connection is opened."""
+def serve_dashboard(
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    *,
+    database_path: str | Path | None = None,
+) -> None:
+    """Serve until interrupted, optionally using a read-only database view."""
 
-    server = create_dashboard_server(host, port)
+    provider = (
+        demonstration_snapshot
+        if database_path is None
+        else read_only_dashboard_snapshot_provider(database_path)
+    )
+    server = create_dashboard_server(
+        host, port, summary_provider=provider
+    )
     try:
         print(f"HESTIA interface: http://{host}:{server.server_port}")
         server.serve_forever()

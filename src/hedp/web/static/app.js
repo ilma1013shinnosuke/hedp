@@ -4,6 +4,15 @@ const toast = document.querySelector("#toast");
 let toastTimer;
 let solarHistory = [];
 
+function displayNumber(value, decimals = 0) {
+  return Number.isFinite(value) ? value.toFixed(decimals) : "—";
+}
+
+function setText(selector, value) {
+  const element = document.querySelector(selector);
+  if (element) element.textContent = value;
+}
+
 function showToast(message) {
   toast.lastElementChild.textContent = message;
   toast.classList.add("show");
@@ -16,18 +25,25 @@ async function loadSummary() {
     const response = await fetch("/api/summary", { cache: "no-store" });
     if (!response.ok) throw new Error("summary unavailable");
     const data = await response.json();
-    document.querySelector("#solar").textContent = data.energy.solar_kw.toFixed(1);
-    document.querySelector("#battery").textContent = data.energy.battery_percent;
-    document.querySelector("#battery-bar").style.width = `${data.energy.battery_percent}%`;
-    document.querySelector("#temperature").textContent = data.climate.temperature_c.toFixed(1);
-    document.querySelector("#humidity").textContent = data.climate.humidity_percent;
-    document.querySelector("#co2").textContent = data.climate.co2_ppm;
-    document.querySelector("#today-energy").textContent = data.energy.today_kwh.toFixed(1);
-    document.querySelector("#self-consumption").textContent =
-      data.energy.self_consumption_percent;
-    solarHistory = data.energy.history;
+    setText("#solar", displayNumber(data.energy.solar_kw, 1));
+    setText("#battery", displayNumber(data.energy.battery_percent));
+    const battery = Number.isFinite(data.energy.battery_percent)
+      ? Math.min(100, Math.max(0, data.energy.battery_percent))
+      : 0;
+    document.querySelector("#battery-bar").style.width = `${battery}%`;
+    setText("#temperature", displayNumber(data.climate.temperature_c, 1));
+    setText("#humidity", displayNumber(data.climate.humidity_percent));
+    setText("#co2", displayNumber(data.climate.co2_ppm));
+    setText("#today-energy", displayNumber(data.energy.today_kwh, 1));
+    setText(
+      "#self-consumption",
+      displayNumber(data.energy.self_consumption_percent),
+    );
+    setText("#data-mode", data.mode === "live_read_only" ? "READ ONLY" : "SHADOW");
+    setText("#data-quality", data.quality?.status || "demo");
+    solarHistory = Array.isArray(data.energy.history) ? data.energy.history : [];
     drawSolarChart();
-    for (const device of data.devices) {
+    for (const device of data.devices || []) {
       const button = document.querySelector(`[data-action="${device.kind}"]`);
       if (button) button.querySelector("small").textContent = device.state;
     }
@@ -38,20 +54,28 @@ async function loadSummary() {
 
 function drawSolarChart() {
   const canvas = document.querySelector("#solar-chart");
-  if (!canvas || solarHistory.length < 2) return;
+  if (!canvas) return;
   const bounds = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
   canvas.width = Math.round(bounds.width * ratio);
   canvas.height = Math.round(bounds.height * ratio);
   const context = canvas.getContext("2d");
   context.scale(ratio, ratio);
+  context.clearRect(0, 0, bounds.width, bounds.height);
+  if (solarHistory.length < 2) return;
 
   const width = bounds.width;
   const height = bounds.height;
   const padding = { top: 16, right: 5, bottom: 12, left: 5 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
-  const maximum = Math.max(...solarHistory.map((point) => point.solar_kw), 1) * 1.12;
+  const maximum =
+    Math.max(
+      ...solarHistory.map((point) =>
+        Number.isFinite(point.solar_kw) ? point.solar_kw : 0,
+      ),
+      1,
+    ) * 1.12;
   const points = solarHistory.map((point, index) => ({
     x: padding.left + (index / (solarHistory.length - 1)) * chartWidth,
     y: padding.top + chartHeight - (point.solar_kw / maximum) * chartHeight,

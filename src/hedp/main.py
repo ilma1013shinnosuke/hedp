@@ -605,11 +605,20 @@ def cli(argv: Optional[list[str]] = None) -> Optional[int]:
     interface_parser = subparsers.add_parser("interface")
     interface_parser.add_argument("--host", default="127.0.0.1")
     interface_parser.add_argument("--port", type=int, default=8765)
+    interface_parser.add_argument(
+        "--database",
+        type=Path,
+        help="read HESTIA facts from this SQLite database without writing it",
+    )
     add_switchbot_parser(subparsers)
     arguments = parser.parse_args(argv)
 
     if arguments.command == "interface":
-        serve_dashboard(arguments.host, arguments.port)
+        serve_dashboard(
+            arguments.host,
+            arguments.port,
+            database_path=arguments.database,
+        )
         return 0
 
     if arguments.command == "switchbot":
