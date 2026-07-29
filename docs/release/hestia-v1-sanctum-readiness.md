@@ -29,6 +29,25 @@ PATHへ配置した後、次を実行する。
 出力はplatform、Python version、tool version、失敗したcheck名だけである。秘密ファイル、
 環境変数値、repository URL、鍵、credentialの存在や内容は検査しない。
 
+release配置後・実行前は、秘密を復号せず次も実行する。
+
+```text
+.venv/bin/python scripts/check_sanctum_hestia_acceptance.py \
+  --release-root /承認済みrelease-root \
+  --profile /承認済みrelease-root/source/config/release/hestia-v1.json \
+  --encrypted-source /app共通/secrets/runtime.sops.env
+```
+
+これはLinux validation scope、shadow、単一read-only能力、平文`.env`不在、
+SOPS暗号化済み値、mode 0600、HESTIA永続job・active job・cronが0であることだけを
+匿名結果で確認する。sourceと秘密の配置が分離されている場合は、実体pathを明示する。
+symlinkや複製でlayoutを偽装しない。一件でも失敗すればcollectorを起動しない。
+
+2026-07-30、現行deploymentのrelease root、profile実体、暗号化正本実体を明示して
+sanctum上で実行し、全checkが合格した。秘密復号、live試行、設定変更、job登録はない。
+一時scriptはSHA-256照合後に実行し、終了後に削除・不在確認した。匿名receipt:
+`config/release/receipts/hestia-sanctum-secret-free-acceptance.json`
+
 ## 秘密復旧の実行要件
 
 1. runtime用age秘密鍵はsanctumだけが読めるGit管理外のmode 0600 fileへ置く。
@@ -105,3 +124,5 @@ Executor・writeなし、平文保存なし、永続jobなしで安全停止し�
 
 公式仕様、変更前Gate、影響、rollbackは
 `docs/release/hestia-v1-sanctum-smartlogger-change-plan.md`を正本とする。
+Linux read-only限定の保証境界は
+`docs/release/hestia-v1-linux-read-only-portability-audit.md`を正本とする。
